@@ -3,6 +3,8 @@
 A 3D-printable retractable cable spool driven by a constant-force spring, with a
 ratchet to hold the cable out and a brake to drag it on retraction.
 
+![Assembly preview](demo.png)
+
 ## Source
 
 All geometry lives in [`spool_flange.py`](spool_flange.py) — a single
