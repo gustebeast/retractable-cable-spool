@@ -1,7 +1,7 @@
 # Retractable Cable Spool
 
 A 3D-printable retractable cable spool driven by a constant-force spring, with a
-ratchet to hold the cable out and a brake to drag it on retraction.
+ratchet to hold the cable out and a brake to control speed while retracting.
 
 ![Assembly preview](demo.png)
 
