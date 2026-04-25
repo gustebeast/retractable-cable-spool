@@ -24,7 +24,8 @@ py -3.12 spool_flange.py
 Running the script regenerates every STEP file in this directory:
 
 - `spool_main_body.step` — spool with drum, flanges, ratchet teeth, brake ring
-- `bearing_cap.step` — top bearing retainer
+- `bearing_cap_top.step` — top bearing retainer + integrated source-cable pancake spool
+- `bearing_cap_bottom.step` — bottom bearing retainer
 - `axle.step` — fixed center shaft with integrated spring stub
 - `lever_housing.step` — U-bracket carrying both levers above the top flange
 - `ratchet_lever.step`, `brake_lever.step` — the two actuating levers

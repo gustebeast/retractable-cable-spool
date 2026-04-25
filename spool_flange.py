@@ -209,10 +209,16 @@ AXLE_D         =   8.0   # axle shaft diameter (= 608 bearing bore)
 
 # Lever-housing geometry that sizes the axle extensions
 PLATE_T             =  2.0   # housing top/bottom plate thickness
-HOUSING_BEARING_GAP = 10.0   # axial clearance between each plate and the
-                             # nearest bearing, so the spool's rotating hub face
-                             # can't rub against the stationary housing
-AXLE_EXTRA     = HOUSING_BEARING_GAP + PLATE_T   # 12 — axle past spool each end
+# Axial clearance between each housing plate and the nearest bearing. The
+# two sides are asymmetric because the post-flip TOP end also houses the
+# source-cable pancake spool (integrated into bearing_cap_top) and needs
+# extra room for the two pancake flanges plus the cable groove.
+HOUSING_GAP_LEVER   = 10.0   # pre-flip +z / post-flip BOTTOM (lever side)
+HOUSING_GAP_PANCAKE = 12.0   # pre-flip −z / post-flip TOP (pancake side)
+HOUSING_BEARING_GAP = HOUSING_GAP_LEVER   # legacy alias (lever-side default)
+AXLE_EXTRA_LEVER    = HOUSING_GAP_LEVER   + PLATE_T   # 12 — axle past spool, lever end
+AXLE_EXTRA_PANCAKE  = HOUSING_GAP_PANCAKE + PLATE_T   # 14 — axle past spool, pancake end
+AXLE_EXTRA          = AXLE_EXTRA_LEVER               # legacy alias
 
 SPRING_STUB_OD =  23.0   # Matches Lee Spring's recommended drum diameter
                          # for the LCF 250 06 050S (22.86 mm spec; rounded
@@ -300,7 +306,7 @@ FLANGE_ID      = DRUM_ID                                   # 146 mm (bottom flan
 FLANGE_INNER_ID = FLANGE_ID - 2 * FLANGE_INNER_EXT         # 132 mm (top flange only — inner edge)
 HUB_CAVITY_D   = HUB_OD - 2 * HUB_WALL                     # 34 mm  — spring cavity ID
 SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # 38 mm  — overall spool height
-AXLE_H         = SPOOL_H + 2 * AXLE_EXTRA                  # 58 mm
+AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE  # 64 mm
 BEARING_BORE   = BEARING_OD + BEARING_CLR                  # 22.1 mm
 
 DRUM_BOTTOM_Z  = FLANGE_H                                  #  7 mm
@@ -320,11 +326,23 @@ CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 32 mm — cavity ID
 #   z = 0                          bottom of main body
 CAP_SEAT_Z0    = SPOOL_H - CAP_H                           # 30 — cap seat starts
 STOP_LIP_Z0    = CAP_SEAT_Z0 - CAP_STOP_LIP_H              # 29 — stop lip starts
-CAVITY_Z0      = BEARING_W + BEARING_LIP_H                 #  8 — spring cavity starts
+BOT_CAP_SEAT_Z0 = 0                                        # bottom cap seat starts
+BOT_CAP_SEAT_Z1 = BOT_CAP_SEAT_Z0 + CAP_H                  # 8 — bottom cap seat ends
+BOT_STOP_LIP_Z0 = BOT_CAP_SEAT_Z1                          # 8 — bottom cap-stop lip starts
+BOT_STOP_LIP_Z1 = BOT_STOP_LIP_Z0 + CAP_STOP_LIP_H         # 9 — bottom cap-stop lip ends
+CAVITY_Z0      = BOT_STOP_LIP_Z1                           #  9 — spring cavity starts (above bottom stop lip)
 CAVITY_Z1      = STOP_LIP_Z0                               # 29 — spring cavity ends
 
 # Spring stub (on axle)
-STUB_BASE_Z    = CAVITY_Z0                                 #  8 — chamfer begins here
+STUB_BASE_Z    = 8.5    # chamfer base — decoupled from CAVITY_Z0 so the
+                        # stub cylinder above (z=16..29 = 13 mm) is comfortably
+                        # longer than the 12.7 mm constant-force spring width,
+                        # while still leaving 0.5 mm of bearing axial play below
+                        # the chamfer (industry-typical clearance — accommodates
+                        # bearing width tolerance without binding). The chamfer
+                        # at z=8.5 sits inside the bottom cap-stop lip region;
+                        # its r=4 base clears the lip's r=16 wall by a wide
+                        # margin.
 STUB_CHAMFER_H = (SPRING_STUB_OD - AXLE_D) / 2             # 8.5 — 45° self-supporting
 STUB_CYL_Z0    = STUB_BASE_Z + STUB_CHAMFER_H              # 15.5
 STUB_TOP_Z     = CAVITY_Z1                                 # 29
@@ -471,7 +489,14 @@ def ratchet_cutter(num_teeth, r_in, r_out, z_top, depth, theta_offset_deg=0.0):
         ]
         wire_s = cq.Wire.makePolygon(pts_s, close=True)
         wire_e = cq.Wire.makePolygon(pts_e, close=True)
-        return cq.Solid.makeLoft([wire_s, wire_e])
+        # ruled=True forces each side face to a simple ruled surface
+        # (bilinear patch between corresponding edge points) instead of
+        # the smooth BSpline that the default loft produces. Ruled
+        # surfaces are topologically cleaner and avoid the 1 bad face
+        # that OCCT's BSpline loft generates near the degenerate
+        # start-wire corner (z_bottom..z_bottom+eps edge collapses to
+        # near-zero length at one end).
+        return cq.Solid.makeLoft([wire_s, wire_e], ruled=True)
 
     teeth = _tooth_material(0)
     for i in range(1, num_teeth):
@@ -503,11 +528,18 @@ def spokes_solid(z_base, z_top):
       2. The 45° taper matches the flange inner slope visually, so the
          spoke appears to terminate along the same line that carves the
          flange inner cavity — no square-corner notch at the junction."""
-    r_in         = HUB_OD / 2
-    r_out        = DRUM_ID / 2
+    # Inner/outer radii overlap the hub OD and drum ID by 0.5 mm so the
+    # spoke-to-hub and spoke-to-drum unions are volumetric, not tangent.
+    # A perfectly tangent boolean (r_in = HUB_OD/2 exactly) gives OCCT a
+    # knife-edge contact line that occasionally produces a degenerate
+    # face on one of the six spokes — visible as a tapered / triangulated
+    # spoke that doesn't span the full hub height.
+    _spoke_overlap = 0.5
+    r_in         = HUB_OD / 2 - _spoke_overlap
+    r_out        = DRUM_ID / 2 + _spoke_overlap
     taper_h      = FLANGE_INNER_EXT + FLANGE_INNER_LIP_H   # 9
     z_taper_end  = z_top - taper_h                         # 29
-    r_taper_start = r_out - taper_h                        # 64
+    r_taper_start = r_out - taper_h                        # 64.5
     out = None
     for i in range(SPOKE_COUNT):
         s = (
@@ -545,31 +577,83 @@ main_body = (
     .union(spokes_solid(0, SPOOL_H))                 # full-height spokes
 )
 
-# Interior z-map cuts (top of hub down):
-#   SPOOL_H .. CAP_SEAT_Z0   — cap seat (HUB_CAVITY_D = 34 mm ID)
-#   CAP_SEAT_Z0 .. STOP_LIP_Z0 — cap-stop lip (CAP_STOP_ID = 32 mm ID, 1 mm tall)
-#   STOP_LIP_Z0 .. CAVITY_Z0 — straight spring cavity (34 mm ID)
-#   CAVITY_Z0 .. BEARING_W   — bottom bearing retention lip (20 mm ID, 1 mm tall)
-#   BEARING_W .. 0           — bottom bearing pocket (22.1 mm ID)
+# Interior z-map cuts — symmetric cap seats at both ends:
+#   SPOOL_H .. CAP_SEAT_Z0     — top cap seat (HUB_CAVITY_D = 34 mm ID)
+#   CAP_SEAT_Z0 .. STOP_LIP_Z0 — top cap-stop lip (CAP_STOP_ID = 32 mm, 1 mm)
+#   STOP_LIP_Z0 .. CAVITY_Z0   — straight spring cavity (34 mm ID, 20 mm tall)
+#   CAVITY_Z0 .. BOT_STOP_LIP_Z0 — bottom cap-stop lip (CAP_STOP_ID → HUB_CAVITY_D)
+#   BOT_CAP_SEAT_Z1 .. 0       — bottom cap seat (HUB_CAVITY_D = 34 mm ID)
+# Both cap seats receive a separate bearing_cap part; bearings are pressed
+# into the caps from the interior (spring-cavity) face before the caps are
+# slid onto the axle and into the seats.
 main_body = (
     main_body
-    .cut(cyl(BEARING_BORE,    BEARING_W,                    z=0))              # bottom pocket
-    # Bottom bearing lip — 45° cone taper from BEARING_BORE (pocket ID)
-    # up to BEARING_LIP_ID. The spool prints teeth-up (pre-flip
-    # orientation), so going z=+BEARING_W → z=+BEARING_W+BEARING_LIP_H
-    # the inner wall moves inward 1.05 mm over 1 mm rise — 45°
-    # self-supporting overhang. The UPPER face of the lip (that the
-    # bearing presses against) stays flat 90°, as needed for a good
-    # bearing seat.
-    .cut(cone_solid(BEARING_BORE, BEARING_LIP_ID, BEARING_LIP_H, BEARING_W))   # bottom lip
-    .cut(cyl(HUB_CAVITY_D,    CAVITY_Z1 - CAVITY_Z0,        z=CAVITY_Z0))      # spring cavity
-    # Cap-stop lip — 45° conical inward taper from HUB_CAVITY_D at the
-    # bottom (STOP_LIP_Z0) to CAP_STOP_ID at the top (CAP_SEAT_Z0). Self-
-    # supporting underside, and the slope coincides with the spring
-    # slot's sloped roof (see below).
-    .cut(cone_solid(HUB_CAVITY_D, CAP_STOP_ID, CAP_STOP_LIP_H, STOP_LIP_Z0))   # cap-stop lip
-    .cut(cyl(HUB_CAVITY_D,    SPOOL_H - CAP_SEAT_Z0,        z=CAP_SEAT_Z0))    # cap seat
+    # Bottom cap seat (0..CAP_H)
+    .cut(cyl(HUB_CAVITY_D, CAP_H, z=BOT_CAP_SEAT_Z0))
+    # Bottom cap-stop lip — inverted cone opening upward into the spring
+    # cavity. At z=BOT_STOP_LIP_Z0 the ID is CAP_STOP_ID (narrow, holds
+    # cap from sliding up); at z=BOT_STOP_LIP_Z1 it widens to HUB_CAVITY_D
+    # (matches the spring cavity above). The inward-narrowing underside
+    # is what the cap's top face rests against.
+    .cut(cone_solid(CAP_STOP_ID, HUB_CAVITY_D, CAP_STOP_LIP_H, BOT_STOP_LIP_Z0))
+    # Spring cavity (9..29)
+    .cut(cyl(HUB_CAVITY_D,    CAVITY_Z1 - CAVITY_Z0,        z=CAVITY_Z0))
+    # Top cap-stop lip — HUB_CAVITY_D at bottom (STOP_LIP_Z0) narrowing
+    # to CAP_STOP_ID at top (CAP_SEAT_Z0). Self-supporting underside,
+    # and the slope coincides with the spring slot's sloped roof.
+    .cut(cone_solid(HUB_CAVITY_D, CAP_STOP_ID, CAP_STOP_LIP_H, STOP_LIP_Z0))
+    # Top cap seat (30..38)
+    .cut(cyl(HUB_CAVITY_D,    SPOOL_H - CAP_SEAT_Z0,        z=CAP_SEAT_Z0))
 )
+
+# Pancake-spool outer flange (spool side) — the r > 17 half of the
+# source-cable wrap groove's wall, integrated into the spool's
+# build-plate face during printing (no mid-air overhang). An annular
+# disc at pre-flip z=0..2, r=17..38. Inner radius matches the cap-seat
+# ID so the cap can still slide through the z=0 face.
+#
+# This flange is FLUSH with the rest of the spool body (sits inside
+# z=0..38 in pre-flip), so the spool's bottom face stays at z=0. After
+# _flip_z it ends up at post-flip z=36..38 — flush with the spool's
+# top face.
+#
+# Note: the flange's TOP face at post-flip z=38 is 2 mm BELOW the cap
+# inner plate's top face at z=40, leaving a 2 mm air gap at r=17..38
+# between z=38..40. This is fine in practice: layer-1 cable wraps at
+# r<17 are pinned in the 6.5 mm slot between cap inner plate (z=40)
+# and outer flange (z=46.5); subsequent layers stack radially on top of
+# the previous layer at the same axial position, so the wider zone at
+# r>17 is extra clearance, not actual axial slop.
+_PANCAKE_SPOOL_FLANGE_OD = 88.0                # matches PANCAKE_FLANGE_OD below
+_PANCAKE_SPOOL_FLANGE_ID = HUB_CAVITY_D        # 34 — matches cap_seat ID
+_PANCAKE_SPOOL_FLANGE_T  = 2.0
+_pancake_spool_flange = (
+    cyl(_PANCAKE_SPOOL_FLANGE_OD, _PANCAKE_SPOOL_FLANGE_T, z=0)
+    .cut(cyl(_PANCAKE_SPOOL_FLANGE_ID, _PANCAKE_SPOOL_FLANGE_T, z=0))
+)
+
+# Cable transit hole — stadium-shaped slot through the spool disk,
+# aligned alongside the +y face of the 180° spoke. The cable descends
+# from the pancake's inner wrap, drops through this slot into the spoke
+# region below, and runs along the spoke face down to the drum-wall
+# slot. The spoke serves as one wall of the cable channel: one of the
+# stadium's flat edges sits exactly at y=+SPOKE_W/2, so the spoke face
+# bounds the slot on its -y side. Long axis 10 mm runs radially along
+# the spoke; short axis 7 mm gives ~1 mm clearance around the 6 mm
+# cable.
+PANCAKE_TRANSIT_LONG  = 10.0   # along X (radial, parallel to the spoke)
+PANCAKE_TRANSIT_SHORT =  7.0   # along Y (perpendicular to the spoke)
+PANCAKE_TRANSIT_R     = 27.0   # radial position of slot center
+_pancake_transit_hole = (
+    cq.Workplane("XY")
+    .workplane(offset=-0.5)
+    .center(-PANCAKE_TRANSIT_R,
+            SPOKE_W / 2 + PANCAKE_TRANSIT_SHORT / 2)
+    .slot2D(PANCAKE_TRANSIT_LONG, PANCAKE_TRANSIT_SHORT)
+    .extrude(_PANCAKE_SPOOL_FLANGE_T + 1.0)
+)
+_pancake_spool_flange = _pancake_spool_flange.cut(_pancake_transit_hole)
+main_body = main_body.union(_pancake_spool_flange)
 
 # Spring outer-end attachment slot — a blind radial notch in the hub
 # wall sized to receive the spring's bent-over outer tab (12.7 mm z x
@@ -608,11 +692,19 @@ _slot_prism = (
     )
 )
 
-# The lip cone, extended downward from its apex at z=_lip_apex_z all the
-# way to z=0. Its lateral surface r = _lip_apex_z − z is exactly the
-# cap-stop lip's underside surface.
+# The lip cone, extended downward from its apex — shifted 0.02 mm
+# upward from the true lip apex so the slot's roof surface is ever so
+# slightly DEEPER than the actual lip cone (by 0.02 mm / 20 µm at each
+# z). Without this offset, the cut operation produces two mathematically
+# coincident cone surfaces (the lip's underside and the slot's roof),
+# which OCCT's boolean fails to merge cleanly and marks the result
+# invalid — cadquery's shallow check passes but STEP export flags
+# tolerance faults on re-import. The offset is below any print
+# resolution you'd ever get.
+_lip_cone_offset = 0.02
 _lip_cone_ext = cq.Workplane("XY").add(cq.Solid.makeCone(
-    _lip_apex_z, 0.0, _lip_apex_z,
+    _lip_apex_z + _lip_cone_offset, 0.001,
+    _lip_apex_z + _lip_cone_offset - 0.001,
     pnt=cq.Vector(0, 0, 0),
     dir=cq.Vector(0, 0, 1),
 ))
@@ -626,21 +718,138 @@ main_body = main_body.cut(spring_slot)
 # tooth phase automatically track any lever repositioning.)
 
 # ────────────────────────────────────────────────────────────────────────────
-# BEARING CAP — small cylindrical insert
-#   33.8 mm OD (slip fit into 34 mm cavity), 8 mm tall.
-#   Bottom 1 mm is a 20 mm-ID retention lip (stops the bearing).
-#   Top 7 mm is the 22.1 mm-ID bearing pocket (bearing presses in from above).
-#   No spokes, no flange — it's just a small disc that retains the bearing.
+# BEARING CAPS — two separate parts retaining the 608 bearings at each end.
+#
+# Both caps have the bearing pressed in from their INTERIOR (spring-cavity)
+# face, so the 45° retention lip lives at the exterior face. They share the
+# body geometry (CAP_OD × CAP_H, slip-fit into the hub's cap seat); the TOP
+# cap additionally carries the source-cable pancake spool on its exterior
+# side, living in the 12 mm pancake-side HOUSING gap.
+#
+# bearing_cap_bottom (post-flip BOTTOM, lever side)
+# -------------------------------------------------
+# Built in its final post-flip position — body at assembly z=0..8, inside
+# the flipped hub's bottom cap seat. Interior face at z=8 (bearing enters
+# here from the spring-cavity side), exterior face at z=0 (lip ends here;
+# faces the lever-side housing plate at z=-10).
+#
+# bearing_cap_top (post-flip TOP, pancake side — opposite the levers)
+# -------------------------------------------------------------------
+# Built in its final post-flip position — body at assembly z=30..38, inside
+# the flipped hub's top cap seat. Pancake flanges + groove extend outward
+# to z=48.5, with 1.5 mm clearance to the pancake-side housing plate at
+# z=50.
+#
+# Pancake geometry (why these numbers):
+#   Source cable accumulates ~4.2 wraps over 6 ft of extension (÷ main drum
+#   circumference). Only ~12 mm of axial room exists between the hub top
+#   and the housing plate — far less than 4.2 × 6 mm = 25 mm — so wraps
+#   MUST stack radially. With the groove width tight to cable OD (6 mm +
+#   0.5 clearance), the cable can't move axially; each new wrap is forced
+#   to climb on top of the previous layer. Inner radius starts at
+#   axle_r + 2 mm = 6 mm; 4–5 radial layers grow the stack to r ≈ 6 + 5×6
+#   = 36 mm. Flange OD = 76 mm (r = 38) gives a 2 mm margin past a
+#   fully-wound 5-layer stack.
+#
+# Printability: the outer pancake flange overhangs ~32 mm radially across
+# the groove (unsupported bridge). This part needs print supports inside
+# the groove (they pull out cleanly). The inner flange is supported by
+# the body below it.
 # ────────────────────────────────────────────────────────────────────────────
 
-bearing_cap = cyl(CAP_OD, CAP_H, z=0)
-bearing_cap = (
-    bearing_cap
-    # Bottom lip → 45° cone taper from BEARING_BORE down to BEARING_LIP_ID
-    # over BEARING_LIP_H. Replaces the horizontal pocket→lip step so the
-    # transition self-supports when printed.
-    .cut(cone_solid(BEARING_LIP_ID, BEARING_BORE, BEARING_LIP_H, 0))
-    .cut(cyl(BEARING_BORE,   BEARING_W,     z=BEARING_LIP_H))      # bearing pocket (z=1..8)
+CABLE_OD                = 6.0    # source cable OD (USB-A-to-C)
+PANCAKE_GROOVE_R_IN     = AXLE_D / 2 + 2.0                 #  6 mm — inner wrap radius
+PANCAKE_FLANGE_OD       = 88.0                             # 44 mm radius flange — supports
+                                                           # 6 radial layers (1 wrap pre-load
+                                                           # + 4.2 wraps extension + margin)
+PANCAKE_GROOVE_W        = CABLE_OD + 0.5                   #  6.5 mm — tight to cable OD
+PANCAKE_FLANGE_T_OUT    = 2.0                              # flange on cap (housing-plate side)
+# Inner flange of the pancake is integrated into main_body (see
+# pancake_spool_flange below) rather than being part of the cap. That
+# keeps it on the spool's build-plate face during printing (no overhang)
+# and shortens the cap by 2 mm — leaving 3.5 mm clearance from the cap's
+# outer flange edge to the housing plate at post-flip z=50.
+PANCAKE_SPOOL_FLANGE_T  = 2.0
+PANCAKE_SPOOL_FLANGE_ID = HUB_CAVITY_D                     # 34 — matches cap_seat ID
+# Pancake on cap: groove (6.5) + outer flange (2) = 8.5 mm reaching from
+# z=38 to z=46.5 post-flip; spool's pancake flange occupies z=38..40.
+
+_axle_bore_d           = AXLE_D + 2.0                       # 10 mm — 1 mm radial clearance
+                                                            # between cap and axle through the
+                                                            # pancake section. Generous gap (the
+                                                            # bearing — not this bore — fixes the
+                                                            # cap concentric to the axle).
+
+# ---- bearing_cap_bottom -----------------------------------------------------
+# Post-flip assembly position: z = 0 .. CAP_H (=8). Exterior face at z=0
+# (lip, narrow end, adjacent to lever-side housing plate). Interior face at
+# z=CAP_H (pocket opening, adjacent to spring cavity at z=9..29).
+
+bearing_cap_bottom = (
+    cyl(CAP_OD, CAP_H, z=0)
+    # Lip z=0..1 — straight 90° shelf at ID=BEARING_LIP_ID (20). The
+    # bearing's full bottom face from r=10 to r=11 (outer race rim) lands
+    # flat on the lip's top surface — more contact area than the old 45°
+    # cone version. The 45° was there to be self-supporting when printed
+    # lip-down on the build plate; since this is now a small standalone
+    # part, you can print it in any orientation that avoids the 90°
+    # transition.
+    .cut(cyl(BEARING_LIP_ID, BEARING_LIP_H, z=0))
+    # Pocket z=1..CAP_H — straight bore, bearing press-fits here from the
+    # z=CAP_H (interior) face.
+    .cut(cyl(BEARING_BORE, BEARING_W, z=BEARING_LIP_H))
+)
+
+# ---- bearing_cap_top --------------------------------------------------------
+# Post-flip assembly position: z = 30 .. 48.5.
+#   Body         z=30..38  — slip-fits into the hub's top cap seat
+#     Pocket     z=30..37  — bearing press-fits here from z=30 (interior)
+#     Lip       z=37..38  — 90° flat shelf, ID=BEARING_LIP_ID (20), holds
+#                            bearing in. Full annular contact from r=10 to
+#                            r=11 against the bearing's outer race rim.
+#                            (90° instead of 45° cone: small standalone
+#                            part can be printed in any orientation, so
+#                            self-supporting cones aren't needed.)
+#   Inner plate  z=38..40  — connects the body's top face to the groove core
+#   Groove core  z=40..46.5 — r=5..6, cable wraps here
+#   Outer flange z=46.5..48.5 — the "large plate" (r=0..38)
+#
+# Clearance to the housing plate at z=50 is 1.5 mm.
+#
+# Print orientation: large plate (outer flange) down on the build plate.
+# Inner plate overhangs the groove at r=6..16.9 and needs support inside
+# the groove void.
+
+CAP_INNER_PLATE_T = 2.0
+
+_top_cap_body_z0    = 30.0                                    # body interior face
+_top_cap_body_z1    = _top_cap_body_z0 + CAP_H                # 38 — body exterior face
+_top_cap_lip_z0     = _top_cap_body_z1 - BEARING_LIP_H        # 37 — lip bottom face (bearing stop)
+_top_cap_plate_z0   = _top_cap_body_z1                        # 38 — inner plate starts above body
+_top_cap_plate_z1   = _top_cap_plate_z0 + CAP_INNER_PLATE_T   # 40
+_top_cap_grv_z0     = _top_cap_plate_z1                       # 40 — groove core starts
+_top_cap_fout_z0    = _top_cap_grv_z0 + PANCAKE_GROOVE_W      # 46.5 — outer flange
+_top_cap_z1         = _top_cap_fout_z0 + PANCAKE_FLANGE_T_OUT # 48.5
+
+# Outer envelope: body + inner plate + groove core + outer flange
+bearing_cap_top = (
+    cyl(CAP_OD, CAP_H, z=_top_cap_body_z0)                                    # body
+    .union(cyl(CAP_OD, CAP_INNER_PLATE_T, z=_top_cap_plate_z0))               # inner plate disc
+    .union(cyl(PANCAKE_GROOVE_R_IN * 2,
+               _top_cap_fout_z0 - _top_cap_plate_z0,                          # groove core
+               z=_top_cap_plate_z0))                                          # spans plate+groove
+    .union(cyl(PANCAKE_FLANGE_OD, PANCAKE_FLANGE_T_OUT, z=_top_cap_fout_z0))  # outer flange
+)
+bearing_cap_top = (
+    bearing_cap_top
+    # Bearing pocket z=30..37 — bearing enters from z=30 (interior face)
+    .cut(cyl(BEARING_BORE, BEARING_W, z=_top_cap_body_z0))
+    # Lip z=37..38 — straight 90° shelf, ID=BEARING_LIP_ID (20). Pocket
+    # bore at r=11.05 narrows abruptly to r=10 here; the bearing's outer
+    # race rim (r=11) presses flat against the lip's bottom face at z=37.
+    .cut(cyl(BEARING_LIP_ID, BEARING_LIP_H, z=_top_cap_lip_z0))
+    # Axle-clearance bore through the pancake section above the body
+    .cut(cyl(_axle_bore_d, _top_cap_z1 - _top_cap_body_z1, z=_top_cap_body_z1))
 )
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -650,7 +859,7 @@ bearing_cap = (
 #   without supports.
 # ────────────────────────────────────────────────────────────────────────────
 
-axle_shaft = cyl(AXLE_D, AXLE_H, z=-AXLE_EXTRA)
+axle_shaft = cyl(AXLE_D, AXLE_H, z=-AXLE_EXTRA_PANCAKE)
 
 # Both the 45° chamfer AND the straight stub cylinder are hollow 2 mm walls.
 # Outer surface (what the spring wraps against) is unchanged. Inside, four
@@ -707,9 +916,9 @@ axle = axle_shaft.union(stub_chamfer).union(stub_wall).union(stub_spokes)
 # housing plates drop onto the 0.5 mm shoulder (axial register) and the
 # D-flat keys them rotationally. M2 inserts in both ends + screws through
 # the housing's axle pads lock everything vertically.
-_top_ledge_z   = SPOOL_H + HOUSING_BEARING_GAP   # 48 — top reduced section starts here
-_bot_ledge_z   = -AXLE_EXTRA                     # -12 — bottom reduced section starts here
-_axle_tip      = SPOOL_H + AXLE_EXTRA            # 50 — top of axle
+_top_ledge_z   = SPOOL_H + HOUSING_GAP_LEVER     # 48 — lever-side reduced section starts here
+_bot_ledge_z   = -AXLE_EXTRA_PANCAKE             # -14 — pancake-side reduced section starts here
+_axle_tip      = SPOOL_H + AXLE_EXTRA_LEVER      # 50 — top of axle (lever side)
 _flat_y        = AXLE_D / 2 - AXLE_FLAT_DEPTH    # 3 — shared flat plane
 # 1) Reduce the OD at the top: cut the annulus from AXLE_D → AXLE_LEDGE_D
 axle = axle.cut(
@@ -743,7 +952,7 @@ axle = axle.cut(
     cyl(AXLE_INSERT_PILOT_D, AXLE_INSERT_DEPTH, z=_axle_tip - AXLE_INSERT_DEPTH)
 )
 axle = axle.cut(
-    cyl(AXLE_INSERT_PILOT_D, AXLE_INSERT_DEPTH, z=-AXLE_EXTRA)
+    cyl(AXLE_INSERT_PILOT_D, AXLE_INSERT_DEPTH, z=-AXLE_EXTRA_PANCAKE)
 )
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -789,7 +998,12 @@ HOUSING_HOLE_CLR  =   0.15   # axle hole slip fit
 
 SPINE_X_INNER     = FLANGE_OD / 2 + HOUSING_CLR         # 90 — 10 mm past flange OD
 SPINE_X_OUTER     = SPINE_X_INNER + HOUSING_SPINE_T     # 92
-HOUSING_X_TAIL    = -HOUSING_W / 2                      # -11 (22 mm x 2 mm square tail)
+# Wrap-around: back spine on the opposite side of the housing, mirroring
+# the front (mounting) spine. Plates now extend across the full width
+# from -SPINE_X_INNER to +SPINE_X_INNER, with a spine box at each end.
+BACK_SPINE_X_INNER = -SPINE_X_INNER                     # -90
+BACK_SPINE_X_OUTER = -SPINE_X_OUTER                     # -92
+HOUSING_X_TAIL    = BACK_SPINE_X_INNER                  # -90 — plate left edge
 
 # Top-plate pads — 9 mm OD pivot bosses can't sit on a 2 mm plate (pivot pad
 # → 10 mm). And the axle attachment needs more material for the M2 insert
@@ -824,13 +1038,13 @@ RATCHET_PIVOT_X   = 76.0
 BRAKE_PIVOT_X     = 55.0
 
 # Derived z-coordinates (SPOOL_H=38 top, 0 bottom of the spool body)
-_TOP_PLATE_Z_IN   = SPOOL_H + HOUSING_BEARING_GAP                 # 48 — plate inner face
+_TOP_PLATE_Z_IN   = SPOOL_H + HOUSING_GAP_LEVER                   # 48 — plate inner face (lever side)
 _TOP_PLATE_Z_OUT  = _TOP_PLATE_Z_IN + PLATE_T                     # 50 — plate outer face
 _TOP_PIVOT_Z_OUT  = _TOP_PLATE_Z_IN + PIVOT_PAD_Z                 # 58 — pivot pad outer face
 _TOP_AXLE_Z_OUT   = _TOP_PLATE_Z_IN + AXLE_PAD_Z                  # 52 — top axle pad outer face
-_BOT_PLATE_Z_IN   = -HOUSING_BEARING_GAP                          # -10 — inner face
-_BOT_PLATE_Z_OUT  = _BOT_PLATE_Z_IN - PLATE_T                     # -12 — outer face
-_BOT_AXLE_Z_OUT   = -HOUSING_BEARING_GAP - AXLE_PAD_Z             # -14 — bottom axle pad outer face
+_BOT_PLATE_Z_IN   = -HOUSING_GAP_PANCAKE                          # -12 — plate inner face (pancake side)
+_BOT_PLATE_Z_OUT  = _BOT_PLATE_Z_IN - PLATE_T                     # -14 — outer face
+_BOT_AXLE_Z_OUT   = -HOUSING_GAP_PANCAKE - AXLE_PAD_Z             # -16 — bottom axle pad outer face
 
 # Each column rises vertically by (column_Z − PLATE_T). The side walls use a
 # 45° slope over the same distance in x (aesthetic, not structural — purely
@@ -947,6 +1161,36 @@ spine = (
          _TOP_PLATE_Z_OUT - _BOT_PLATE_Z_OUT,
          centered=(True, True, False))
 )
+
+# Back spine — wraps the housing into a closed rectangle. Mirrors the
+# front (mounting) spine on the opposite x-face. Carries the source-cable
+# entry hole.
+back_spine = (
+    cq.Workplane("XY").workplane(offset=_BOT_PLATE_Z_OUT)
+    .center((BACK_SPINE_X_INNER + BACK_SPINE_X_OUTER) / 2, 0)
+    .box(HOUSING_SPINE_T, HOUSING_W,
+         _TOP_PLATE_Z_OUT - _BOT_PLATE_Z_OUT,
+         centered=(True, True, False))
+)
+
+# Source-cable entry hole — a stadium-shaped slot through the back spine.
+# Sized to pass the molded plug of an LTT TrueSpec USB-C cable (plug body
+# ≈ 13 × 8 mm including the strain-relief overmold) with ~1 mm clearance
+# during install. Once threaded, the 6 mm cable sits loosely in the hole.
+# Z position: aligned with the cable groove on the pancake spool (groove
+# at pre-flip z ≈ -8.5..-2), so the cable enters tangentially.
+CABLE_HOLE_W      = 14.0    # along Y (long axis) — plug width + clearance
+CABLE_HOLE_H      =  9.0    # along Z (short axis) — plug thickness + clearance
+CABLE_HOLE_Z_PRE  = -5.25   # pre-flip z, centered on the cable groove
+
+_back_cable_hole = (
+    cq.Workplane("YZ")
+    .workplane(offset=BACK_SPINE_X_OUTER - 0.5)              # start outside the spine
+    .center(0, CABLE_HOLE_Z_PRE)
+    .slot2D(CABLE_HOLE_W, CABLE_HOLE_H)
+    .extrude(HOUSING_SPINE_T + 1.0)                          # through, with margin
+)
+back_spine = back_spine.cut(_back_cable_hole)
 
 # Wall-mount stud pattern — two clearance holes drilled diagonally
 # through the spine from the +x face (the face that points away from
@@ -1312,7 +1556,7 @@ def _brake_pin_place(part):
 brake_housing_pin = _brake_pin_place(_brake_pin_local())
 
 lever_housing = (
-    top_plate.union(bot_plate).union(spine)
+    top_plate.union(bot_plate).union(spine).union(back_spine)
     # Ratchet pivot: clearance through from +y (lever side), insert on -y
     .cut(_pivot_clearance(RATCHET_PIVOT_X))
     .cut(_pivot_insert_pilot(RATCHET_PIVOT_X, insert_face_sign=-1))
@@ -1536,6 +1780,42 @@ main_body = main_body.cut(
                    theta_offset_deg=RATCHET_TOOTH_OFFSET_DEG)
 )
 
+# Drum-wall cable transit — stadium-shaped slot through the drum wall
+# at angle 180°, aligned alongside the +y face of the 180° spoke (the
+# same spoke as the spool-disk transit hole). The cable descends along
+# the spoke face after dropping through the spool disk; it exits the
+# drum interior through this slot to wrap the drum OD. The spoke face
+# at y=+SPOKE_W/2 sits on one of the stadium's flat edges, so the
+# spoke serves as one wall of the cable channel through the drum.
+# Long axis 12 mm runs along Z (axial, parallel to spoke); short axis
+# 7 mm gives ~1 mm clearance around the 6 mm cable.
+CABLE_HOLE_AZIMUTH_DEG = 180.0
+CABLE_HOLE_Z_CENTER    =  18.0                       # pre-flip — near drum mid (drum spans 7..31)
+CABLE_HOLE_LONG_AXIS   =  12.0                       # along Z
+CABLE_HOLE_SHORT_AXIS  =   7.0                       # along Y
+
+_cable_hole_alpha = math.radians(CABLE_HOLE_AZIMUTH_DEG)
+_cable_hole_cos = math.cos(_cable_hole_alpha)        # -1 at 180°
+_cable_hole_sin = math.sin(_cable_hole_alpha)        #  0 at 180°
+# Start the slot well outside the drum OD and run it through to past
+# the inner face, so the radial cut cleanly opens both faces.
+_cable_hole_r_start = DRUM_ID / 2 - 2.0              # 71
+_cable_hole_r_end   = DRUM_OD / 2 + 2.0              # 77
+_cable_hole_len = _cable_hole_r_end - _cable_hole_r_start
+
+# At angle 180° the bore axis is -x; the workplane sits at the OUTER
+# face of the bore (x = -77) and extrudes along its +x normal toward
+# the drum interior.
+_cable_hole = (
+    cq.Workplane("YZ")
+    .workplane(offset=_cable_hole_cos * _cable_hole_r_end)
+    .center(SPOKE_W / 2 + CABLE_HOLE_SHORT_AXIS / 2,
+            CABLE_HOLE_Z_CENTER)
+    .slot2D(CABLE_HOLE_LONG_AXIS, CABLE_HOLE_SHORT_AXIS, angle=90)
+    .extrude(_cable_hole_len)
+)
+main_body = main_body.cut(_cable_hole)
+
 def _ratchet_pawl_contact(y_near, y_far):
     """Pawl built as (lever-aligned annular-strip prism extending from
     valley floor up to the lever body bottom) MINUS (tooth material in
@@ -1745,11 +2025,12 @@ brake_lever   = _flip_z(brake_lever)
 ratchet_spring = _flip_z(ratchet_spring)
 brake_spring   = _flip_z(brake_spring)
 brake_housing_pin = _flip_z(brake_housing_pin)
-# Bearing cap: flip about its OWN center (z = CAP_H/2 = 4) so the standalone
-# part still fits in a clean 0..8 z range, just with the lip and pocket
-# swapped. Assembly position moves from z=CAP_SEAT_Z0 (=30) to z=0 since
-# the cap seat in the flipped main_body is now at z=0..8.
-bearing_cap   = bearing_cap.mirror(mirrorPlane="XY", basePointVector=(0, 0, CAP_H / 2))
+# Bearing caps are already built in post-flip assembly coords
+# (bearing_cap_bottom at z=0..8, bearing_cap_top at z=30..48.5), so they
+# don't need _flip_z. For clean single-part STEP exports, translate each
+# to a z=0 origin; the assembly uses the original positioned versions.
+bearing_cap_bottom_export = bearing_cap_bottom
+bearing_cap_top_export    = bearing_cap_top.translate((0, 0, -_top_cap_body_z0))
 
 # ────────────────────────────────────────────────────────────────────────────
 # Export — individual parts for printing, + a combined assembly STEP for
@@ -1757,11 +2038,35 @@ bearing_cap   = bearing_cap.mirror(mirrorPlane="XY", basePointVector=(0, 0, CAP_
 # purchased parts).
 # ────────────────────────────────────────────────────────────────────────────
 
+def _heal(wp):
+    """Run OCCT's ShapeFix on a Workplane's underlying solid to clean up
+    any minor face/edge tolerance issues before STEP export. cadquery
+    pipelines of many boolean ops can accumulate tiny invalidities
+    (particularly around lofted/BSpline faces) that pass cadquery's
+    shallow validator but get flagged by strict STEP importers."""
+    from OCP.ShapeFix import ShapeFix_Shape  # type: ignore[import]
+    shape = wp.val().wrapped
+    fixer = ShapeFix_Shape(shape)
+    fixer.SetPrecision(1e-4)
+    fixer.SetMaxTolerance(1e-3)
+    fixer.Perform()
+    # Wrap the fixed TopoDS back into a cadquery Workplane
+    new_solid = cq.Solid(fixer.Shape())
+    return cq.Workplane("XY").add(new_solid)
+
+main_body = _heal(main_body)
+axle = _heal(axle)
+lever_housing = _heal(lever_housing)
+# bearing_cap, levers, pin, spring viz are simple enough to skip
+
 cq.exporters.export(main_body,    "spool_main_body.step")
 print("Wrote spool_main_body.step")
 
-cq.exporters.export(bearing_cap,  "bearing_cap.step")
-print("Wrote bearing_cap.step")
+cq.exporters.export(bearing_cap_bottom_export, "bearing_cap_bottom.step")
+print("Wrote bearing_cap_bottom.step")
+
+cq.exporters.export(bearing_cap_top_export,    "bearing_cap_top.step")
+print("Wrote bearing_cap_top.step")
 
 cq.exporters.export(axle,         "axle.step")
 print("Wrote axle.step")
@@ -1787,7 +2092,8 @@ print("Wrote brake_housing_pin.step  (print separately — glue-install)")
 assembly = (
     cq.Assembly(name="retractable_cable_spool")
     .add(main_body,     name="main_body")
-    .add(bearing_cap,   name="bearing_cap",    loc=cq.Location((0, 0, 0)))
+    .add(bearing_cap_bottom, name="bearing_cap_bottom", loc=cq.Location((0, 0, 0)))
+    .add(bearing_cap_top,    name="bearing_cap_top",    loc=cq.Location((0, 0, 0)))
     .add(axle,          name="axle")
     .add(lever_housing, name="lever_housing")
     .add(ratchet_lever, name="ratchet_lever")
