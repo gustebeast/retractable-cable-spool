@@ -15,7 +15,6 @@ from .dimensions import (
     DRUM_OD,
     FLANGE_OD,
     HOUSING_GAP_LEVER, HOUSING_GAP_PANCAKE,
-    LEVER_CROSS_PIN_Z,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
     M2_INSERT_DEPTH, M2_INSERT_PILOT_D, M2_SHAFT_CLR_D,
     PANCAKE_CROSS_PIN_Z, PLATE_T,
@@ -50,9 +49,17 @@ SPINE_X_OUTER     = SPINE_X_INNER + HOUSING_SPINE_T     # 92
 # Wrap-around: back spine on the opposite side of the housing, mirroring
 # the front (mounting) spine. Plates extend across the full width from
 # -SPINE_X_INNER to +SPINE_X_INNER, with a spine box at each end.
-BACK_SPINE_X_INNER = -SPINE_X_INNER                     # -90
-BACK_SPINE_X_OUTER = -SPINE_X_OUTER                     # -92
-HOUSING_X_TAIL    = BACK_SPINE_X_INNER                  # -90 — plate left edge
+# With the back spine removed, plates are trimmed asymmetrically:
+#   - Lever-side plate starts at LEVER_HOUSING_X_TAIL = 57: 2 mm past the
+#     -x edge of the brake-lever pivot boss (BRAKE_PIVOT_X − boss_radius
+#     = 62 − 3 = 59). Everything inboard of that is gone, including the
+#     lever-side axle cross-pin (axle is now held only by the pancake-
+#     side cross-pin + the bottom bearing).
+#   - Pancake-side plate starts at PANCAKE_HOUSING_X_TAIL = -6: 2 mm past
+#     the axle hole's -x edge (axle radius 4 → -x edge at -4). Keeps the
+#     axle hole + cross-pin.
+LEVER_HOUSING_X_TAIL   = 57.0
+PANCAKE_HOUSING_X_TAIL = -6.0
 
 # Lever pivot Z — preserved at the original position (2.5 mm into the plate
 # from its inner face) so the lever kinematics stay unchanged when the
@@ -78,8 +85,22 @@ _LEVER_PIVOT_OFFSET_FROM_INNER = 2.5
 #     descends onto the brake ring. Pivot position TUNED for the
 #     handle-throw to match the ratchet's, paired with the chosen lever
 #     ratio.
-RATCHET_PIVOT_X   = 76.0   # tuned (kinematic constraint with brake)
-BRAKE_PIVOT_X     = 55.0   # tuned (handle throw paired with ratchet)
+RATCHET_PIVOT_X   = 70.0   # was 76 — moved inboard to clear the new lever-side
+                           # guide bearing, which sits at x≈73..81 (between the
+                           # levers, riding on the brake track at z=0). Throw
+                           # ratio increases (handle/pawl ≈ 4.7 vs ~2.5 before),
+                           # i.e., the user moves the handle a bit more for the
+                           # same pawl rise. Kinematic match to the brake side
+                           # has shifted; revisit if engagement timing matters.
+BRAKE_PIVOT_X     = 62.0   # was 55 — moved to maintain the matched ROM
+                           # constraint when the ratchet pivot moved 76 → 70.
+                           # New ratio (pawl_arm / pad_arm = 9.55 / 11.5 = 0.83)
+                           # is the same +11% deviation from ideal that the
+                           # original (76, 55) design had, so engagement timing
+                           # feel matches the prior prototype. Engagement angle
+                           # is now ~9.5° vs the old ~6° (more lever throw to
+                           # the same engagement state, but ratchet/brake still
+                           # transition together).
 
 # Derived z-coordinates: LEVER side sits below the spool body (Z < 0),
 # PANCAKE side sits above (Z > SPOOL_H). _Z_IN is the spool-facing face
@@ -91,28 +112,28 @@ PANCAKE_PLATE_Z_OUT  = PANCAKE_PLATE_Z_IN + PLATE_T                     # 64 —
 
 
 def _top_plate():
-    """11 mm slab spanning the full housing in x and y. Lever-side plate.
-    The axle / pivot holes are cut later; the slab itself has no local
-    thickenings (the uniform thickness carries the bending load directly)."""
+    """11 mm slab — lever-side plate. Trimmed to start at
+    LEVER_HOUSING_X_TAIL (= 57, just past the brake-pivot boss's -x edge)."""
     return (
         cq.Workplane("XZ")
-        .moveTo(HOUSING_X_TAIL,     _LEVER_PLATE_Z_IN)
-        .lineTo(SPINE_X_INNER,      _LEVER_PLATE_Z_IN)
-        .lineTo(SPINE_X_INNER,      _LEVER_PLATE_Z_OUT)
-        .lineTo(HOUSING_X_TAIL,     _LEVER_PLATE_Z_OUT)
+        .moveTo(LEVER_HOUSING_X_TAIL, _LEVER_PLATE_Z_IN)
+        .lineTo(SPINE_X_INNER,        _LEVER_PLATE_Z_IN)
+        .lineTo(SPINE_X_INNER,        _LEVER_PLATE_Z_OUT)
+        .lineTo(LEVER_HOUSING_X_TAIL, _LEVER_PLATE_Z_OUT)
         .close()
         .extrude(HOUSING_W / 2, both=True)
     )
 
 
 def _bot_plate():
-    """11 mm slab — pancake-side plate."""
+    """11 mm slab — pancake-side plate. Trimmed to start at
+    PANCAKE_HOUSING_X_TAIL (= -6, 2 mm past the axle hole's -x edge)."""
     return (
         cq.Workplane("XZ")
-        .moveTo(HOUSING_X_TAIL,     PANCAKE_PLATE_Z_IN)
-        .lineTo(SPINE_X_INNER,      PANCAKE_PLATE_Z_IN)
-        .lineTo(SPINE_X_INNER,      PANCAKE_PLATE_Z_OUT)
-        .lineTo(HOUSING_X_TAIL,     PANCAKE_PLATE_Z_OUT)
+        .moveTo(PANCAKE_HOUSING_X_TAIL, PANCAKE_PLATE_Z_IN)
+        .lineTo(SPINE_X_INNER,          PANCAKE_PLATE_Z_IN)
+        .lineTo(SPINE_X_INNER,          PANCAKE_PLATE_Z_OUT)
+        .lineTo(PANCAKE_HOUSING_X_TAIL, PANCAKE_PLATE_Z_OUT)
         .close()
         .extrude(HOUSING_W / 2, both=True)
     )
@@ -124,10 +145,10 @@ def _bot_plate():
 def _axle_round_hole(z_base, height):
     return cyl(AXLE_PRINT_D + 2 * HOUSING_HOLE_CLR, height, z=z_base)
 
-top_plate = (
-    _top_plate()
-    .cut(_axle_round_hole(_LEVER_PLATE_Z_OUT, PLATE_T))
-)
+# Lever-side plate: NO axle hole — the trimmed plate doesn't reach x=0
+# anymore, so there's no plate material at the axle's z-range to cut.
+top_plate = _top_plate()
+# Pancake-side plate: still needs the axle hole at x=0.
 bot_plate = (
     _bot_plate()
     .cut(_axle_round_hole(PANCAKE_PLATE_Z_IN, PLATE_T))
@@ -141,45 +162,9 @@ spine = (
          centered=(True, True, False))
 )
 
-# Back spine — wraps the housing into a closed rectangle. Mirrors the
-# front (mounting) spine on the opposite x-face. Carries the source-cable
-# entry hole.
-back_spine = (
-    cq.Workplane("XY").workplane(offset=_LEVER_PLATE_Z_OUT)
-    .center((BACK_SPINE_X_INNER + BACK_SPINE_X_OUTER) / 2, 0)
-    .box(HOUSING_SPINE_T, HOUSING_W,
-         PANCAKE_PLATE_Z_OUT - _LEVER_PLATE_Z_OUT,
-         centered=(True, True, False))
-)
-
-# Source-cable entry hole — through the back spine (BACK face),
-# placed close to the top of the housing in printer orientation, with
-# 2 mm of material between the hole's near-plate edge and the inside
-# corner where the back spine meets the bot plate. Sized to pass the
-# molded plug of an LTT TrueSpec USB-C cable (plug body ≈ 13 × 8 mm
-# with strain-relief overmold) with ~1 mm clearance during install.
-CABLE_HOLE_W                    = 14.0    # long axis — plug width + clearance
-CABLE_HOLE_H                    =  9.0    # short axis — plug thickness + clearance
-CABLE_HOLE_GAP_FROM_PLATE       =  2.0    # mm between hole edge and plate-spine corner
-
-# Post-flip Z: hole's near-plate edge sits 2 mm below the plate's inner
-# face at z=53 (= 2 mm into the housing interior). Long axis runs along Y
-# (housing width); short axis along Z.
-_cable_hole_z_max = PANCAKE_PLATE_Z_IN - CABLE_HOLE_GAP_FROM_PLATE
-_cable_hole_z_min = _cable_hole_z_max - CABLE_HOLE_H
-_cable_hole_z_center = (_cable_hole_z_min + _cable_hole_z_max) / 2
-
-_back_cable_hole = (
-    cq.Workplane("YZ")
-    .center(0, _cable_hole_z_center)
-    .slot2D(CABLE_HOLE_W, CABLE_HOLE_H, angle=0)
-    .extrude(HOUSING_SPINE_T + 2 * BOOL_OVERSHOOT)
-)
-_bb = _back_cable_hole.val().BoundingBox()
-_back_cable_hole = _back_cable_hole.translate(
-    (BACK_SPINE_X_OUTER - 0.5 - _bb.xmin, 0, 0)
-)
-back_spine = back_spine.cut(_back_cable_hole)
+# Back spine + back-spine cable hole removed — the source cable now exits
+# the housing through the lever-side end of the axle (cap + cable hole, to
+# be added). Plates are trimmed to HOUSING_X_TAIL = -10 instead of -90.
 
 # Wall-mount stud — single clearance hole through the front spine, on the
 # face that sits against the mounting surface (+x face). Install method:
@@ -767,7 +752,7 @@ def _build_housing_skeleton():
     the guide intermediates have been defined further down the module."""
     return (
         # ── UNIONS FIRST ────────────────────────────────────────────────────
-        top_plate.union(bot_plate).union(spine).union(back_spine)
+        top_plate.union(bot_plate).union(spine)
         # Support bosses around each housing stop pin (full housing y width).
         .union(_stop_pin_support(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG))
         # Top (spring pin) boss: axis-aligned rectangle in the boss's local
@@ -810,25 +795,28 @@ def _build_housing_skeleton():
         .cut(stop_pin_hole(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG,
                             hole_y=+(HOUSING_W / 2 + STOP_PIN_HOLE_OFFSET),
                             cover_d=STOP_PIN_SUPPORT_D))
-        # Axle cross-pin holes. Counterbore on +y, insert on -y, so
-        # tightening clamps the axle between head and inserted shoulder.
-        .cut(_axle_pin_clearance(LEVER_CROSS_PIN_Z))
-        .cut(_axle_pin_insert_pilot(LEVER_CROSS_PIN_Z, insert_face_sign=-1))
+        # Axle cross-pin hole — pancake side only. The lever-side cross-pin
+        # was dropped: with the lever-side plate trimmed to x=57 there's
+        # no plate material at x=0 to anchor the screw, and the axle is
+        # already constrained on the lever side by the bottom 608 bearing.
         .cut(_axle_pin_clearance(PANCAKE_CROSS_PIN_Z))
         .cut(_axle_pin_insert_pilot(PANCAKE_CROSS_PIN_Z, insert_face_sign=-1))
-        # Wall-mount stud holes through the spine.
+        # Wall-mount stud hole through the spine.
         .cut(_mount_hole(0, MOUNT_SCREW_Z))
-        # Screw-head counterbores LAST so boss material in their volume
-        # is removed. Only the axle cross-pin screws get counterbored.
-        .cut(_screw_head_counterbore(0, LEVER_CROSS_PIN_Z, entry_face_sign=+1))
+        # Pancake cross-pin head counterbore (LAST so boss material in its
+        # volume is removed).
         .cut(_screw_head_counterbore(0, PANCAKE_CROSS_PIN_Z, entry_face_sign=+1))
     )
 
-# Final housing assembly: U-bracket skeleton (this module) + guide-bearing
-# area (housing_guide.py).
+# Final housing assembly: U-bracket skeleton (this module) + pancake-side
+# guide-bearing (housing_guide.py) + lever-side guide-bearing
+# (housing_lever_guide.py).
 def _build_housing():
-    from . import housing_guide
-    return housing_guide.apply_to_housing(_build_housing_skeleton())
+    from . import housing_guide, housing_lever_guide
+    h = _build_housing_skeleton()
+    h = housing_guide.apply_to_housing(h)
+    h = housing_lever_guide.apply_to_housing(h)
+    return h
 
 
 housing = _build_housing()

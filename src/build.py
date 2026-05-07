@@ -36,6 +36,7 @@ from . import axle as _axle_mod
 from . import housing as _housing_mod
 from . import housing_pins as _housing_pins_mod
 from . import guide_axle as _guide_mod
+from . import lever_guide_axle as _lever_guide_mod
 from . import levers as _lev_mod
 from . import viz as _viz_mod
 
@@ -47,12 +48,12 @@ main_body = _lev_mod.apply_to_main_body(main_body)
 # Re-bind module-level part variables for export.
 bearing_cap_bottom     = caps.bearing_cap_bottom
 bearing_cap_top        = caps.bearing_cap_top
-pancake_spool          = caps.pancake_spool
 axle                   = _axle_mod.axle
 housing                = _housing_mod.housing
 brake_housing_pin      = _housing_pins_mod.brake_housing_pin
 brake_housing_rest_pin = _housing_pins_mod.brake_housing_rest_pin
 guide_axle_part        = _guide_mod.guide_axle_part
+lever_guide_axle_part  = _lever_guide_mod.lever_guide_axle_part
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
 ratchet_spring         = _viz_mod.ratchet_spring
@@ -60,6 +61,7 @@ brake_spring           = _viz_mod.brake_spring
 bearing_top            = _viz_mod.bearing_top
 bearing_bottom         = _viz_mod.bearing_bottom
 bearing_guide          = _viz_mod.bearing_guide
+bearing_lever_guide    = _viz_mod.bearing_lever_guide
 
 # ────────────────────────────────────────────────────────────────────────────
 # Export — individual parts for printing, + a combined assembly STEP for
@@ -75,19 +77,17 @@ ratchet_lever = heal(ratchet_lever)
 brake_lever   = heal(brake_lever)
 # bearing_cap, levers, pin, spring viz are simple enough to skip
 
-# Bearing caps & pancake_spool are built in their assembled positions; for
-# clean single-part STEP exports, translate each to a z=0 origin. The
-# assembly uses the original positioned versions.
+# Bearing caps are built in their assembled positions; for clean single-
+# part STEP exports, translate each to a z=0 origin. The assembly uses
+# the original positioned versions.
 bearing_cap_bottom_export = bearing_cap_bottom
 bearing_cap_top_export    = bearing_cap_top.translate((0, 0, -caps._top_cap_body_z0))
-pancake_spool_export      = pancake_spool.translate((0, 0, -caps._pancake_flange_z0))
 
 # Map of part name → (workplane, output filename, optional note).
 PARTS = {
     "main_body":              (main_body,                  "spool_main_body.step",        None),
     "bearing_cap_bottom":     (bearing_cap_bottom_export,  "bearing_cap_bottom.step",     None),
     "bearing_cap_top":        (bearing_cap_top_export,     "bearing_cap_top.step",        None),
-    "pancake_spool":          (pancake_spool_export,       "pancake_spool.step",          None),
     "axle":                   (axle,                       "axle.step",                   None),
     "housing":                (housing,                    "housing.step",                None),
     "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
@@ -96,7 +96,8 @@ PARTS = {
     "brake_spring":           (brake_spring,               "brake_spring.step",           "dummy — purchased torsion spring"),
     "brake_housing_pin":      (brake_housing_pin,          "brake_housing_pin.step",      "print separately — glue-install"),
     "brake_housing_rest_pin": (brake_housing_rest_pin,     "brake_housing_rest_pin.step", "print separately — glue-install"),
-    "guide_axle":             (guide_axle_part,            "guide_axle.step",             "separate axle — press-fits into housing boss"),
+    "guide_axle":             (guide_axle_part,            "guide_axle.step",             "separate axle — press-fits into pancake-side guide-bearing boss"),
+    "lever_guide_axle":       (lever_guide_axle_part,      "lever_guide_axle.step",       "separate axle — press-fits into lever-side guide-bearing boss"),
 }
 
 
@@ -113,11 +114,12 @@ def _export_assembly():
         .add(main_body,     name="main_body")
         .add(bearing_cap_bottom, name="bearing_cap_bottom", loc=cq.Location((0, 0, 0)))
         .add(bearing_cap_top,    name="bearing_cap_top",    loc=cq.Location((0, 0, 0)))
-        .add(pancake_spool,      name="pancake_spool",      loc=cq.Location((0, 0, 0)))
         .add(bearing_bottom,     name="bearing_bottom",     loc=cq.Location((0, 0, 0)))
         .add(bearing_top,        name="bearing_top",        loc=cq.Location((0, 0, 0)))
         .add(bearing_guide,      name="bearing_guide",      loc=cq.Location((0, 0, 0)))
+        .add(bearing_lever_guide, name="bearing_lever_guide", loc=cq.Location((0, 0, 0)))
         .add(guide_axle_part,    name="guide_axle",         loc=cq.Location((0, 0, 0)))
+        .add(lever_guide_axle_part, name="lever_guide_axle", loc=cq.Location((0, 0, 0)))
         .add(axle,          name="axle")
         .add(housing, name="housing")
         .add(ratchet_lever, name="ratchet_lever")
