@@ -18,6 +18,9 @@ from .housing import (
 from .housing_guide import (
     GUIDE_BEARING_Y_OFFSET, GUIDE_AXLE_Z, GUIDE_KEY_TAB_X_MAX,
 )
+from .housing_lever_guide import (
+    LEVER_GUIDE_AXLE_X_OUTER, LEVER_GUIDE_AXLE_Z, LEVER_GUIDE_BEARING_Y_OFFSET,
+)
 from .levers import LEVER_INNER_Y
 from .caps import pancake_bearing_z0
 
@@ -183,4 +186,29 @@ def _build_bearing_guide():
 
 
 bearing_guide = _build_bearing_guide()
+
+
+# Lever-side guide bearing — same 608 dummy, rolling on the lever-side
+# flange's BOTTOM face at z=0. Bearing's outboard face flush with the
+# axle's outer end (x = LEVER_GUIDE_AXLE_X_OUTER); bearing extents
+# inboard by BEARING_W.
+def _build_bearing_lever_guide():
+    x_min = LEVER_GUIDE_AXLE_X_OUTER - BEARING_W
+    z = LEVER_GUIDE_AXLE_Z
+    return (
+        cq.Workplane("XY").add(cq.Solid.makeCylinder(
+            BEARING_OD / 2, BEARING_W,
+            pnt=cq.Vector(x_min, LEVER_GUIDE_BEARING_Y_OFFSET, z),
+            dir=cq.Vector(1, 0, 0),
+        ))
+    ).cut(
+        cq.Workplane("XY").add(cq.Solid.makeCylinder(
+            AXLE_D / 2, BEARING_W,
+            pnt=cq.Vector(x_min, LEVER_GUIDE_BEARING_Y_OFFSET, z),
+            dir=cq.Vector(1, 0, 0),
+        ))
+    )
+
+
+bearing_lever_guide = _build_bearing_lever_guide()
 
