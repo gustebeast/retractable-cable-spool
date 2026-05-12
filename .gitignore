@@ -3,3 +3,7 @@ __pycache__/
 *.pyo
 .venv/
 .vscode/
+
+# Onshape API credentials — NEVER commit. Copy onshape_credentials.example.json
+# to onshape_credentials.json and fill in your keys.
+tools/onshape_credentials.json
