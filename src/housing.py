@@ -259,7 +259,7 @@ _BACK_AXLE_SLOT_LEN = BACK_AXLE_TRAVEL + M2_SHAFT_CLR_D + 2.0                   
 BACK_AXLE_HEAD_D      = 12.0
 BACK_AXLE_HEAD_H      = 3.0
 BACK_AXLE_SHAFT_TOP_Z = PANCAKE_PLATE_Z_OUT                # 63 — flush with bearing top
-BACK_AXLE_SHAFT_BOT_Z = DRUM_BOTTOM_Z                      # 7  — bottom of the lowest helix turn
+BACK_AXLE_SHAFT_BOT_Z = DRUM_BOTTOM_Z - (BACK_AXLE_SHAFT_TOP_Z - DRUM_BOTTOM_Z)  # TEMP — 2x shaft length for update verification (normally = DRUM_BOTTOM_Z)
 
 
 def _back_axle_narrow_plate():

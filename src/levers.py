@@ -17,7 +17,7 @@ from .dimensions import (
     RATCHET_DEPTH, RATCHET_TEETH,
     SPOKE_W, SPOOL_H,
 )
-from .helpers import cyl, cone_solid, ratchet_cutter
+from .helpers import cyl, cone_solid, heal, ratchet_cutter
 from .housing import (
     BRAKE_BOSS_EXT_ALPHA_HI, BRAKE_BOSS_EXT_ALPHA_LO,
     BRAKE_INNER_TRAVEL_DEG, BRAKE_LEVER_BOSS_EXTENSION,
@@ -364,6 +364,10 @@ def apply_to_main_body(main_body: cq.Workplane) -> cq.Workplane:
                        depth=RATCHET_DEPTH,
                        theta_offset_deg=RATCHET_TOOTH_OFFSET_DEG)
     )
+    # Heal between the ratchet cut and the transit-slot cut — the slot
+    # passes through the spool's groove-relieved drum wall, whose geometry
+    # is valid but fragile, and the cut otherwise silently no-ops.
+    main_body = heal(main_body)
     main_body = main_body.cut(_build_top_merged_slot())
     main_body = main_body.cut(_build_entry_hole())
     return main_body
