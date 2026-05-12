@@ -22,7 +22,7 @@ from .dimensions import (
     TOP_BEARING_BORE,
 )
 from .helpers import (
-    cyl, cone_solid, heal,
+    cyl, cone_solid,
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
@@ -108,12 +108,13 @@ def _build_main_body():
     main_body = main_body.union(_top_bearing_ribs())
     main_body = main_body.cut(_spring_slot())
     main_body = main_body.cut(_helical_cable_groove())
-    main_body = main_body.cut(_helical_groove_following_relief())
     main_body = main_body.union(_top_rim_cap())
-    # The helical relief sweep + thin-shell booleans leave a lot of tiny
-    # faces; heal here so the downstream cap/lever cuts in build.py get a
-    # clean solid (an un-healed near-degenerate face makes them fail).
-    return heal(main_body)
+    # NB: the constant-thickness drum-wall relief (_helical_groove_following_
+    # relief) is applied LAST in build.py, AFTER the cap/lever cuts — the
+    # relieved drum geometry is valid but too fragile for further booleans
+    # (the cable-transit slot cut silently no-ops on it), so the spool
+    # leaves here with the full-thickness wall and gets relieved at the end.
+    return main_body
 
 
 # Top rim cap — re-added AFTER the helix cut so the helix's topmost turn

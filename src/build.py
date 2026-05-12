@@ -43,12 +43,14 @@ from . import viz as _viz_mod
 # Compose the final main_body by applying the cap-key grooves and the
 # lever-dependent cuts (ratchet teeth, drum cable hole) explicitly.
 main_body = caps.apply_to_main_body(spool.main_body)
-# Heal before the lever cuts — the drum's groove-following inner relief
-# (built in spool.py) leaves geometry that's valid but fragile, and the
-# cable-transit slot cut (which passes right through the relieved drum
-# wall) silently no-ops on it otherwise.
-main_body = heal(main_body)
 main_body = _lev_mod.apply_to_main_body(main_body)
+# Constant-thickness drum-wall relief, applied LAST: it thins the drum
+# wall behind the cable cradle's edges/bands down to STRUCT_WALL (the
+# wall behind the cradle bottom is already STRUCT_WALL). It leaves
+# geometry that's valid but too fragile for further booleans, so it goes
+# after every cap/lever cut — nothing cuts main_body after this except
+# the final heal() below.
+main_body = main_body.cut(spool._helical_groove_following_relief())
 
 # Re-bind module-level part variables for export.
 bearing_cap_bottom     = caps.bearing_cap_bottom
