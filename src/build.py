@@ -24,11 +24,13 @@ effects on imported modules.
 """
 
 import argparse
+import pathlib
 import sys
 
 import cadquery as cq
 
 from .helpers import heal
+from .dimensions import SPOOL_H
 
 from . import spool
 from . import caps
@@ -147,7 +149,41 @@ def _ratchet_lever_for_assembly():
     )
 
 
+# ── Build counter — a 3D number floating well above the assembly, bumped
+# on every full build. Lets you see at a glance in Onshape that a fresh
+# build landed (the number ticks up), without poking at any real part.
+# Stored in tools/build_counter.txt (gitignored); starts at 1 if missing.
+_BUILD_COUNTER_FILE = pathlib.Path(__file__).resolve().parent.parent / "tools" / "build_counter.txt"
+
+
+def _bump_build_counter() -> int:
+    try:
+        n = int(_BUILD_COUNTER_FILE.read_text().strip()) + 1
+    except (OSError, ValueError):
+        n = 1
+    try:
+        _BUILD_COUNTER_FILE.write_text(f"{n}\n")
+    except OSError:                                         # noqa: BLE001 — counter is best-effort
+        pass
+    return n
+
+
+def _build_counter_model(n: int):
+    """Upright extruded number, centred at X=0 and floating ~50 mm above
+    the top of the spool (well clear of the housing). Returns None if the
+    text engine isn't available — a font hiccup must not break the build."""
+    try:
+        return (
+            cq.Workplane("XZ")
+            .center(0, SPOOL_H + 50)
+            .text(str(n), 30, 6)
+        )
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _export_assembly():
+    build_n = _bump_build_counter()
     assembly = (
         cq.Assembly(name="retractable_cable_spool")
         .add(main_body,     name="main_body")
@@ -169,8 +205,11 @@ def _export_assembly():
         .add(brake_housing_pin, name="brake_housing_pin")
         .add(brake_housing_rest_pin, name="brake_housing_rest_pin")
     )
+    counter = _build_counter_model(build_n)
+    if counter is not None:
+        assembly.add(counter, name="build_counter")
     assembly.save("assembly.step")
-    print("Wrote assembly.step"
+    print(f"Wrote assembly.step  [build #{build_n}]"
           + ("  [ratchet shown DISCONNECTED]" if SHOW_RATCHET_DISCONNECTED else ""),
           flush=True)
     _push_onshape()
