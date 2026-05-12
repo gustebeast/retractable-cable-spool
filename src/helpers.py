@@ -212,14 +212,16 @@ def spokes_solid(z_base: float, z_top: float) -> cq.Workplane:
     # spoke that doesn't span the full hub height.
     _spoke_overlap = 0.5
     r_in         = HUB_OD / 2 - _spoke_overlap
-    # Reach the cable-cradle bottom radius (= DRUM_ID/2 + STRUCT_WALL). That's
-    # as far out as the spoke can go without poking past the drum's outer
-    # surface (which dips to exactly there at each cradle bottom). The drum
-    # wall's groove-following inner relief pulls its inner surface ~3 mm
-    # clear of DRUM_ID/2 between cradle turns, so a spoke ending at DRUM_ID/2
-    # would float free there; reaching the cradle bottom lets the spoke land
-    # flush on the full-thickness wall at every cradle crossing.
-    r_out        = DRUM_ID / 2 + STRUCT_WALL
+    # Reach _SPOKE_BAND_OVERLAP into the relieved drum's band-level wall
+    # (whose inner face sits at DRUM_OD/2 − STRUCT_WALL). This lands the
+    # spoke on the wall over its WHOLE height: flush over each cable cradle
+    # — where the cradle cut trims the spoke flush to the groove surface,
+    # so it never pokes into the cable channel — and with a real overlap
+    # into the thin band wall in between (which the groove-following inner
+    # relief otherwise leaves ~3 mm clear of DRUM_ID/2). Must stay below
+    # DRUM_OD/2 (else the spoke pokes out the OD and tangles the helix).
+    _SPOKE_BAND_OVERLAP = 0.9
+    r_out        = DRUM_OD / 2 - STRUCT_WALL + _SPOKE_BAND_OVERLAP
     taper_h      = FLANGE_INNER_EXT + FLANGE_INNER_LIP_H
     z_taper_end  = z_base + taper_h                        # taper at the lever-side (z_base) end
     r_taper_start = r_out - taper_h
