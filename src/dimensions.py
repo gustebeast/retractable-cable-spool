@@ -8,23 +8,40 @@ build.py next to the part they apply to.
 import math
 
 # ── Spool body (drum + flanges + hub) ────────────────────────────────────────
-DRUM_OD        = 150.0   # cable drum outer diameter
-DRUM_WALL      =   2.0   # drum wall thickness → drum ID = 146 mm
+DRUM_OD        = 155.0   # cable drum outer diameter (cable-wrap region).
+                         # Sized to fit a 3 mm-deep helical cable groove
+                         # (Ø6 mm × 7 mm pitch) with ≥1.5 mm wall behind it.
+DRUM_WALL      =   4.5   # drum wall thickness → drum ID = 146 mm
 DRUM_H         =  37.0   # drum axial extent. Sized for the cassette spring
                          # cavity to be ≥ 33 mm tall (clears the 31.7 mm
                          # Stanley 30-455 cassette assembly with axial slack).
 
-FLANGE_OD      = 160.0   # flange outer diameter
+FLANGE_OD      = DRUM_OD   # flange outer diameter — flush with drum (no
+                           # outer overhang). Both rims (smooth brake/wheel
+                           # outer, toothed ratchet inner) live on a single
+                           # flat-bottom annulus connected to the drum body
+                           # by one inward 45° chamfer.
 FLANGE_H       =   7.0   # flange axial extent at inner edge (over the drum).
                          # = (FLANGE_OD−DRUM_OD)/2 + FLANGE_LIP_T → 45° underside.
 FLANGE_LIP_T   =   2.0   # flange thickness at outer edge (cable retention lip)
 
-HUB_OD         =  73.0   # hub outer diameter. Sized for cavity ID 67 mm
-                         # (clears the 64 mm cassette flange OD by 1.5 mm
-                         # per side, with 0.5 mm clearance also at the
+# Universal thin-structural-wall thickness. Used for the hub wall, the
+# main spool spokes, the bearing-cap radial spokes, and the top-bearing
+# block radial ribs — keeping them all on one number means a single
+# stiffness/material knob and one slicer-friendly print width. 1.7 mm =
+# ≈4 perimeters at a 0.4 mm nozzle (extrusion width ~0.42–0.45) so these
+# features print as solid walls with no infill sliver. The bearing
+# press-fit collars are NOT pinned to this — they keep their own thicker
+# wall (3 mm) for hoop strength under the press-fit.
+STRUCT_WALL    =   1.7
+
+HUB_OD         =  70.4   # hub outer diameter = cavity ID 67 mm + 2×HUB_WALL.
+                         # Cavity still clears the 64 mm cassette flange OD by
+                         # 1.5 mm per side, with 0.5 mm clearance also at the
                          # cap-stop lip's narrowest point — CAP_STOP_ID
-                         # = 65 mm).
-HUB_WALL       =   3.0   # hub wall thickness in the spring-cavity region
+                         # = 65 mm. (Was 73.0 with a 3 mm wall.)
+HUB_WALL       = STRUCT_WALL   # hub wall thickness in the spring-cavity region.
+                         # Pinned to STRUCT_WALL — see its comment above.
 
 # ── 608 bearing (purchased part) ─────────────────────────────────────────────
 BEARING_OD     =  22.0   # 608 bearing outer race diameter
@@ -41,38 +58,40 @@ AXLE_PRINT_D   =   AXLE_D - 0.3   # 7.7 — printed axle Ø, 0.15 mm per side un
                                    # the printed axle fits the bearing.
 
 # ── Lever-housing geometry that sizes the axle extensions ────────────────────
-PLATE_T             = 11.0   # housing top/bottom plate thickness. The thick
-                             # plates carry the bending load directly (used to
-                             # be 2 mm + local ~5 mm columns for the lever and
-                             # axle holes; with 11 mm everywhere the columns
-                             # are gone and the housing is much stiffer in the
-                             # mounted-cantilever direction).
-# Axial clearance between each housing plate and the nearest bearing. The
-# two sides are asymmetric because the pancake side (above the spool) also
-# houses the source-cable pancake spool (integrated into bearing_cap_top)
-# and needs extra room for the two pancake flanges plus the cable groove.
-HOUSING_GAP_LEVER   = 10.0   # lever side (below the spool, z < 0)
-HOUSING_GAP_PANCAKE = 15.0   # pancake side (above the spool, z > SPOOL_H).
-                             # +2 mm over the lever-side gap so the pancake
-                             # spool clears the housing plate with room to
-                             # route the source cable above the spool.
-                             # Sized to fit the pancake_spool's hourglass
-                             # cone (taper-in 3.525 mm + taper-out 3.525
-                             # mm = 7.05 mm total, same height as the
-                             # original single-cone) + outer flange
-                             # (9.05 mm above main_body face) with ~1.95
-                             # mm clearance. Cable wraps in the cone's
-                             # waist (now 19.05 mm OD instead of 12 mm
-                             # — halving the cone halves doubles the
-                             # waist OD, but the disk-to-cone joint is
-                             # now thick because both halves meet at
-                             # 19.05 mm OD instead of converging on a
-                             # thin 12 mm neck).
-# Axle extends past the spool through the gap and through the full plate
-# thickness. Cross-pin sits at plate center, so the axle has PLATE_T/2 of
-# full-diameter material on each side of the pin's hole edges.
-AXLE_EXTRA_LEVER    = HOUSING_GAP_LEVER   + PLATE_T   # 21 — axle past spool, lever end
-AXLE_EXTRA_PANCAKE  = HOUSING_GAP_PANCAKE + PLATE_T   # 26 — axle past spool, pancake end
+PLATE_T             = 10.0   # housing top/bottom plate thickness.
+# Axial clearance between each housing plate and the nearest spool feature.
+# The pancake side is now MUCH tighter than the lever side: the printed
+# guide wheel rolls on the spool's pancake-side flange top with its
+# painted-rubber peak just shy of the plate's inner face, so the gap only
+# needs to clear the wheel's bottom (= 0). The 2 mm value lets the plate's
+# inner face sit 2 mm above the spool top — the wheel pokes UP into a
+# pocket cut into the plate's inner face, leaving 1.5 mm of plate roof
+# above the painted wheel as the keep-out from the wood mount.
+HOUSING_GAP_LEVER   =  2.0   # lever side (below the spool, z < 0). Mirrors
+                             # the pancake-side gap so the lever-side guide
+                             # wheel pokes into a pocket cut in the plate
+                             # the same way it does on the pancake side.
+                             # With _LEVER_PIVOT_OFFSET_FROM_INNER=8.13,
+                             # the lever pivot ends up at z=-10.13 (was
+                             # -12.5) — the whole lever assembly moves up
+                             # 2.37 mm, while the wheel and sandwich slab
+                             # geometry stay anchored to the spool flange.
+                             # Top of top stop-pin boss now at z=-2 (=
+                             # plate top) — no boss material in the
+                             # spool clearance gap.
+HOUSING_GAP_PANCAKE = 2.0    # pancake side (above the spool, z > SPOOL_H).
+                             # See above — wheel intrudes into a pocket
+                             # cut in the plate; 2 mm leaves a thin roof.
+# Axle extends past the spool. On the PANCAKE side the axle still goes
+# through the full housing plate (gap + plate thickness) so the cross-
+# pin sits at plate center with PLATE_T/2 of full-diameter material on
+# each side of the pin hole. On the LEVER side the housing plate has
+# been trimmed inboard to LEVER_HOUSING_X_TAIL, leaving no plate at
+# the axle's X position — there's no housing material to mount or
+# pin against, so the axle just ends with a short stub past the
+# bearing cap's outer face.
+AXLE_EXTRA_LEVER    = 2.0                              # short stub past bearing-cap outer face
+AXLE_EXTRA_PANCAKE  = HOUSING_GAP_PANCAKE + PLATE_T    # axle past spool, pancake end
 
 # Axle-to-housing cross-pin Z positions: centered in each housing axle
 # column. Shared by the axle (cross-hole through axle) and the housing
@@ -135,7 +154,9 @@ FIN_TOTAL_H          = (FIN_TAPER_H + FIN_BOTTOM_SOLID_EXT
 SPOKE_COUNT    =   6     # radial ribs (hub ↔ drum ↔ both flange rings).
                          # 6 (up from 4) shortens the unsupported span under
                          # the widened top flange between spokes.
-SPOKE_W        =   2.0   # spoke tangential width
+SPOKE_W        = STRUCT_WALL  # spoke tangential width — pinned to STRUCT_WALL
+                              # so all thin structural walls in the spool
+                              # share one knob. See STRUCT_WALL above.
 
 # ── Anti-rotation keys (cap → main_body, pancake_spool → cap tongue) ─────────
 # Same key system used wherever a cylindrical part needs to lock rotationally
@@ -153,14 +174,14 @@ KEY_ANGLES = [i * 360.0 / SPOKE_COUNT for i in range(SPOKE_COUNT)]
 # from the pivot → lower MA → less handle travel to disengage); outer half
 # is a smooth surface for a rubber brake pad (larger radius → slightly more
 # braking torque per normal force).
-FLANGE_INNER_EXT = 7.0   # radial extension inward. Full 7 mm inward
-                         # extension → tooth ring is r=66..73 (7 mm wide).
-                         # The inner 45° slope runs the full 7 mm (rise=run)
-                         # for self-supporting print, but its top is now
-                         # FLANGE_INNER_LIP_H below the flange top — so the
-                         # slope bottom sits 2 mm below DRUM_TOP_Z. The
-                         # resulting underside at r=75..80 overlaps the
-                         # drum top and prints as a short supported bridge.
+FLANGE_INNER_EXT = 14.0  # radial width of the lever-side rim, measured
+                         # inward from DRUM_OD/2. Rim is OD=DRUM_OD,
+                         # ID=DRUM_OD−2*FLANGE_INNER_EXT, FLANGE_LIP_T thick.
+                         # Inner half (7 mm) carries the ratchet teeth,
+                         # outer half (7 mm) is the smooth brake/wheel surface.
+                         # The 45° chamfer above the rim spans
+                         # (DRUM_ID−FLANGE_INNER_ID)/2 axially before
+                         # meeting the drum's inner cavity wall.
 FLANGE_INNER_LIP_H = 2.0 # vertical inner lip height (analogous to the
                          # outer lip via FLANGE_LIP_T). Creates 2 mm of
                          # straight rectangular material below the tooth
@@ -218,7 +239,8 @@ CAP_STOP_INSET =   1.0   # radial inset of cap-stop lip (per side)
 # ── Derived ──────────────────────────────────────────────────────────────────
 DRUM_ID        = DRUM_OD - 2 * DRUM_WALL                   # 146 mm
 FLANGE_ID      = DRUM_ID                                   # 146 mm (bottom flange ID)
-FLANGE_INNER_ID = FLANGE_ID - 2 * FLANGE_INNER_EXT         # 132 mm (top flange only — inner edge)
+FLANGE_INNER_ID = DRUM_OD - 2 * FLANGE_INNER_EXT           # 127 mm (lever rim ID; pancake top-rim ID derives from band width)
+FLANGE_RIM_MID_R = (FLANGE_INNER_ID + DRUM_OD) / 4         # 70.5 — boundary between ratchet (inner) and brake (outer) bands
 HUB_CAVITY_D   = HUB_OD - 2 * HUB_WALL                     # 34 mm  — spring cavity ID
 SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # overall spool height
 AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE  # 64 mm
@@ -244,14 +266,15 @@ CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 32 mm — cavity ID
 #   z = 8                          bottom of spring cavity (= top of bottom lip)
 #   z = 7                          bottom of bottom bearing lip
 #   z = 0                          bottom of main body
-PANCAKE_CAP_SEAT_Z0 = SPOOL_H - CAP_H                          # 30 — cap seat starts
-PANCAKE_STOP_LIP_Z0 = PANCAKE_CAP_SEAT_Z0 - CAP_STOP_LIP_H     # 29 — stop lip starts
+PANCAKE_CAP_SEAT_Z0 = SPOOL_H - CAP_H                          # 43 — bearing-pocket region starts (was cap-seat top)
 LEVER_CAP_SEAT_Z0   = 0                                        # bottom cap seat starts
 LEVER_CAP_SEAT_Z1   = LEVER_CAP_SEAT_Z0 + CAP_H                # 8 — bottom cap seat ends
 LEVER_STOP_LIP_Z0   = LEVER_CAP_SEAT_Z1                        # 8 — bottom cap-stop lip starts
 LEVER_STOP_LIP_Z1   = LEVER_STOP_LIP_Z0 + CAP_STOP_LIP_H       # 9 — bottom cap-stop lip ends
 CAVITY_Z0           = LEVER_STOP_LIP_Z1                        # 9  — spring cavity starts (above bottom stop lip)
-CAVITY_Z1           = PANCAKE_STOP_LIP_Z0                      # 29 — spring cavity ends
+CAVITY_Z1           = PANCAKE_CAP_SEAT_Z0                      # 43 — spring cavity ends, flush with bearing-pocket bottom
+                                                               #      (the formerly-separate top cap-stop lip is gone now
+                                                               #      that the bearing pocket is fused into the spool)
 
 # Slot is positioned so its center aligns with cassette mid-z. Fin top
 # = slot top (no top taper on the fin); fin extends downward by the
@@ -263,8 +286,8 @@ FIN_Z1     = SLOT_Z_TOP                               # 33   — top of fin = to
 FIN_Z0     = FIN_Z1 - FIN_TOTAL_H                     # 10.7 — bottom of fin
 FIN_CYL_Z0 = FIN_Z0 + FIN_TAPER_H                     # 13   — top of bottom taper
 
-# Cross-pin Z (absolute), centered in each housing plate.
-LEVER_CROSS_PIN_Z   = -HOUSING_GAP_LEVER - PLATE_T / 2            # lever-side (Z < 0)
+# Cross-pin Z (absolute), centered in the pancake housing plate. The
+# lever-side plate was trimmed inboard so there's no lever cross-pin.
 PANCAKE_CROSS_PIN_Z = SPOOL_H + HOUSING_GAP_PANCAKE + PLATE_T / 2 # pancake-side (Z > SPOOL_H)
 
 
@@ -288,12 +311,10 @@ assert CAP_STOP_ID > BEARING_OD, \
     "cap-stop lip ID must be larger than the bearing OD (else the bearing can't pass through)"
 assert FLANGE_INNER_ID < DRUM_ID, \
     "flange inner ID must be smaller than drum ID (else there's no flange overhang)"
-assert FLANGE_OD > DRUM_OD, \
-    "flange must extend radially past the drum (cable retention)"
+assert FLANGE_OD >= DRUM_OD, \
+    "flange OD cannot be smaller than drum OD"
 assert HUB_CAVITY_D > BEARING_BORE, \
     "hub cavity must be larger than the bearing pocket so the bearing fits through"
-assert AXLE_EXTRA_LEVER < AXLE_EXTRA_PANCAKE, \
-    "pancake side has more clearance than lever side by design"
 assert CAP_STOP_LIP_H == CAP_STOP_INSET, \
     "cap-stop lip must be 45° (rise = run) for self-supporting print"
 assert SPOKE_COUNT >= 4, \

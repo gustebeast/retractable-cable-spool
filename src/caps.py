@@ -1,67 +1,80 @@
-"""Bearing caps (top/bottom) + anti-rotation key joining.
+"""Lever-side bearing cap + anti-rotation key joining.
 
 Caller must invoke ``apply_to_main_body(main_body)`` to add the matching
-groove cuts to the main spool body — pure-function style, no side effects.
+groove cut to the main spool body — pure-function style, no side effects.
 
-The pancake spool was removed in the source-cable-rework: the source cable
-now exits the housing from the lever-side end of the axle, with no source-
-side wrapping. ``bearing_cap_top`` is therefore just a plain disc + bearing
-pocket + axle bore now (no cone funnel, no tongue cylinder).
+Only the LEVER-side bearing cap is a separately-printed part now. The
+PANCAKE-side bearing pocket is fused into the housing as a stem
+extending from the pancake plate down into the spool's hub cavity (see
+``_pancake_bearing_carrier`` in housing.py); the formerly-separate
+``bearing_cap_top`` and its tongue/groove keying are gone.
 """
 
 import cadquery as cq
 
 from .dimensions import (
-    AXLE_D,
     BEARING_BORE, BEARING_LIP_H, BEARING_LIP_ID, BEARING_W,
     CAP_H, CAP_OD,
     HUB_CAVITY_D,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
-    PANCAKE_CAP_SEAT_Z0,
-    SPOOL_H,
-    TOP_BEARING_BORE,
+    STRUCT_WALL,
 )
-from .helpers import cyl, cone_solid, make_keys
+from .helpers import cyl, make_keys
 
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# BEARING CAPS — two separate parts retaining the 608 bearings at each end.
+# BEARING CAP — lever-side (below the spool).
 #
-# Both caps have the bearing pressed in from their INTERIOR (spring-cavity)
-# face, so the 45° retention lip lives at the exterior face. They share the
-# body geometry (CAP_OD × CAP_H, slip-fit into the hub's cap seat).
+# Bearing is pressed in from the INTERIOR (spring-cavity) face, with a
+# 45° retention lip at the exterior face.
 #
-# bearing_cap_bottom (lever side, below the spool)
-# ------------------------------------------------
-# Body at assembly z=0..8, inside the hub's bottom cap seat. Interior
-# face at z=8 (bearing enters here from the spring-cavity side), exterior
-# face at z=0 (lip ends here; faces the lever-side housing plate at
-# z=-HOUSING_GAP_LEVER).
-#
-# bearing_cap_top (pancake side, above the spool — opposite the levers)
-# ---------------------------------------------------------------------
-# Body at assembly z=PANCAKE_CAP_SEAT_Z0..SPOOL_H, inside the hub's top cap seat.
-# Pure bearing retainer now — bearing pocket + axle clearance bore + the
-# anti-rotation tongues on its OD that key into main_body's cap seat.
-# Used to also carry the source-cable pancake (cone funnel + tongue
-# cylinder + pancake_spool disc); those are gone now that the source
-# cable exits the housing through the lever-side end of the axle.
+# Body at assembly z=0..CAP_H (=8), inside the hub's bottom cap seat.
+# Interior face at z=CAP_H (bearing enters here from the spring-cavity
+# side). Exterior face at z=0 (lip ends here; faces the lever-side
+# housing plate at z=-HOUSING_GAP_LEVER).
 # ────────────────────────────────────────────────────────────────────────────
 
-CABLE_OD = 6.0    # source cable OD (USB-A-to-C)
 
-_axle_bore_d = AXLE_D + 2.0   # 10 mm — 1 mm radial clearance between cap
-                              # and axle through the funnel/clearance bore.
+# Lightened bearing cap. Instead of a solid Ø66.7 × 8 puck (the metal-
+# heavy original), the cap is just:
+#   - a CAP_BOSS_WALL-thick collar around the Ø22.3 press-fit pocket
+#     (with the bearing-retention lip at its base),
+#   - a CAP_RIM_WALL-thick outer rim — carries the anti-rotation tongues,
+#     slip-fits the hub cavity, and seats the Ø64 Stanley cassette flange
+#     on its top face (the flange lands at r≈32, inside the rim's
+#     r=rim_id/2..CAP_OD/2 top annulus),
+#   - CAP_RIB_COUNT radial spokes tying boss → rim, full cap height.
+# No solid web — the cap is open on both faces between the spokes (the
+# cassette's central bore is Ø13.4; its flange bears only on the rim top,
+# the lever housing plate sits 2 mm clear of the bottom face).
+CAP_BOSS_WALL = 3.0          # wall around the bearing press-fit pocket
+CAP_RIM_WALL  = 3.0          # outer-wall thickness (tongues + cassette-flange seat)
+CAP_RIB_W     = STRUCT_WALL  # radial-spoke width — pinned to STRUCT_WALL
+CAP_RIB_COUNT = 6            # built as CAP_RIB_COUNT // 2 full-diameter boxes
 
-# ---- bearing_cap_bottom -----------------------------------------------------
-# Post-flip assembly position: z = 0 .. CAP_H (=8). Exterior face at z=0
-# (lip, narrow end, adjacent to lever-side housing plate). Interior face at
-# z=CAP_H (pocket opening, adjacent to spring cavity at z=9..29).
 
 def _build_bearing_cap_bottom():
+    boss_od = BEARING_BORE + 2 * CAP_BOSS_WALL          # 28.3
+    rim_id  = CAP_OD - 2 * CAP_RIM_WALL                 # 60.7
+
+    boss = cyl(boss_od, CAP_H, z=0)
+    rim  = cyl(CAP_OD, CAP_H, z=0).cut(cyl(rim_id, CAP_H, z=0))
+
+    cap = boss.union(rim)
+    # Radial spokes — full-diameter boxes through the centre; the middle
+    # overlaps the boss and the ends overlap the rim (union, harmless).
+    n_boxes = CAP_RIB_COUNT // 2
+    for i in range(n_boxes):
+        rib = (
+            cq.Workplane("XY")
+            .box(CAP_OD, CAP_RIB_W, CAP_H, centered=(True, True, False))
+            .rotate((0, 0, 0), (0, 0, 1), i * 180.0 / n_boxes)
+        )
+        cap = cap.union(rib)
+
     cap = (
-        cyl(CAP_OD, CAP_H, z=0)
+        cap
         # Lip z=0..1 — straight 90° shelf at ID=BEARING_LIP_ID (20). The
         # bearing's bottom outer-race rim (r=10..11) lands flat on the lip.
         .cut(cyl(BEARING_LIP_ID, BEARING_LIP_H, z=0))
@@ -73,61 +86,19 @@ def _build_bearing_cap_bottom():
         make_keys(CAP_OD / 2, LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1)
     )
 
-# ---- bearing_cap_top --------------------------------------------------------
-# Plain disc with bearing pocket and axle clearance bore. Anti-rotation
-# tongues on the OD key into main_body's top cap seat.
-#
-# Post-flip assembly position: z = PANCAKE_CAP_SEAT_Z0..SPOOL_H = 43..51.
-#
-# Print orientation: disc face on build plate, axle bore pointing up.
-
-_top_cap_body_z0   = PANCAKE_CAP_SEAT_Z0      # 43 — body interior face (= main body cap seat)
-_top_cap_body_z1   = _top_cap_body_z0 + CAP_H # 51 — body exterior face (= main body top face)
-
-pancake_bearing_z0 = _top_cap_body_z0         # 43 — bearing pocket Z (kept name for viz.py compat)
-_pancake_lip_z0    = pancake_bearing_z0 + BEARING_W  # 50 — top of bearing pocket (where the funnel starts)
-
-
-def _build_bearing_cap_top():
-    cap = (
-        # Disc body — slip-fits into main_body's top cap seat.
-        cyl(CAP_OD, CAP_H, z=_top_cap_body_z0)
-        # Bearing pocket — TOP_BEARING_BORE is 0.1 mm looser than BEARING_BORE
-        # so the top bearing drops in by hand.
-        .cut(cyl(TOP_BEARING_BORE, BEARING_W, z=pancake_bearing_z0))
-        # 45° funnel from pocket top to axle bore. Bearing outer race wedges
-        # into the cone where it has narrowed to D=axle_bore.
-        .cut(cone_solid(TOP_BEARING_BORE, _axle_bore_d,
-                        (TOP_BEARING_BORE - _axle_bore_d) / 2,
-                        _pancake_lip_z0))
-        # Axle clearance bore from funnel top through the rest of the cap.
-        .cut(cyl(_axle_bore_d,
-                 _top_cap_body_z1 - (_pancake_lip_z0 + (TOP_BEARING_BORE - _axle_bore_d) / 2),
-                 z=_pancake_lip_z0 + (TOP_BEARING_BORE - _axle_bore_d) / 2))
-    )
-    # Anti-rotation tongues on the cap OD → main_body's top cap-seat groove.
-    cap = cap.union(make_keys(CAP_OD / 2, _top_cap_body_z0, _top_cap_body_z1))
-    return cap
-
 
 # ────────────────────────────────────────────────────────────────────────────
-# Anti-rotation keys (tongue & groove) at each spoke angle:
+# Anti-rotation keys (tongue & groove) for the lever-side cap only:
 #   bearing_cap_bottom (tongue) → main_body bottom cap seat (groove)
-#   bearing_cap_top    (tongue) → main_body top cap seat    (groove)
 # Tongue: 2 mm tangential × full-axial × 1 mm radial protrusion.
 # Groove: 2.2 × full-axial × 1.2 mm — 0.2 mm per-side slack to drop in by hand.
 # ────────────────────────────────────────────────────────────────────────────
 bearing_cap_bottom = _build_bearing_cap_bottom()
-bearing_cap_top    = _build_bearing_cap_top()
 
 
 def apply_to_main_body(main_body: cq.Workplane) -> cq.Workplane:
-    """Cut the bottom + top cap groove keys into the main spool body.
+    """Cut the bottom cap groove keys into the main spool body.
     Returns the modified body."""
-    main_body = main_body.cut(
+    return main_body.cut(
         make_keys(HUB_CAVITY_D / 2, LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1, groove=True)
     )
-    main_body = main_body.cut(
-        make_keys(HUB_CAVITY_D / 2, PANCAKE_CAP_SEAT_Z0, SPOOL_H, groove=True)
-    )
-    return main_body

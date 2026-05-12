@@ -6,7 +6,7 @@ import cadquery as cq
 from .dimensions import (
     AXLE_CROSS_HOLE_D, AXLE_D, AXLE_EXTRA_LEVER, AXLE_H, AXLE_PRINT_D,
     FIN_Z1,
-    LEVER_CAP_SEAT_Z1, LEVER_CROSS_PIN_Z,
+    LEVER_CAP_SEAT_Z1,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
     M2_INSERT_DEPTH, M2_INSERT_PILOT_D, M2_SHAFT_CLR_D,
     PANCAKE_CAP_SEAT_Z0, PANCAKE_CROSS_PIN_Z,
@@ -217,10 +217,11 @@ def _build_axle():
                           bearing_lip_h, pancake_hat_peak_z))
     )
 
-    # Cross-pin holes — single M2 screw through each housing column AND
-    # the axle, perpendicular to the axle axis. Loads the screw in shear
-    # (not pull-out) and locks the axle against rotation + axial slide.
-    axle = axle.cut(_axle_cross_hole(LEVER_CROSS_PIN_Z))
+    # Cross-pin hole — pancake-side only. The lever-side plate was
+    # trimmed inboard to LEVER_HOUSING_X_TAIL with no material at the
+    # axle's X, so there's no lever-side cross-pin to drill for. The
+    # pancake cross-pin alone locks the axle against rotation + axial
+    # slide.
     axle = axle.cut(_axle_cross_hole(PANCAKE_CROSS_PIN_Z))
     return axle
 

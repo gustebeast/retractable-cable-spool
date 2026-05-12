@@ -7,22 +7,31 @@ in `levers.py`.
 import cadquery as cq
 
 from .dimensions import (
-    BOOL_OVERSHOOT,
+    AXLE_D,
+    BEARING_W, BOOL_OVERSHOOT,
     CAP_H, CAP_STOP_ID, CAP_STOP_LIP_H,
     CAVITY_Z0, CAVITY_Z1,
-    DRUM_BOTTOM_Z, DRUM_H, DRUM_ID, DRUM_OD, DRUM_TOP_Z,
-    FLANGE_H,
+    DRUM_BOTTOM_Z, DRUM_H, DRUM_ID, DRUM_OD, DRUM_TOP_Z, DRUM_WALL,
+    FLANGE_H, FLANGE_INNER_ID,
     HUB_CAVITY_D, HUB_OD,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
     LEVER_STOP_LIP_Z0, LEVER_STOP_LIP_Z1,
-    PANCAKE_CAP_SEAT_Z0, PANCAKE_STOP_LIP_Z0,
-    SPOKE_W, SPOOL_H,
+    PANCAKE_CAP_SEAT_Z0,
+    SPOKE_COUNT, SPOKE_W, SPOOL_H,
+    STRUCT_WALL,
+    TOP_BEARING_BORE,
 )
 from .helpers import (
-    cyl, cone_solid,
+    cyl, cone_solid, heal,
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
+
+# No drum-skirt extension — the lever-flange chamfer apex now sits ABOVE
+# DRUM_BOTTOM_Z (chamfer rises up into the drum region), so the chamfer
+# body itself bridges into the drum and no downward extension is needed.
+DRUM_SKIRT_H = 0.0
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # MAIN BODY — the full spool
@@ -33,8 +42,14 @@ from .helpers import (
 # ────────────────────────────────────────────────────────────────────────────
 
 def _build_main_body():
-    drum = cyl(DRUM_OD, DRUM_H, z=DRUM_BOTTOM_Z).cut(
-           cyl(DRUM_ID, DRUM_H, z=DRUM_BOTTOM_Z))
+    # Drum is extended downward by DRUM_SKIRT_H so its outer wall meets
+    # the brake-rim 45° slope partway down (closing the visual gap left
+    # by DRUM_OD > BRAKE_RIM_INNER_OD). The skirt overlaps with lever-
+    # flange material; the flange's slope-cut outer face becomes interior.
+    _drum_z_lo  = DRUM_BOTTOM_Z - DRUM_SKIRT_H
+    _drum_h     = DRUM_H + DRUM_SKIRT_H
+    drum = cyl(DRUM_OD, _drum_h, z=_drum_z_lo).cut(
+           cyl(DRUM_ID, _drum_h, z=_drum_z_lo))
 
     main_body = (
         cyl(HUB_OD, SPOOL_H, z=0)                       # hub cylinder (full height)
@@ -44,12 +59,17 @@ def _build_main_body():
         .union(spokes_solid(0, SPOOL_H))                 # spokes with taper at lever side
     )
 
-    # Interior z-map cuts — symmetric cap seats at both ends:
-    #   SPOOL_H .. PANCAKE_CAP_SEAT_Z0     — top cap seat (HUB_CAVITY_D = 34 mm ID)
-    #   PANCAKE_CAP_SEAT_Z0 .. PANCAKE_STOP_LIP_Z0 — top cap-stop lip (CAP_STOP_ID = 32 mm, 1 mm)
-    #   PANCAKE_STOP_LIP_Z0 .. CAVITY_Z0   — straight spring cavity (34 mm ID, 20 mm tall)
-    #   CAVITY_Z0 .. LEVER_STOP_LIP_Z0 — bottom cap-stop lip (CAP_STOP_ID → HUB_CAVITY_D)
-    #   LEVER_CAP_SEAT_Z1 .. 0       — bottom cap seat (HUB_CAVITY_D = 34 mm ID)
+    # Interior z-map cuts — bottom is still a separately-printed cap;
+    # the pancake side has the bearing pocket fused directly into the
+    # spool material (replaces the formerly-separate bearing_cap_top).
+    #   SPOOL_H .. PANCAKE_CAP_SEAT_Z0     — fused bearing carrier
+    #     (bearing pocket → 45° funnel → axle clearance bore)
+    #   PANCAKE_CAP_SEAT_Z0 .. CAVITY_Z0   — spring cavity (HUB_CAVITY_D)
+    #     (used to narrow via a top cap-stop lip cone for the
+    #     separately-printed bearing_cap_top to rest on; that lip is
+    #     gone now that the bearing pocket is fused into the spool.)
+    #   CAVITY_Z0 .. LEVER_STOP_LIP_Z0     — bottom cap-stop lip
+    #   LEVER_CAP_SEAT_Z1 .. 0             — bottom cap seat (HUB_CAVITY_D)
     main_body = (
         main_body
         # Bottom cap seat (0..CAP_H)
@@ -61,15 +81,162 @@ def _build_main_body():
         .cut(cone_solid(CAP_STOP_ID, HUB_CAVITY_D, CAP_STOP_LIP_H, LEVER_STOP_LIP_Z0))
         # Spring cavity (9..29)
         .cut(cyl(HUB_CAVITY_D,    CAVITY_Z1 - CAVITY_Z0,        z=CAVITY_Z0))
-        # Top cap-stop lip — HUB_CAVITY_D at bottom (PANCAKE_STOP_LIP_Z0) narrowing
-        # to CAP_STOP_ID at top (PANCAKE_CAP_SEAT_Z0). Self-supporting underside,
-        # and the slope coincides with the spring slot's sloped roof.
-        .cut(cone_solid(HUB_CAVITY_D, CAP_STOP_ID, CAP_STOP_LIP_H, PANCAKE_STOP_LIP_Z0))
-        # Top cap seat (30..38)
-        .cut(cyl(HUB_CAVITY_D,    SPOOL_H - PANCAKE_CAP_SEAT_Z0,        z=PANCAKE_CAP_SEAT_Z0))
     )
+    # Pancake-side bearing pocket — carved directly into the solid hub
+    # material at z=PANCAKE_CAP_SEAT_Z0..SPOOL_H (no longer a separate
+    # cap part). Bearing slips in from the spring-cavity side (entering
+    # from below at z=PANCAKE_CAP_SEAT_Z0); 45° funnel narrows to an
+    # axle clearance bore that exits the spool's top face.
+    _axle_bore_d = AXLE_D + 2.0                                 # 1 mm radial clearance to axle
+    _funnel_h    = (TOP_BEARING_BORE - _axle_bore_d) / 2
+    _pocket_top  = pancake_bearing_z0 + BEARING_W
+    _funnel_top  = _pocket_top + _funnel_h
+    main_body = (
+        main_body
+        .cut(cyl(TOP_BEARING_BORE, BEARING_W, z=pancake_bearing_z0))
+        .cut(cone_solid(TOP_BEARING_BORE, _axle_bore_d, _funnel_h, _pocket_top))
+        .cut(cyl(_axle_bore_d, SPOOL_H - _funnel_top, z=_funnel_top))
+    )
+    # Lighten the otherwise-solid Ø-HUB_OD block surrounding the pancake-
+    # side bearing pocket (z=PANCAKE_CAP_SEAT_Z0..SPOOL_H): keep only a
+    # TOP_BEARING_BOSS_WALL collar around the bearing pocket and the hub OD
+    # wall (the spokes tie in there); hollow the whole annulus between,
+    # leaving SPOKE_COUNT radial ribs aligned with the spokes. The ribs'
+    # undersides at z=PANCAKE_CAP_SEAT_Z0 are the cassette assembly's upper
+    # axial backstop (it normally floats clear of them).
+    main_body = main_body.cut(_top_bearing_void())
+    main_body = main_body.union(_top_bearing_ribs())
     main_body = main_body.cut(_spring_slot())
-    return main_body
+    main_body = main_body.cut(_helical_cable_groove())
+    main_body = main_body.cut(_helical_groove_following_relief())
+    main_body = main_body.union(_top_rim_cap())
+    # The helical relief sweep + thin-shell booleans leave a lot of tiny
+    # faces; heal here so the downstream cap/lever cuts in build.py get a
+    # clean solid (an un-healed near-degenerate face makes them fail).
+    return heal(main_body)
+
+
+# Top rim cap — re-added AFTER the helix cut so the helix's topmost turn
+# can't erode the rim into a knife edge. 9 mm radial × 2 mm axial; sits
+# at the very top of the spool, restoring a uniform 2 mm-thick deck.
+TOP_RIM_CAP_H = 2.0
+TOP_RIM_CAP_W = 9.0
+
+
+def _top_rim_cap():
+    z_lo    = SPOOL_H - TOP_RIM_CAP_H
+    inner_d = DRUM_OD - 2 * TOP_RIM_CAP_W
+    return cyl(DRUM_OD, TOP_RIM_CAP_H, z=z_lo).cut(cyl(inner_d, TOP_RIM_CAP_H, z=z_lo))
+
+
+# Top-bearing block lightening — the pancake-side bearing pocket otherwise
+# sits in a solid Ø-HUB_OD hub block over z=PANCAKE_CAP_SEAT_Z0..SPOOL_H.
+TOP_BEARING_BOSS_WALL = 3.0          # collar wall kept around the Ø(TOP_BEARING_BORE) pocket
+TOP_BEARING_RIB_W     = STRUCT_WALL  # radial-rib tangential width — pinned to STRUCT_WALL
+
+
+def _top_bearing_void():
+    """Annular air pocket spanning the full z-extent between the bearing-
+    pocket collar and the hub OD wall — extends the Ø(HUB_CAVITY_D) spring
+    cavity upward through the top face. The ribs alone tie boss → wall."""
+    boss_od = TOP_BEARING_BORE + 2 * TOP_BEARING_BOSS_WALL
+    z_lo    = PANCAKE_CAP_SEAT_Z0
+    h       = SPOOL_H - z_lo + BOOL_OVERSHOOT          # through the spool's top face
+    return cyl(HUB_CAVITY_D, h, z=z_lo).cut(cyl(boss_od, h, z=z_lo))
+
+
+def _top_bearing_ribs():
+    """SPOKE_COUNT radial ribs spanning the bearing-pocket collar out to the
+    hub OD wall (and into the spoke roots), at the spoke angles."""
+    boss_od = TOP_BEARING_BORE + 2 * TOP_BEARING_BOSS_WALL
+    r_in    = boss_od / 2 - 0.5            # overlap into the collar
+    r_out   = HUB_OD / 2 + 0.5             # overlap into the hub OD wall / spoke root
+    z_lo, z_hi = PANCAKE_CAP_SEAT_Z0, SPOOL_H
+    out = None
+    for i in range(SPOKE_COUNT):
+        rib = (
+            cq.Workplane("XZ")
+            .polyline([(r_in, z_lo), (r_out, z_lo), (r_out, z_hi), (r_in, z_hi)])
+            .close()
+            .extrude(TOP_BEARING_RIB_W / 2, both=True)
+            .rotate((0, 0, 0), (0, 0, 1), i * 360.0 / SPOKE_COUNT)
+        )
+        out = rib if out is None else out.union(rib)
+    return out
+
+
+# Helical cable groove — half-round channel cut into the drum exterior,
+# 7 mm pitch (≈1 mm flat between adjacent turns). Track top at the top of
+# the drum-wall stadium hole (z = SPOOL_H − 2); track bottom at
+# z = DRUM_BOTTOM_Z. The cradle keeps a Ø(HELIX_GROOVE_D) radius (so the
+# Ø5.5 cable nests in it) but only dips GROOVE_DEPTH — its centre is
+# pushed outward by the difference. GROOVE_DEPTH = DRUM_WALL − STRUCT_WALL
+# so the wall behind the cradle bottom equals STRUCT_WALL; the inner
+# relief (below) thins the rest of the drum wall to match → one uniform
+# wall thickness everywhere along every helix turn.
+HELIX_GROOVE_D     = 6.0      # Ø of the half-round cable cradle (fits the Ø5.5 cable)
+HELIX_PITCH        = 7.0
+HELIX_Z_TOP        = SPOOL_H - 2.0       # 49 — matches cable-hole top
+HELIX_Z_BOT        = DRUM_BOTTOM_Z        # 7  — top of lever-flange slope
+GROOVE_DEPTH       = DRUM_WALL - STRUCT_WALL                          # 2.8
+_GROOVE_CIRCLE_R   = HELIX_GROOVE_D / 2                               # 3.0 — cradle radius
+_GROOVE_CENTER_R   = DRUM_OD / 2 + (_GROOVE_CIRCLE_R - GROOVE_DEPTH)  # 77.7
+
+
+def _helix_sweep(helix_radius: float, circle_r: float):
+    """Sweep a circle of radius `circle_r` (centred on the helix) along a
+    helix of pitch HELIX_PITCH wound at `helix_radius`, over the cable-
+    groove z-span. Frenet frame keeps the profile perpendicular to the
+    tangent (the circle is symmetric, so the exact frame is moot). Used
+    for both the cable cradle and the inner relief tube — same shape,
+    different radius."""
+    helix_wire = cq.Wire.makeHelix(
+        pitch=HELIX_PITCH, height=HELIX_Z_TOP - HELIX_Z_BOT, radius=helix_radius,
+        center=cq.Vector(0, 0, HELIX_Z_BOT), dir=cq.Vector(0, 0, 1),
+    )
+    profile = cq.Workplane("XZ").moveTo(helix_radius, HELIX_Z_BOT).circle(circle_r)
+    return profile.sweep(cq.Workplane(obj=helix_wire), isFrenet=True)
+
+
+def _helical_cable_groove():
+    return _helix_sweep(_GROOVE_CENTER_R, _GROOVE_CIRCLE_R)
+
+
+# Groove-following inner relief — makes the drum wall a constant STRUCT_WALL.
+# The wall behind the cradle bottom is already STRUCT_WALL (by GROOVE_DEPTH);
+# everywhere else (cradle edges, bands) it's the full DRUM_WALL. We carve
+# the inside down to the SAME cradle profile shifted radially inward by
+# STRUCT_WALL — an inner cradle tube centred STRUCT_WALL below the outer
+# cradle centre. The material to remove = that tube subtracted from the
+# annular shell DRUM_ID/2 → (DRUM_OD/2 − STRUCT_WALL): in the bands the
+# whole shell goes (inner surface → DRUM_OD/2 − STRUCT_WALL); under the
+# cradle the tube fills the shell so nothing is removed (inner surface
+# stays DRUM_ID/2); at the edges it transitions smoothly. Restricting to
+# that shell (r ≥ DRUM_ID/2) keeps the cut off the hub/spokes; the spokes
+# still land on the recessed wall at every cradle crossing along their
+# height.
+def _helical_groove_following_relief():
+    z_lo = HELIX_Z_BOT - BOOL_OVERSHOOT
+    h    = (HELIX_Z_TOP - HELIX_Z_BOT) + 2 * BOOL_OVERSHOOT
+    shell = (
+        cyl(2 * (DRUM_OD / 2 - STRUCT_WALL), h, z=z_lo)      # r ≤ DRUM_OD/2 − STRUCT_WALL
+        .cut(cyl(DRUM_ID, h, z=z_lo))                        # minus r ≤ DRUM_ID/2 → annular shell
+    )
+    inner_tube = _helix_sweep(_GROOVE_CENTER_R - STRUCT_WALL, _GROOVE_CIRCLE_R)
+    return shell.cut(inner_tube)
+# NB: spoke buttresses (keeping a full-thickness wall sector at each spoke)
+# were tried both ways — cutting buttress boxes out of the relief, and
+# unioning solid wedges back afterward. Both make OCCT collapse the model
+# (the helical relief sweep leaves geometry too fragile for further
+# booleans). Dropped: the spokes still meet the drum at every cradle
+# crossing along their height (the relief's inner surface dips back to
+# DRUM_ID/2 there) with the same 0.5 mm overlap used elsewhere; the
+# drum→flange→spoke→hub path stays fully continuous regardless.
+
+
+# Bearing pocket bottom Z — exported for viz.py's dummy-bearing
+# placement in the assembly STEP.
+pancake_bearing_z0 = PANCAKE_CAP_SEAT_Z0
 
 
 # (The OD-88 pancake-spool floor disc that used to sit at z=49..51 was
@@ -84,13 +251,11 @@ def _build_main_body():
 # narrow in y (fits the strip thickness with tolerance), shallow in x.
 # Blind outer face leaves ≥1.5 mm of hub-OD wall intact — no slits.
 #
-# Conical top: the slot's roof IS the cap-stop lip's 45° cone surface,
-# extended. Both the lip underside (z in [PANCAKE_STOP_LIP_Z0, PANCAKE_STOP_LIP_Z0 +
-# CAP_STOP_LIP_H]) and the slot roof (below) lie on the same cone
-# r = HUB_CAVITY_D/2 + PANCAKE_STOP_LIP_Z0 − z, apex at (0, 0, PANCAKE_STOP_LIP_Z0 +
-# HUB_CAVITY_D/2). Using the cone itself to trim the slot guarantees
-# flush alignment at every y, not just y=0 (a flat-plane approximation
-# would drift ~0.03 mm off the cone at y=±SPRING_SLOT_W/2).
+# Conical bottom: the slot's lower face is bounded by the LEVER cap-
+# stop lip's 45° cone surface, extended UPWARD into the spring cavity.
+# Using the cone itself to trim the slot guarantees flush alignment at
+# every y, not just y=0 (a flat-plane approximation would drift
+# ~0.03 mm off the cone at y=±SPRING_SLOT_W/2).
 SPRING_SLOT_H_RECT = 23.0   # rectangle height (z_bottom to outer-edge roof).
                             # Sized for the 21.8 mm Stanley tape blade with
                             # 1.2 mm of axial play.
@@ -101,9 +266,10 @@ SPRING_SLOT_DEPTH  =  4.0   # x-extent (radial). Cuts all the way through
                             # each side) — tape blade threads through
                             # the slot from the cavity, gets bent on the
                             # outer face to lock in place.
-SPRING_SLOT_ANGLE_DEG = 210.0  # angular position of the slot. 210° sits
-                            # halfway between the 180° and 240° spokes
-                            # so the slot doesn't intersect any spoke.
+SPRING_SLOT_ANGLE_DEG = 270.0  # angular position of the slot. 270° sits
+                            # halfway between the 240° and 300° spokes —
+                            # one spoke-section CCW from 210° to clear the
+                            # cable entry hole through the 180° spoke.
 
 def _spring_slot():
     slot_x_outer = -(HUB_CAVITY_D / 2 + SPRING_SLOT_DEPTH - 0.5)   # outer x face of slot

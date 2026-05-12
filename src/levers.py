@@ -9,23 +9,31 @@ import math
 import cadquery as cq
 
 from .dimensions import (
+    CAVITY_Z0,
     DRUM_ID, DRUM_OD,
-    FLANGE_H, FLANGE_INNER_ID, FLANGE_OD,
+    FLANGE_H, FLANGE_INNER_ID, FLANGE_OD, FLANGE_RIM_MID_R,
+    HUB_CAVITY_D, HUB_OD,
     M2_SHAFT_CLR_D,
     RATCHET_DEPTH, RATCHET_TEETH,
     SPOKE_W, SPOOL_H,
 )
 from .helpers import cyl, cone_solid, ratchet_cutter
 from .housing import (
-    BRAKE_INNER_TRAVEL_DEG, BRAKE_PIVOT_X,
+    BRAKE_BOSS_EXT_ALPHA_HI, BRAKE_BOSS_EXT_ALPHA_LO,
+    BRAKE_INNER_TRAVEL_DEG, BRAKE_LEVER_BOSS_EXTENSION,
+    BRAKE_LEVER_LEG_ALPHA_DEG, BRAKE_PIVOT_X,
     HOUSING_W,
-    LEVER_PIVOT_Z, LEVER_RIM_H, LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END,
+    LEVER_PIVOT_BOSS_OD, LEVER_PIVOT_Z, LEVER_RIM_H,
+    LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END,
+    RATCHET_BOSS_EXT_ALPHA_HI, RATCHET_BOSS_EXT_ALPHA_LO,
+    RATCHET_LEVER_BOSS_EXTENSION, RATCHET_LEVER_LEG_ALPHA_DEG,
     RATCHET_OUTER_TRAVEL_DEG, RATCHET_PIVOT_X,
-    SPINE_X_INNER,
+    SPINE_X_INNER, SPRING_BODY_LEN,
     STOP_HOUSING_PIN_ALPHA_BRAKE_DEG, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG,
     STOP_LEVER_PIN_ALPHA_BRAKE_DEG, STOP_LEVER_PIN_ALPHA_RATCHET_DEG,
     STOP_PIN_D, STOP_PIN_H, STOP_PIN_R,
     STOP_REST_PIN_ALPHA_BRAKE_DEG, STOP_REST_PIN_ALPHA_RATCHET_DEG,
+    pivot_boss_sector, spring_leg_hole_dir_alpha_deg,
     stop_pin_solid, stop_pin_hole,
 )
 
@@ -92,7 +100,7 @@ LEVER_HANDLE_TRAVEL_MAX = 8.12                          # max handle z-travel fr
 # (rubber) = the full rest height — the geometric-layout math stays
 # valid regardless of this value, so adjust freely if the actual
 # measured thickness differs from spec.
-BRAKE_RUBBER_T         = 3.0
+BRAKE_RUBBER_T         = 3.3
 
 LEVER_W              = 11.0    # grip width, perpendicular to pull (in y)
 LEVER_T              =  2.0    # thickness in z (swing plane direction)
@@ -155,115 +163,34 @@ def _lever_pivot_hole(pivot_x, y_start, y_end):
 # a 6 mm OD cylinder so the bolt clearance hole has real wall thickness in z.
 # The boss also extends LEVER_RIM_H past the lever body's inner face to
 # bridge the gap to the housing column outer face (replacing the old thin-
-# walled rim). A counterbore on the housing-facing end seats the spring
-# coil; see _lever_pivot_counterbore.
-LEVER_PIVOT_BOSS_OD  = 6.0     # walls: (6 - 2.5)/2 = 1.75 mm around the
-                               # bolt clearance hole, (6 - 4.7)/2 = 0.65 mm
-                               # around the spring counterbore.
-LEVER_BOSS_EXTENSION = 2.0     # bare boss stub past the lever's inner
-                               # face that fills the portion of the
-                               # lever-housing gap not occupied by the
-                               # spring. Equals LEVER_RIM_H − SPRING_BODY_LEN
-                               # (4.5 − 2.5); literal here because
-                               # SPRING_BODY_LEN is defined later.
+# walled rim).
+#
+# LEVER_PIVOT_BOSS_OD lives in housing.py now so the housing-side
+# matching sector on the ratchet side can use the same OD.
+# BRAKE_LEVER_BOSS_EXTENSION + RATCHET_LEVER_BOSS_EXTENSION live in
+# housing.py — both sides split the gap-buffer with their housing-
+# facing counterparts (a true housing boss on the ratchet, a slab on
+# the brake rest pin on the brake).
 
-# The boss extension is sectored (partial cylinder) so it doesn't collide
-# with the housing stop pins at any rotation. Worst-case clearance:
-#   - Spring pin: at REST (boss never rotates closer; full pull moves it
-#     angularly away).
-#   - Rest pin:   at FULL TENSION (lever rotated TRAVEL_DEG toward the
-#     spring pin, dragging the boss toward the rest pin).
-LEVER_BOSS_EXT_PIN_CLR = 1.0   # mm linear gap between boss-extension
-                               # outer arc and the housing-pin's nearest
-                               # SHARP CORNER. Derived for the square
-                               # pin's inner corner (the rounded corner
-                               # is on the side facing the lever stop
-                               # pin, never on the side facing the boss
-                               # extension), which sits at sqrt((R-r)² + r²)
-                               # from the pivot, ±atan(r/(R-r)) off the
-                               # pin's radial direction.
-_BOSS_EXT_R          = LEVER_PIVOT_BOSS_OD / 2
-_pin_r               = STOP_PIN_D / 2
-_corner_R_pivot      = math.sqrt((STOP_PIN_R - _pin_r)**2 + _pin_r**2)
-_corner_alpha_offset = math.degrees(math.atan2(_pin_r, STOP_PIN_R - _pin_r))
-_corner_ang_clear    = math.degrees(math.acos(
-    (_BOSS_EXT_R**2 + _corner_R_pivot**2 - LEVER_BOSS_EXT_PIN_CLR**2)
-    / (2 * _BOSS_EXT_R * _corner_R_pivot)
-))
-# Total angular clearance measured from the pin's CENTER (radial axis).
-# Pin center → corner = _corner_alpha_offset; corner → boss edge needed
-# for 1 mm linear gap = _corner_ang_clear. Sum = clearance from pin center.
-_BOSS_EXT_ANG_CLEAR_DEG = _corner_alpha_offset + _corner_ang_clear   # ≈ 56.9°
+# Boss-extension angular clearance + sector α bounds live in housing.py
+# now (so the housing can build its own matching sector on the ratchet
+# side without a circular import). LEVER_BOSS_EXT_PIN_CLR,
+# RATCHET_BOSS_EXT_ALPHA_LO/HI, and BRAKE_BOSS_EXT_ALPHA_LO/HI are
+# imported from there. The sector-cylinder helper is also there as
+# pivot_boss_sector.
 
-# Sector α bounds (CCW from α_lo to α_hi). Worst-case rotations baked in:
-# rest-side edge accounts for TRAVEL_DEG of CCW shift in lever-local frame,
-# spring-side edge uses the rest position directly.
-RATCHET_BOSS_EXT_ALPHA_LO = (STOP_REST_PIN_ALPHA_RATCHET_DEG
-                              + RATCHET_OUTER_TRAVEL_DEG
-                              + _BOSS_EXT_ANG_CLEAR_DEG)
-RATCHET_BOSS_EXT_ALPHA_HI = (STOP_HOUSING_PIN_ALPHA_RATCHET_DEG
-                              - _BOSS_EXT_ANG_CLEAR_DEG)
-BRAKE_BOSS_EXT_ALPHA_LO   = (STOP_REST_PIN_ALPHA_BRAKE_DEG
-                              + BRAKE_INNER_TRAVEL_DEG
-                              + _BOSS_EXT_ANG_CLEAR_DEG)
-BRAKE_BOSS_EXT_ALPHA_HI   = (STOP_HOUSING_PIN_ALPHA_BRAKE_DEG
-                              - _BOSS_EXT_ANG_CLEAR_DEG)
-
-def _lever_pivot_boss(pivot_x, y0, y1):
+def _lever_pivot_boss(pivot_x, y0, y1, *, od=LEVER_PIVOT_BOSS_OD):
     """Cylindrical boss centered on the pivot, axis along +y, spanning [y0, y1].
     Used for the in-lever portion that thickens the lever plate at the
     pivot. The portion extending into the lever-housing gap is built
-    separately by _lever_pivot_boss_ext (sectored to clear the stop pins)."""
+    separately by pivot_boss_sector (sectored to clear the stop pins).
+
+    Pass od=RATCHET_PIVOT_BOSS_OD for the ratchet side (slimmer wall)."""
     return (
         cq.Workplane("XY")
-        .circle(LEVER_PIVOT_BOSS_OD / 2)
+        .circle(od / 2)
         .extrude(y1 - y0)
         .rotate((0, 0, 0), (1, 0, 0), -90)
-        .translate((pivot_x, y0, LEVER_PIVOT_Z))
-    )
-
-
-def _lever_pivot_boss_ext(pivot_x, y0, y1, alpha_lo_deg, alpha_hi_deg):
-    """Sectored boss extension. Same pivot axis as _lever_pivot_boss, spans
-    [y0, y1] axially, but only covers the angular range [alpha_lo, alpha_hi]
-    (CCW) in the X-Z plane around the pivot.
-
-    Built by intersecting a full cylinder with an oversized polygonal
-    wedge (a fan of triangles from the pivot covering the angular
-    range). Avoids the topology problems both extrude+arc and revolve
-    approaches produced — and the polygonal approximation of the arc
-    is clipped away by the cylinder's true cylindrical surface so the
-    sector ends up with a clean cylindrical outer face."""
-    r = LEVER_PIVOT_BOSS_OD / 2
-    h = y1 - y0
-    if alpha_hi_deg < alpha_lo_deg:
-        alpha_hi_deg += 360
-    a_lo = math.radians(alpha_lo_deg)
-    a_hi = math.radians(alpha_hi_deg)
-
-    # Full cylinder, axis along Y, radius r, height h, base at the origin.
-    cylinder = (
-        cq.Workplane("XZ")
-        .circle(r)
-        .extrude(-h)   # XZ extrudes along -Y; negate to grow in +Y
-    )
-    # Polygonal wedge in the XZ plane (axis along Y same as cylinder), the
-    # fan vertices on a circle of radius 2r so it fully contains the
-    # cylinder of radius r within the angular range.
-    R_outer = r * 2
-    n_seg = max(2, int(math.ceil((a_hi - a_lo) / math.radians(20))))
-    pts = [(0, 0)]
-    for i in range(n_seg + 1):
-        a = a_lo + (a_hi - a_lo) * (i / n_seg)
-        pts.append((R_outer * math.cos(a), R_outer * math.sin(a)))
-    wedge = (
-        cq.Workplane("XZ")
-        .polyline(pts)
-        .close()
-        .extrude(-h)
-    )
-    return (
-        cylinder.intersect(wedge)
         .translate((pivot_x, y0, LEVER_PIVOT_Z))
     )
 
@@ -289,7 +216,7 @@ PAWL_BRAKE_GAP = 1.5    # radial gap between pawl outer edge and brake
 # the ring. Computing the offset this way means any future move of the
 # ratchet lever in y auto-updates the tooth phase.
 _y_pawl_mid = HOUSING_W / 2 + LEVER_RIM_H + LEVER_W / 2
-_r_pawl_mid = (FLANGE_INNER_ID / 2 + (DRUM_ID / 2 - PAWL_BRAKE_GAP)) / 2
+_r_pawl_mid = (FLANGE_INNER_ID / 2 + (FLANGE_RIM_MID_R - PAWL_BRAKE_GAP)) / 2
 _theta_pawl_mid_deg = math.degrees(
     math.asin(_y_pawl_mid / _r_pawl_mid)
 )
@@ -308,7 +235,7 @@ RATCHET_TOOTH_OFFSET_DEG = _theta_pawl_mid_deg % _tooth_pitch_deg
 # Long axis 12 mm runs along Z (axial, parallel to spoke); short axis
 # 7 mm gives ~1 mm clearance around the 6 mm cable.
 CABLE_HOLE_AZIMUTH_DEG = 180.0
-CABLE_HOLE_Z_CENTER    =  SPOOL_H - 18.0             # near drum mid (drum spans z=FLANGE_H..SPOOL_H-FLANGE_H)
+CABLE_HOLE_Z_CENTER    =  SPOOL_H - 2.0 - 13.0 / 2   # top of hole sits 2 mm below spool top
 CABLE_HOLE_LONG_AXIS   =  13.0                       # along Z
 CABLE_HOLE_SHORT_AXIS  =   7.0                       # along Y
 
@@ -322,7 +249,10 @@ def _build_cable_hole():
     cos_a = math.cos(alpha)
     # Start the slot well outside the drum OD and run it through past the
     # inner face, so the radial cut cleanly opens both faces.
-    r_start = DRUM_ID / 2 - 2.0
+    # Inner reach extended by FLANGE_H so the slot cuts cleanly through
+    # the pancake flange's inward-overhanging rim material that sits
+    # above the drum at the top of the slot.
+    r_start = DRUM_ID / 2 - 2.0 - FLANGE_H
     r_end   = DRUM_OD / 2 + 2.0
     # At angle 180° the bore axis is -x; the workplane sits at the OUTER
     # face of the bore and extrudes along its +x normal toward the drum.
@@ -336,19 +266,106 @@ def _build_cable_hole():
     )
 
 
+# Cable ENTRY hole — stadium slot THROUGH the α=180° spoke, axis along
+# Y. At low Z near the hub OD; cable threads from the spool cavity into
+# the +Y chamber here. Long axis along Z, short axis along X.
+ENTRY_HOLE_Z_BOTTOM   = 2.0
+ENTRY_HOLE_LONG_AXIS  = 13.0
+ENTRY_HOLE_SHORT_AXIS = CABLE_HOLE_SHORT_AXIS     # 7 mm
+
+
+def _build_entry_hole():
+    """Bottom entry slot through the α=180° spoke at low Z near the hub."""
+    x_center = -(HUB_OD / 2 + ENTRY_HOLE_SHORT_AXIS / 2)
+    z_center = ENTRY_HOLE_Z_BOTTOM + ENTRY_HOLE_LONG_AXIS / 2
+    y_extent = SPOKE_W + 2.0
+    return (
+        cq.Workplane("XZ")
+        .workplane(offset=-y_extent / 2)
+        .center(x_center, z_center)
+        .slot2D(ENTRY_HOLE_LONG_AXIS, ENTRY_HOLE_SHORT_AXIS, angle=90)
+        .extrude(y_extent)
+    )
+
+
+# Top merged stadium — combines the former top-spoke pass-through and
+# the drum-wall cable hole into a single 3D cut. The slot's long axis
+# lies in the XY plane, angled TOP_MERGED_ANGLE_FROM_WALL_DEG away from
+# the spool's outer-wall tangent (toward the spoke's radial direction)
+# at α=180°. A small angle keeps the cable's path nearly parallel to
+# the outer wall — a gentler transition onto the helix groove than a
+# steep (more radial) exit. Slot extrudes straight up in Z across the
+# same Z range the drum-wall hole used to cover; its length is solved
+# so the outer cap apex clears the helix groove where the cable exits.
+#
+# Inner cap apex x is at the old drum-wall hole's inner end (-64). Its
+# y is SOLVED (see _top_merged_inner_apex_y) so the slot's far edge,
+# where it crosses the spoke's +Y face, lands flush on the drum's inner
+# cavity wall — no leftover lip of spoke material between the spoke hole
+# and the drum wall.
+TOP_MERGED_ANGLE_FROM_WALL_DEG = 15.0
+TOP_MERGED_INNER_APEX_X        = -(DRUM_ID / 2 - 9.0)   # -64
+
+
+def _top_merged_inner_apex_y():
+    """Inner cap apex y, solved so the slot's far edge at the spoke's
+    +Y face just reaches r=DRUM_ID/2 (the drum's inner cavity wall)."""
+    th       = math.radians(TOP_MERGED_ANGLE_FROM_WALL_DEG)
+    half_w   = CABLE_HOLE_SHORT_AXIS / 2
+    face_y   = SPOKE_W / 2
+    x_target = -math.sqrt((DRUM_ID / 2) ** 2 - face_y ** 2)
+    return ((x_target - TOP_MERGED_INNER_APEX_X + half_w * math.cos(th)) / math.tan(th)
+            + face_y + half_w * math.sin(th))
+
+
+def _build_top_merged_slot():
+    """Merged top-spoke + drum-wall stadium slot, angled in the XY plane."""
+    angle_rad = math.radians(TOP_MERGED_ANGLE_FROM_WALL_DEG)
+    # Direction: mostly +Y (outer-wall tangent), with a -X (radial out)
+    # component sized by the angle-from-wall. Sends the cable CW around
+    # the spool onto the helix.
+    dir_x = -math.sin(angle_rad)
+    dir_y = +math.cos(angle_rad)
+    ix = TOP_MERGED_INNER_APEX_X
+    iy = _top_merged_inner_apex_y()
+    # Solve for L so the outer cap apex sits well past the helix groove's
+    # outermost cut extent (DRUM_OD/2 + helix-groove radius), with margin,
+    # so the slot fully clears the groove where the cable exits:
+    #   (ix + L·dir_x)² + (iy + L·dir_y)² = target_r²
+    target_r = DRUM_OD / 2 + 6.0
+    b = 2 * (ix * dir_x + iy * dir_y)
+    c = ix * ix + iy * iy - target_r * target_r
+    L = (-b + math.sqrt(b * b - 4 * c)) / 2
+    ox = ix + L * dir_x
+    oy = iy + L * dir_y
+    cx = (ix + ox) / 2
+    cy = (iy + oy) / 2
+    angle_deg = math.degrees(math.atan2(dir_y, dir_x))
+    z_lo = CABLE_HOLE_Z_CENTER - CABLE_HOLE_LONG_AXIS / 2
+    z_hi = CABLE_HOLE_Z_CENTER + CABLE_HOLE_LONG_AXIS / 2
+    return (
+        cq.Workplane("XY").workplane(offset=z_lo)
+        .center(cx, cy)
+        .slot2D(L, CABLE_HOLE_SHORT_AXIS, angle=angle_deg)
+        .extrude(z_hi - z_lo)
+    )
+
+
 def apply_to_main_body(main_body: cq.Workplane) -> cq.Workplane:
     """Apply the lever-dependent cuts to the main spool body: ratchet
-    teeth (phase aligned with the ratchet pawl footprint) and the drum-
-    wall cable-transit slot. Returns the modified body."""
+    teeth (phase aligned with the ratchet pawl footprint), the drum-
+    wall cable-transit slot, and the cable-entry slot through the
+    hub wall. Returns the modified body."""
     main_body = main_body.cut(
         ratchet_cutter(RATCHET_TEETH,
                        r_in=FLANGE_INNER_ID / 2,
-                       r_out=DRUM_ID / 2,
+                       r_out=FLANGE_RIM_MID_R,
                        z_top=RATCHET_DEPTH,
                        depth=RATCHET_DEPTH,
                        theta_offset_deg=RATCHET_TOOTH_OFFSET_DEG)
     )
-    main_body = main_body.cut(_build_cable_hole())
+    main_body = main_body.cut(_build_top_merged_slot())
+    main_body = main_body.cut(_build_entry_hole())
     return main_body
 
 def _ratchet_pawl_contact(y_near, y_far):
@@ -358,7 +375,7 @@ def _ratchet_pawl_contact(y_near, y_far):
     with vertical side walls flush with the lever y-edges."""
     import math
     r_in  = FLANGE_INNER_ID / 2
-    r_out = DRUM_ID / 2 - PAWL_BRAKE_GAP
+    r_out = FLANGE_RIM_MID_R - PAWL_BRAKE_GAP
     z_valley = RATCHET_DEPTH
     z_tip    = 0
     # Footprint corners — intersections of y = const with the two ring radii
@@ -402,11 +419,11 @@ def _build_ratchet_lever():
         # cylinder boss because OCCT's boolean produces an invalid face
         # if the cylinder boss is unioned in first (only on the +X-side
         # ratchet — the -X-side brake is fine in either order).
-        .union(_lever_pivot_boss_ext(RATCHET_PIVOT_X,
-                                     RATCHET_LEVER_Y0 - LEVER_BOSS_EXTENSION,
-                                     RATCHET_LEVER_Y0 + 0.5,
-                                     RATCHET_BOSS_EXT_ALPHA_LO,
-                                     RATCHET_BOSS_EXT_ALPHA_HI))
+        .union(pivot_boss_sector(RATCHET_PIVOT_X,
+                                  RATCHET_LEVER_Y0 - RATCHET_LEVER_BOSS_EXTENSION,
+                                  RATCHET_LEVER_Y0 + 0.5,
+                                  RATCHET_BOSS_EXT_ALPHA_LO,
+                                  RATCHET_BOSS_EXT_ALPHA_HI))
         # Pivot boss inside the lever body.
         .union(_lever_pivot_boss(RATCHET_PIVOT_X,
                                  RATCHET_LEVER_Y0,
@@ -418,9 +435,11 @@ def _build_ratchet_lever():
         .cut(stop_pin_hole(RATCHET_PIVOT_X, STOP_LEVER_PIN_ALPHA_RATCHET_DEG,
                             hole_y=+((LEVER_INNER_Y - STOP_PIN_H)
                                      + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END),
-                            teardrop=True))
+                            teardrop=False,
+                            hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(
+                                RATCHET_LEVER_LEG_ALPHA_DEG)))
         .cut(_lever_pivot_hole(RATCHET_PIVOT_X,
-                               RATCHET_LEVER_Y0 - LEVER_BOSS_EXTENSION,
+                               RATCHET_LEVER_Y0 - RATCHET_LEVER_BOSS_EXTENSION,
                                RATCHET_LEVER_Y1))
     )
 
@@ -454,7 +473,7 @@ def _brake_pad_contact(y_near, y_far):
     clean boolean union (the rotated top face is no longer at
     LEVER_Z_BOT — it's tilted)."""
     import math
-    r_in  = DRUM_ID / 2
+    r_in  = FLANGE_RIM_MID_R
     r_out = FLANGE_OD / 2
     # 4 corners — intersections of y = const with each ring
     x_in_near  = math.sqrt(r_in**2  - y_near**2)
@@ -465,14 +484,25 @@ def _brake_pad_contact(y_near, y_far):
     y_mid = (y_near + y_far) / 2
     x_in_mid  = math.sqrt(r_in**2  - y_mid**2)
     x_out_mid = math.sqrt(r_out**2 - y_mid**2)
-    # ENGAGED-pose pad: build the pad at the position it occupies when
-    # the brake is fully engaged — same kinematics as before (rubber
-    # compresses by PAD_REST_LIFT mm against the ring), but defined so
-    # the bottom face is FLAT and PARALLEL to the ring at engagement.
-    # The rest position (after the -BRAKE_INNER_TRAVEL_DEG rotation
-    # below) ends up at approximately the original PAD_REST_Z_BOT +
-    # BRAKE_RUBBER_T, so the rest-side feel is unchanged.
-    pad_bot_engaged_z = PAD_REST_LIFT - BRAKE_RUBBER_T
+    # ENGAGED-pose pad: built at the pose where the brake is fully engaged
+    # — class-2 lever rises to engage, rubber's TOP touches the lever-side
+    # flange BOTTOM (brake track at z=0). Then rotated +BRAKE_INNER_TRAVEL_DEG
+    # around the brake pivot to get the REST pose.
+    #
+    # Tuned so that at REST (post-rotation), the pad's CORNER closest to
+    # the track has rubber-top-to-track clearance = PAD_REST_LIFT — i.e.,
+    # the brake just-touches at the same lever throw the ratchet just-
+    # clears (matched ROM). The +12° rotation tilts the inboard / -X end
+    # of the pad UP, so the spool-facing peak is at the pad's inner arc
+    # at the y with largest magnitude. That x value is the relevant
+    # x_rel for the matched-ROM constraint.
+    BRAKE_TRACK_Z = 0.0
+    _pad_inner_rest_z = BRAKE_TRACK_Z - PAD_REST_LIFT - BRAKE_RUBBER_T
+    _y_max_abs        = max(abs(y_near), abs(y_far))
+    _x_rel_corner     = math.sqrt(r_in ** 2 - _y_max_abs ** 2) - BRAKE_PIVOT_X
+    _theta            = math.radians(BRAKE_INNER_TRAVEL_DEG)
+    _z_rel = (_pad_inner_rest_z - LEVER_PIVOT_Z + _x_rel_corner * math.sin(_theta)) / math.cos(_theta)
+    pad_bot_engaged_z = LEVER_PIVOT_Z + _z_rel
     # Extend the top past LEVER_Z_TOP so the rotated solid still
     # interpenetrates the lever body (its inner face is at LEVER_Z_TOP and
     # the rotated pad top is tilted; we need the union to absorb the
@@ -521,11 +551,11 @@ def _build_brake_lever():
         .union(_lever_pivot_boss(BRAKE_PIVOT_X,
                                  BRAKE_LEVER_Y0,
                                  BRAKE_LEVER_Y1))
-        .union(_lever_pivot_boss_ext(BRAKE_PIVOT_X,
-                                     BRAKE_LEVER_Y1 - 0.5,    # 0.01 mm overlap
-                                     BRAKE_LEVER_Y1 + LEVER_BOSS_EXTENSION,
-                                     BRAKE_BOSS_EXT_ALPHA_LO,
-                                     BRAKE_BOSS_EXT_ALPHA_HI))
+        .union(pivot_boss_sector(BRAKE_PIVOT_X,
+                                  BRAKE_LEVER_Y1 - 0.5,    # 0.01 mm overlap
+                                  BRAKE_LEVER_Y1 + BRAKE_LEVER_BOSS_EXTENSION,
+                                  BRAKE_BOSS_EXT_ALPHA_LO,
+                                  BRAKE_BOSS_EXT_ALPHA_HI))
         # Lever stop pin + teardrop spring-leg through-hole.
         .union(stop_pin_solid(BRAKE_PIVOT_X, STOP_LEVER_PIN_ALPHA_BRAKE_DEG,
                                BRAKE_LEVER_Y0,
@@ -533,10 +563,12 @@ def _build_brake_lever():
         .cut(stop_pin_hole(BRAKE_PIVOT_X, STOP_LEVER_PIN_ALPHA_BRAKE_DEG,
                             hole_y=-((LEVER_INNER_Y - STOP_PIN_H)
                                      + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END),
-                            teardrop=True))
+                            teardrop=False,
+                            hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(
+                                BRAKE_LEVER_LEG_ALPHA_DEG)))
         .cut(_lever_pivot_hole(BRAKE_PIVOT_X,
                                BRAKE_LEVER_Y0,
-                               BRAKE_LEVER_Y1 + LEVER_BOSS_EXTENSION))
+                               BRAKE_LEVER_Y1 + BRAKE_LEVER_BOSS_EXTENSION))
     )
 
 

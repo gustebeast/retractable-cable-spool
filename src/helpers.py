@@ -15,6 +15,7 @@ from .dimensions import (
     DRUM_OD, DRUM_ID,
     HUB_OD,
     SPOKE_COUNT, SPOKE_W,
+    STRUCT_WALL,
     KEY_W, KEY_DEPTH, KEY_CLR, KEY_ANGLES,
     BOOL_OVERSHOOT,
 )
@@ -37,81 +38,78 @@ def cone_solid(d_bottom: float, d_top: float, h: float, z_base: float) -> cq.Wor
 
 
 def lever_flange_solid(z_drum_face: float) -> cq.Workplane:
-    """Lever-side sloped flange — carries the ratchet teeth surfaces.
-    z_drum_face is the upper face of the flange (drum-facing). Body
-    extends FLANGE_H below z_drum_face. Inner overhang extends ABOVE
-    z_drum_face into the drum region:
-         - 45° outer drum-side: (r=DRUM_OD/2, z_drum_face) →
-           (r=FLANGE_OD/2, z_drum_face−slope_h_outer), with the outer lip
-           FLANGE_LIP_T tall on the lower (away-from-drum) side.
-         - 45° inner upper: (r=FLANGE_INNER_ID/2, z_face_lo+FLANGE_INNER_LIP_H)
-           → (r=DRUM_ID/2, z_drum_face+FLANGE_INNER_LIP_H). The slope
-           bottoms out FLANGE_INNER_LIP_H above the flange's lower face,
-           leaving a vertical inner lip; rise=run=slope_h_inner means the
-           top of the slope extends FLANGE_INNER_LIP_H above z_drum_face,
-           overlapping the drum.
-    Built as (base ring over full extended z range) − (outer overhang)
-    − (inner overhang)."""
-    slope_h_outer = FLANGE_H - FLANGE_LIP_T              # 5
-    slope_h_inner = (DRUM_ID - FLANGE_INNER_ID) / 2      # 7
-    z_face_lo          = z_drum_face - FLANGE_H              # bottom of body
-    z_inner_slope_lo   = z_face_lo + FLANGE_INNER_LIP_H      # 2 mm above bottom face
-    z_inner_slope_hi   = z_drum_face + FLANGE_INNER_LIP_H    # 2 mm above drum face
-    z_flange_top       = max(z_drum_face, z_inner_slope_hi)
-    flange_h_actual    = z_flange_top - z_face_lo
+    """Lever-side flange — flat-bottom annular rim plus a single inward
+    45° chamfer connecting the rim's inner edge up to the drum's inner
+    cavity wall. z_drum_face is the upper face of the flange.
 
-    base_ring = (
-        cyl(FLANGE_OD, flange_h_actual, z=z_face_lo)
-        .cut(cyl(FLANGE_INNER_ID, flange_h_actual, z=z_face_lo))
+    Geometry (z_face_lo = z_drum_face − FLANGE_H = 0 in current build):
+      - Rim: OD=DRUM_OD, ID=FLANGE_INNER_ID, FLANGE_LIP_T thick, at
+        z=z_face_lo..z_face_lo+FLANGE_LIP_T. Inner half carries ratchet
+        teeth, outer half is the smooth brake/wheel surface.
+      - Chamfer: 45° conical face from (FLANGE_INNER_ID/2, rim_top_z) to
+        (DRUM_ID/2, rim_top_z+chamfer_h), where chamfer_h equals
+        (DRUM_ID−FLANGE_INNER_ID)/2 (rise=run).
+      - Wall: cylindrical shell at r=DRUM_ID/2..DRUM_OD/2 from the
+        chamfer's apex up to z_drum_face — bridges to the drum body
+        above. spool.py drives DRUM_SKIRT_H from chamfer_h so the drum
+        cylinder extends down to meet the chamfer apex seamlessly."""
+    z_face_lo     = z_drum_face - FLANGE_H            # bottom of flange
+    rim_top_z     = z_face_lo + FLANGE_LIP_T          # top of flat rim
+    chamfer_h     = (DRUM_ID - FLANGE_INNER_ID) / 2   # 2.5 — 45° rise=run
+    chamfer_top_z = rim_top_z + chamfer_h             # apex meets drum cavity wall
+
+    rim = (
+        cyl(DRUM_OD, FLANGE_LIP_T, z=z_face_lo)
+        .cut(cyl(FLANGE_INNER_ID, FLANGE_LIP_T, z=z_face_lo))
     )
 
-    # Outer overhang on the drum-facing side: spans z_drum_face−slope_h_outer..z_drum_face
-    outer_annulus = (
-        cyl(FLANGE_OD, slope_h_outer, z=z_drum_face - slope_h_outer)
-        .cut(cyl(DRUM_OD, slope_h_outer, z=z_drum_face - slope_h_outer))
-    )
-    outer_cone = cone_solid(FLANGE_OD, DRUM_OD, slope_h_outer, z_drum_face - slope_h_outer)
-    outer_overhang = outer_annulus.cut(outer_cone)
+    # Chamfer body: full disk over the chamfer's axial range with a cone
+    # carved out on the inside. Cone widens going up (FLANGE_INNER_ID at
+    # rim_top_z → DRUM_ID at chamfer_top_z); cutting the cone leaves the
+    # 45° conical face bounding the cavity.
+    chamfer_body       = cyl(DRUM_OD, chamfer_h, z=rim_top_z)
+    chamfer_inner_cone = cone_solid(FLANGE_INNER_ID, DRUM_ID, chamfer_h, rim_top_z)
+    chamfer = chamfer_body.cut(chamfer_inner_cone)
 
-    # Inner overhang: at z_inner_slope_lo..z_inner_slope_hi. Cone widens
-    # with increasing z, so the air we cut is INSIDE the cone — intersect.
-    inner_annulus = (
-        cyl(DRUM_ID, slope_h_inner, z=z_inner_slope_lo)
-        .cut(cyl(FLANGE_INNER_ID, slope_h_inner, z=z_inner_slope_lo))
-    )
-    inner_cone = cone_solid(FLANGE_INNER_ID, DRUM_ID, slope_h_inner, z_inner_slope_lo)
-    inner_overhang = inner_annulus.intersect(inner_cone)
-
-    result = base_ring.cut(outer_overhang).cut(inner_overhang)
-
-    # If the flange extends above z_drum_face into drum region, trim the
-    # outer skirt outside DRUM_OD/2 there so the flange doesn't intrude
-    # past the drum wall.
-    if z_flange_top > z_drum_face:
-        skirt_cut = (
-            cyl(FLANGE_OD, z_flange_top - z_drum_face, z=z_drum_face)
-            .cut(cyl(DRUM_OD, z_flange_top - z_drum_face, z=z_drum_face))
+    # Wall section bridging chamfer apex up to the drum's bottom face.
+    wall_h = z_drum_face - chamfer_top_z
+    if wall_h > 0:
+        wall = (
+            cyl(DRUM_OD, wall_h, z=chamfer_top_z)
+            .cut(cyl(DRUM_ID, wall_h, z=chamfer_top_z))
         )
-        result = result.cut(skirt_cut)
-
-    return result
+        return rim.union(chamfer).union(wall)
+    return rim.union(chamfer)
 
 
 def pancake_flange_solid(z_drum_face: float) -> cq.Workplane:
-    """Pancake-side sloped flange ring. z_drum_face is the lower face
-    (drum-facing). Body extends FLANGE_H above. Slope on the drum-facing
-    side; lip on the upper (away-from-drum) end."""
-    slope_h = FLANGE_H - FLANGE_LIP_T
-    base_ring = cyl(FLANGE_OD, FLANGE_H, z=z_drum_face).cut(
-                cyl(FLANGE_ID, FLANGE_H, z=z_drum_face))
-    slope_annulus = (
-        cyl(FLANGE_OD, slope_h, z=z_drum_face)
-        .cut(cyl(DRUM_OD, slope_h, z=z_drum_face))
+    """Pancake-side flange — z_drum_face is the lower (drum-facing) face.
+    Body extends FLANGE_H above z_drum_face; outer wall flush with the
+    drum (OD = DRUM_OD). Inside, a 45° taper rises from r=DRUM_ID/2 at
+    z_drum_face to the vertical-lip radius, then continues straight up
+    to the top face. Top flat annulus matches the lever-side rim width
+    (FLANGE_INNER_EXT)."""
+    pancake_rim_w  = FLANGE_INNER_EXT / 2                     # 7 — matches one lever rim band
+    slope_h        = pancake_rim_w - (DRUM_OD - DRUM_ID) / 2  # 2.5 with current dims
+    inner_top_d    = DRUM_ID - 2 * slope_h                    # vertical-lip ID
+    z_face_hi      = z_drum_face + FLANGE_H                   # body top
+    z_slope_hi     = z_drum_face + slope_h                    # top of slope
+
+    base_ring = (
+        cyl(DRUM_OD, FLANGE_H, z=z_drum_face)
+        .cut(cyl(inner_top_d, FLANGE_H, z=z_drum_face))
     )
-    # Cone widens going UP from the drum face (DRUM_OD at bottom, FLANGE_OD at top).
-    support_cone = cone_solid(DRUM_OD, FLANGE_OD, slope_h, z_drum_face)
-    overhang = slope_annulus.cut(support_cone)
-    return base_ring.cut(overhang)
+
+    # Inner overhang: 45° cone narrowing going up (DRUM_ID at z_drum_face,
+    # inner_top_d at z_slope_hi). Air to cut is INSIDE the cone — intersect.
+    inner_annulus = (
+        cyl(DRUM_ID, slope_h, z=z_drum_face)
+        .cut(cyl(inner_top_d, slope_h, z=z_drum_face))
+    )
+    inner_cone = cone_solid(DRUM_ID, inner_top_d, slope_h, z_drum_face)
+    inner_overhang = inner_annulus.intersect(inner_cone)
+
+    return base_ring.cut(inner_overhang)
 
 
 def ratchet_cutter(
@@ -214,7 +212,14 @@ def spokes_solid(z_base: float, z_top: float) -> cq.Workplane:
     # spoke that doesn't span the full hub height.
     _spoke_overlap = 0.5
     r_in         = HUB_OD / 2 - _spoke_overlap
-    r_out        = DRUM_ID / 2 + _spoke_overlap
+    # Reach the cable-cradle bottom radius (= DRUM_ID/2 + STRUCT_WALL). That's
+    # as far out as the spoke can go without poking past the drum's outer
+    # surface (which dips to exactly there at each cradle bottom). The drum
+    # wall's groove-following inner relief pulls its inner surface ~3 mm
+    # clear of DRUM_ID/2 between cradle turns, so a spoke ending at DRUM_ID/2
+    # would float free there; reaching the cradle bottom lets the spoke land
+    # flush on the full-thickness wall at every cradle crossing.
+    r_out        = DRUM_ID / 2 + STRUCT_WALL
     taper_h      = FLANGE_INNER_EXT + FLANGE_INNER_LIP_H
     z_taper_end  = z_base + taper_h                        # taper at the lever-side (z_base) end
     r_taper_start = r_out - taper_h
@@ -294,17 +299,32 @@ def make_keys(
 
 
 def heal(wp: cq.Workplane) -> cq.Workplane:
-    """Run OCCT's ShapeFix on a Workplane's underlying solid to clean up
-    any minor face/edge tolerance issues before STEP export. cadquery
-    pipelines of many boolean ops can accumulate tiny invalidities
-    (particularly around lofted/BSpline faces) that pass cadquery's
-    shallow validator but get flagged by strict STEP importers."""
+    """Run OCCT's ShapeFix + ShapeUpgrade on a Workplane's underlying
+    shape to clean up minor face/edge tolerance issues and merge same-
+    domain adjacent faces before STEP export. cadquery pipelines of
+    many boolean ops can accumulate tiny invalidities (around lofted
+    BSpline faces, near-tangent fuses, etc.) that pass cadquery's
+    shallow validator but get flagged by strict STEP importers like
+    Onshape. The unify pass also collapses fuse-of-disjoint Compounds
+    down to plain Solids."""
     from OCP.ShapeFix import ShapeFix_Shape  # type: ignore[import]
+    from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain  # type: ignore[import]
+    from OCP.TopAbs import TopAbs_SOLID, TopAbs_COMPOUND
     shape = wp.val().wrapped
     fixer = ShapeFix_Shape(shape)
     fixer.SetPrecision(1e-4)
     fixer.SetMaxTolerance(1e-3)
     fixer.Perform()
-    # Wrap the fixed TopoDS back into a cadquery Workplane
-    new_solid = cq.Solid(fixer.Shape())
-    return cq.Workplane("XY").add(new_solid)
+    fixed = fixer.Shape()
+    # Merge adjacent faces sharing the same underlying surface, and
+    # adjacent edges sharing the same underlying curve. Also collapses
+    # a Compound containing one connected solid into a plain Solid.
+    unifier = ShapeUpgrade_UnifySameDomain(fixed, True, True, True)
+    unifier.Build()
+    unified = unifier.Shape()
+    shape_type = unified.ShapeType()
+    if shape_type == TopAbs_COMPOUND:
+        wrapped = cq.Compound(unified)
+    else:
+        wrapped = cq.Solid(unified)
+    return cq.Workplane("XY").add(wrapped)
