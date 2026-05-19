@@ -10,13 +10,14 @@ import math
 import cadquery as cq
 
 from .dimensions import (
+    AXLE_LIP_OD, AXLE_PRINT_D,
     FLANGE_H, FLANGE_OD, FLANGE_ID, FLANGE_LIP_T,
     FLANGE_INNER_ID, FLANGE_INNER_EXT, FLANGE_INNER_LIP_H,
-    DRUM_OD, DRUM_ID,
+    DRUM_OD, DRUM_ID, DRUM_WALL,
     HUB_OD,
     SPOKE_COUNT, SPOKE_W,
     STRUCT_WALL,
-    KEY_W, KEY_DEPTH, KEY_CLR, KEY_ANGLES,
+    KEY_W, KEY_DEPTH, KEY_ANGLES, FIT_CLR,
     BOOL_OVERSHOOT,
 )
 
@@ -24,6 +25,19 @@ from .dimensions import (
 def cyl(d: float, h: float, z: float = 0.0) -> cq.Workplane:
     """Solid cylinder, diameter d, height h, base at z."""
     return cq.Workplane("XY").workplane(offset=z).circle(d / 2).extrude(h)
+
+
+def axle_print_flat(z_lo: float, z_hi: float) -> cq.Workplane:
+    """Cutter box that flattens the -X side of an axle (shaft + lip shoulders)
+    at the axle's -X tangent line (x = -AXLE_PRINT_D/2). With the flat in
+    place the part can be printed on its SIDE — layer lines run along the
+    axle's length, much stronger than a vertically-printed thin shaft.
+    Spans the given z range; covers the full lip overhang in x and y."""
+    flat_x = -AXLE_PRINT_D / 2
+    return (cq.Workplane("XY")
+            .box(AXLE_LIP_OD, AXLE_LIP_OD + 2, z_hi - z_lo,
+                 centered=(False, True, False))
+            .translate((flat_x - AXLE_LIP_OD, 0, z_lo)))
 
 
 def cone_solid(d_bottom: float, d_top: float, h: float, z_base: float) -> cq.Workplane:
@@ -55,7 +69,7 @@ def lever_flange_solid(z_drum_face: float) -> cq.Workplane:
         cylinder extends down to meet the chamfer apex seamlessly."""
     z_face_lo     = z_drum_face - FLANGE_H            # bottom of flange
     rim_top_z     = z_face_lo + FLANGE_LIP_T          # top of flat rim
-    chamfer_h     = (DRUM_ID - FLANGE_INNER_ID) / 2   # 2.5 — 45° rise=run
+    chamfer_h     = (DRUM_ID - FLANGE_INNER_ID) / 2   # 45° rise=run
     chamfer_top_z = rim_top_z + chamfer_h             # apex meets drum cavity wall
 
     rim = (
@@ -255,8 +269,9 @@ def make_keys(
     """Build SPOKE_COUNT boxes (one at each spoke angle), each protruding
     radially outward from a cylinder at radius cyl_r. Tongue and groove
     both span the full [z_low, z_high] axial range; groove is oversized
-    by KEY_CLR on tangential and radial dimensions so the tongue drops
-    in by hand.
+    by FIT_CLR per side tangentially (bilateral). No radial oversizing —
+    the caller's seat fit (tongue at inner cyl_r, groove at outer cyl_r
+    offset by FIT_CLR) already provides the radial tip clearance.
 
     chamfer_high=True adds a 45° chamfer at the z_high end of the tongue
     so it tapers from full radial protrusion down to the cylinder
@@ -265,8 +280,8 @@ def make_keys(
     orientation) so the protrusion is self-supporting at the start."""
     overshoot = BOOL_OVERSHOOT  # extend inward into host material for clean union/cut
     if groove:
-        depth = KEY_DEPTH + KEY_CLR
-        width = KEY_W + KEY_CLR
+        depth = KEY_DEPTH                    # radial gap comes from the seat fit
+        width = KEY_W + 2 * FIT_CLR          # bilateral tangential side gap
     else:
         depth = KEY_DEPTH
         width = KEY_W
@@ -321,9 +336,15 @@ def heal(wp: cq.Workplane) -> cq.Workplane:
     # Merge adjacent faces sharing the same underlying surface, and
     # adjacent edges sharing the same underlying curve. Also collapses
     # a Compound containing one connected solid into a plain Solid.
-    unifier = ShapeUpgrade_UnifySameDomain(fixed, True, True, True)
-    unifier.Build()
-    unified = unifier.Shape()
+    try:
+        unifier = ShapeUpgrade_UnifySameDomain(fixed, True, True, True)
+        unifier.Build()
+        unified = unifier.Shape()
+    except Exception:
+        # If unify trips on a "Courbes non jointives" edge, fall back to
+        # the ShapeFix-only result. STEP importers will still accept it,
+        # just without merged coplanar faces.
+        unified = fixed
     shape_type = unified.ShapeType()
     if shape_type == TopAbs_COMPOUND:
         wrapped = cq.Compound(unified)

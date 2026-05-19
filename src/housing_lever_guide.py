@@ -24,19 +24,26 @@ _pocket = _wheel.wheel_pocket_cut(
     WHEEL_X_CENTER, WHEEL_Y_CENTER, WHEEL_Z_CENTER,
     housing_z_sign=-1,
 )
-_fingers = _wheel.slab_fingers(
-    WHEEL_X_CENTER, WHEEL_Y_CENTER, WHEEL_Z_CENTER,
-    housing_z_sign=-1,
-)
+# Slab FINGERS skipped (cosmetic clean-up — see housing_guide.py).
+# HUBS kept — they're the Ø4 friction-reducing axial spacers that
+# contact the wheel faces.
 _hubs = _wheel.slab_hubs(WHEEL_X_CENTER, WHEEL_Y_CENTER, WHEEL_Z_CENTER)
 _m2_hole = _wheel.m2_hole_cut(
     WHEEL_X_CENTER, WHEEL_Y_CENTER, WHEEL_Z_CENTER,
-    head_side="inboard",
 )
 
 
 def apply_to_housing(housing: cq.Workplane) -> cq.Workplane:
+    # See housing_guide.py for why the access channel is NOT cut here.
     return (housing.cut(_pocket)
-                   .union(_fingers)
                    .union(_hubs)
                    .cut(_m2_hole))
+
+
+def axle_access_channel() -> cq.Workplane:
+    """Ø MOUNT_HEAD_HOLE_D bore from outboard slab to housing +X face."""
+    from .housing import SPINE_X_OUTER
+    _, outboard_inner_x = _wheel.slab_inner_faces(WHEEL_X_CENTER)
+    outboard_outer_x    = outboard_inner_x + _wheel.MOUNT_T
+    return _wheel.axle_access_channel(WHEEL_Y_CENTER, WHEEL_Z_CENTER,
+                                       outboard_outer_x, SPINE_X_OUTER)

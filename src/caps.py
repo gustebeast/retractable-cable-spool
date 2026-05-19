@@ -90,8 +90,9 @@ def _build_bearing_cap_bottom():
 # ────────────────────────────────────────────────────────────────────────────
 # Anti-rotation keys (tongue & groove) for the lever-side cap only:
 #   bearing_cap_bottom (tongue) → main_body bottom cap seat (groove)
-# Tongue: 2 mm tangential × full-axial × 1 mm radial protrusion.
-# Groove: 2.2 × full-axial × 1.2 mm — 0.2 mm per-side slack to drop in by hand.
+# Tongue: KEY_W tangential × full-axial × KEY_DEPTH radial protrusion.
+# Groove oversized by FIT_CLR (0.15 mm) per side tangentially and at the
+# radial tip — drops in by hand without wobble.
 # ────────────────────────────────────────────────────────────────────────────
 bearing_cap_bottom = _build_bearing_cap_bottom()
 

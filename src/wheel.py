@@ -4,24 +4,20 @@ Replaces the 608 guide bearings (one above the spool flange, one below)
 with custom-printed wheels riding on M2 cap screws. Each wheel is
 captured between two flat rectangular sandwich slabs that are PRINTED
 AS PART OF THE HOUSING. The M2 passes along X through both slab regions
-and the wheel hub.
+and the wheel hub. No heat-set insert — the M2 threads into a tight-fit
+Ø GUIDE_AXLE_SHAFT_D (2.2 mm) hole in printed PA6-GF on the far side
+of the wheel.
 
-Per-side housing cut layout (merged-with-housing):
-
-  Wheel pocket: rectangular box covering the wheel envelope only,
-    cut into the plate so the wheel can spin in place. Slabs sit at
-    its ±X edges (made of plate material).
-
-  Stepped M2 hole along X (shared between both slabs + wheel pocket):
-    [head pocket]   Ø MOUNT_HEAD_HOLE_D, depth MOUNT_OUTER_T (= 2 mm)
-                    on the inboard slab's outer face
-    [shaft clear]   Ø M2_SHAFT_CLR_D through the rest of inboard slab,
-                    inner MOUNT_INNER_T mm
-    (wheel pocket — the wheel's own hub bore Ø WHEEL_BORE_D handles
-     the M2 in this region)
-    [shaft clear]   Ø M2_SHAFT_CLR_D through outboard slab inner 2 mm
-    [insert pocket] Ø MOUNT_INSERT_HOLE_D, depth MOUNT_OUTER_T on the
-                    outboard slab's outer face
+Stepped M2 hole layout along X (single bore through both slabs + wheel):
+  [head access + pocket] Ø MOUNT_HEAD_HOLE_D from the housing's +X
+                         outer face inward to the head step
+  [tight-fit shaft]      Ø GUIDE_AXLE_SHAFT_D from the head step
+                         through outboard slab, outboard hub, wheel
+                         bore, inboard hub, and GUIDE_AXLE_FAR_SCREW_DEPTH
+                         + GUIDE_AXLE_FAR_HOLE_EXTRA into the inboard
+                         slab — total 3 mm of enclosed axle space
+                         past the wheel, of which the M2 screw uses
+                         the first 2 mm (1 mm hub + 1 mm slab).
 
 Slab dimensions (the rectangular footprint that defines the M2-hole
 neighborhood):
@@ -43,8 +39,6 @@ import cadquery as cq
 
 from .dimensions import (
     M2_HEAD_RECESS_D,
-    M2_INSERT_PILOT_D,
-    M2_SHAFT_CLR_D,
 )
 
 # ── Wheel ───────────────────────────────────────────────────────────────────
@@ -77,12 +71,39 @@ MOUNT_FAR_END_DIST    = 3.0    # M2 hole center → far end of slab along Z
                                # (= 2 mm hole radius + 1 mm extra)
 assert MOUNT_HOUSING_END_DIST + MOUNT_FAR_END_DIST == MOUNT_L
 
-MOUNT_HEAD_HOLE_D     = M2_HEAD_RECESS_D     # 4.0 — head clearance
-MOUNT_INSERT_HOLE_D   = M2_INSERT_PILOT_D    # 3.3 — heat-set insert pilot
+MOUNT_HEAD_HOLE_D     = M2_HEAD_RECESS_D     # 4.1 — head clearance
 
-# Tip-clearance blind-bore depth past the insert (so an M2 screw slightly
-# longer than the stack doesn't bottom out on housing material).
-TIP_CLEARANCE_DEPTH   = 2.0
+# ── Guide-wheel M2 axle (no heat-set insert) ────────────────────────────────
+# The M2 screw threads directly into a tight-fit Ø2.2 hole in printed
+# PA6-GF on the far side of the wheel — exception to the M2_SHAFT_CLR_D
+# (=2.3) used elsewhere in the project, which assumes either a heat-set
+# insert or a sliding shaft.
+GUIDE_AXLE_SHAFT_D         = 2.2     # tight-fit thread hole (NOT M2_SHAFT_CLR_D)
+GUIDE_AXLE_FAR_SCREW_DEPTH = 1.0     # screw tip lands this far past inboard slab inner face
+GUIDE_AXLE_FAR_HOLE_EXTRA  = 1.0     # hole extends this far PAST the tip for clearance
+GUIDE_AXLE_SCREW_LEN       = 20.0    # M2 cap screw, head-to-tip length (M2×20)
+
+# Derived: distance the head pocket's +X face is shifted past the outboard
+# slab's outer face. Picked so the M2 screw (length GUIDE_AXLE_SCREW_LEN)
+# bottoms out at the head step (Ø MOUNT_HEAD_HOLE_D → Ø GUIDE_AXLE_SHAFT_D
+# transition) with its tip GUIDE_AXLE_FAR_SCREW_DEPTH past the inboard
+# slab inner face. axle_access_channel reads this constant.
+#
+# Algebra (all x_center terms cancel):
+#   head_step_x = (inboard_inner_x - GUIDE_AXLE_FAR_SCREW_DEPTH) + GUIDE_AXLE_SCREW_LEN
+#   head_pocket_outer_x = head_step_x + MOUNT_OUTER_T
+#   EXTRA_HEAD_RECESS = head_pocket_outer_x - outboard_outer_x
+#                     = GUIDE_AXLE_SCREW_LEN - GUIDE_AXLE_FAR_SCREW_DEPTH
+#                       - (WHEEL_W + 2·HUB_H + 2·HUB_AXIAL_CLR)
+#                       - MOUNT_T + MOUNT_OUTER_T
+#                     = 20 - 1 - 8.4 - 4 + 2 = 8.6 mm
+EXTRA_HEAD_RECESS = (
+    GUIDE_AXLE_SCREW_LEN
+    - GUIDE_AXLE_FAR_SCREW_DEPTH
+    - (WHEEL_W + 2 * HUB_H + 2 * HUB_AXIAL_CLR)
+    - MOUNT_T
+    + MOUNT_OUTER_T
+)
 
 
 # ── Wheel pocket sizing ─────────────────────────────────────────────────────
@@ -179,20 +200,25 @@ def slab_hubs(x_center: float, y_center: float, z_center: float) -> cq.Workplane
 
 
 def wheel_pocket_cut(x_center: float, y_center: float, z_center: float, *,
-                     housing_z_sign: int) -> cq.Workplane:
+                     housing_z_sign: int, extra_z: float = 0.0) -> cq.Workplane:
     """Pocket carved into the housing for the wheel only. X extent matches
     wheel + hub envelope + axial clearance; YZ extent matches painted OD
     + clearance, but stretched in the housing-end Z direction up to the
-    slab housing-end so the slab's housing-end face is the pocket roof."""
+    slab housing-end so the slab's housing-end face is the pocket roof.
+
+    extra_z extends the pocket's outer-Z extent by that many mm (in the
+    housing_z_sign direction). Use this to extend the pocket through the
+    mount-bracket's +Y chamfer wedge (so the bracket's small 45° chamfer
+    is cut away where it would otherwise pass over the wheel pocket)."""
     inboard_x, outboard_x = slab_inner_faces(x_center)
     half_y = WHEEL_PAINTED_OD / 2 + WHEEL_POCKET_Y_CLR
     half_z = WHEEL_PAINTED_OD / 2 + WHEEL_POCKET_Z_CLR
     if housing_z_sign > 0:
         # Pancake: housing above. Pocket stretches up to the slab housing-end.
         z_min = z_center - half_z
-        z_max = z_center + MOUNT_HOUSING_END_DIST
+        z_max = z_center + MOUNT_HOUSING_END_DIST + extra_z
     else:
-        z_min = z_center - MOUNT_HOUSING_END_DIST
+        z_min = z_center - MOUNT_HOUSING_END_DIST - extra_z
         z_max = z_center + half_z
     return (
         cq.Workplane("XY")
@@ -204,27 +230,50 @@ def wheel_pocket_cut(x_center: float, y_center: float, z_center: float, *,
     )
 
 
-def m2_hole_cut(x_center: float, y_center: float, z_center: float,
-                *, head_side: str = "inboard") -> cq.Workplane:
-    """Stepped M2 hole through both slab regions, centered at (y, z).
-    Returns the full cutter (head pocket + shaft + insert + tip clearance).
+def axle_access_channel(y_center: float, z_center: float,
+                        x_start: float, x_end: float) -> cq.Workplane:
+    """Ø MOUNT_HEAD_HOLE_D bore from (x_start + EXTRA_HEAD_RECESS) to
+    x_end along +X — carries the M2 head body + driver from the housing's
+    +X face down to where the head bottoms out. The first
+    EXTRA_HEAD_RECESS mm just outboard of the slab is INTENTIONALLY left
+    solid (apart from the Ø2.3 shaft hole bored by m2_hole_cut); that
+    solid step is where the screw head seats. Callers pass the outboard
+    slab's outer face as x_start — the EXTRA_HEAD_RECESS offset is
+    applied internally so callers don't change.
 
-    head_side: "inboard" (head at the -X end) or "outboard" (head at +X end).
-    """
+    Must be cut LAST in the housing assembly so subsequent unions don't
+    fill it back in."""
+    eps = 0.05
+    x_start_eff = x_start + EXTRA_HEAD_RECESS
+    return cq.Workplane("XY").add(cq.Solid.makeCylinder(
+        MOUNT_HEAD_HOLE_D / 2,
+        (x_end - x_start_eff) + 2 * eps,
+        pnt=cq.Vector(x_start_eff - eps, y_center, z_center),
+        dir=cq.Vector(1, 0, 0),
+    ))
+
+
+def m2_hole_cut(x_center: float, y_center: float, z_center: float) -> cq.Workplane:
+    """Stepped M2 axle hole through both slab regions, head at the +X
+    (outboard) end. Returns the full cutter.
+
+    Two diameters:
+      • Ø MOUNT_HEAD_HOLE_D (4.1 mm) head pocket from the head step
+        outward — joined by axle_access_channel into a single Ø4.1 bore
+        out to the housing's +X face.
+      • Ø GUIDE_AXLE_SHAFT_D (2.2 mm) tight-fit shaft from the head step
+        through outboard slab + hub + wheel + hub + GUIDE_AXLE_FAR_SCREW_DEPTH
+        of inboard slab, plus GUIDE_AXLE_FAR_HOLE_EXTRA past the screw
+        tip for clearance.
+
+    No heat-set insert — the screw threads engage the printed PA6-GF
+    Ø2.2 hole directly on the far side."""
     inboard_inner_x, outboard_inner_x = slab_inner_faces(x_center)
-    inboard_outer_x  = inboard_inner_x  - MOUNT_T   # -X edge of inboard slab
-    outboard_outer_x = outboard_inner_x + MOUNT_T   # +X edge of outboard slab
 
-    if head_side == "inboard":
-        head_x_min, head_x_max = inboard_outer_x, inboard_outer_x + MOUNT_OUTER_T
-        insert_x_min, insert_x_max = outboard_outer_x - MOUNT_OUTER_T, outboard_outer_x
-        tip_blind_x_min = outboard_outer_x
-        tip_blind_x_max = outboard_outer_x + TIP_CLEARANCE_DEPTH
-    else:
-        head_x_min, head_x_max = outboard_outer_x - MOUNT_OUTER_T, outboard_outer_x
-        insert_x_min, insert_x_max = inboard_outer_x, inboard_outer_x + MOUNT_OUTER_T
-        tip_blind_x_min = inboard_outer_x - TIP_CLEARANCE_DEPTH
-        tip_blind_x_max = inboard_outer_x
+    tip_x          = inboard_inner_x - GUIDE_AXLE_FAR_SCREW_DEPTH
+    hole_far_end_x = tip_x - GUIDE_AXLE_FAR_HOLE_EXTRA
+    head_step_x    = tip_x + GUIDE_AXLE_SCREW_LEN
+    head_pocket_outer_x = head_step_x + MOUNT_OUTER_T
 
     eps = 0.05  # boolean overshoot
 
@@ -236,10 +285,6 @@ def m2_hole_cut(x_center: float, y_center: float, z_center: float,
             dir=cq.Vector(1, 0, 0),
         ))
 
-    # Full-length Ø2.3 shaft clearance from inboard outer to outboard outer
-    # (cuts through everything; head/insert pockets widen it locally).
-    shaft = _x_cyl(M2_SHAFT_CLR_D, inboard_outer_x, outboard_outer_x)
-    head_pocket = _x_cyl(MOUNT_HEAD_HOLE_D, head_x_min, head_x_max)
-    insert_pocket = _x_cyl(MOUNT_INSERT_HOLE_D, insert_x_min, insert_x_max)
-    tip_blind = _x_cyl(M2_SHAFT_CLR_D, tip_blind_x_min, tip_blind_x_max)
-    return shaft.union(head_pocket).union(insert_pocket).union(tip_blind)
+    shaft = _x_cyl(GUIDE_AXLE_SHAFT_D, hole_far_end_x, head_step_x)
+    head_pocket = _x_cyl(MOUNT_HEAD_HOLE_D, head_step_x, head_pocket_outer_x)
+    return shaft.union(head_pocket)
