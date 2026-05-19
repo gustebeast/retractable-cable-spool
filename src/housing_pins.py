@@ -11,6 +11,8 @@ The matching keyed holes in the housing are cut by ``housing.py`` itself
 using ``_brake_hole_local`` + ``brake_pin_place`` defined there.
 """
 
+import math
+
 import cadquery as cq
 
 from .dimensions import M2_INSERT_PILOT_D
@@ -19,7 +21,7 @@ from .housing import (
     BRAKE_HOUSING_BOSS_EXTENSION, BRAKE_HOUSING_LEG_ALPHA_DEG,
     BRAKE_PIVOT_X, HOUSING_W,
     LEVER_PIVOT_BOSS_OD, LEVER_PIVOT_Z,
-    STOP_PIN_D, STOP_PIN_H, STOP_PIN_HOLE_D,
+    STOP_PIN_D, STOP_PIN_H, STOP_PIN_HOLE_D, STOP_PIN_R,
     BRAKE_PIN_INSERT_DEPTH,
     STOP_REST_PIN_ALPHA_BRAKE_DEG,
     brake_pin_xz_profile, brake_pin_place,
@@ -152,24 +154,88 @@ def _rest_pin_nook_fill_local():
 
 
 def _rest_pin_slab():
-    """Half-boss slab unioned into the brake rest pin. See module
-    docstring + REST_PIN_SLAB_* constants above for the design."""
+    """Full-disc spring-retention slab unioned into the brake rest pin.
+
+    Mirrors the ratchet HOUSING-side boss extension (a full Ø
+    LEVER_PIVOT_BOSS_OD disc around the pivot), but anchored to the
+    rest pin via a rectangular connector bar instead of a boss on the
+    housing column — the brake half of the housing must stay flat for
+    printability, so the spring-retention disc rides on the separately-
+    printed rest pin.
+
+    Two pieces unioned:
+      1. Full annular Ø REST_PIN_SLAB_OUTER_D disc around the brake
+         pivot, with Ø REST_PIN_SLAB_INNER_D inner clearance for the
+         M2 + heat-set insert.
+      2. Rectangular connector bar from disc edge out to the rest pin
+         along the rest pin's radial direction (α =
+         STOP_REST_PIN_ALPHA_BRAKE_DEG). Length overlaps 1 mm into the
+         pin column; width matches STOP_PIN_D so it's flush with the
+         pin tangentially.
+    """
     y_in_face_world  = -HOUSING_W / 2                                       # housing column outer face (-Y)
     y_out_face_world = -HOUSING_W / 2 - BRAKE_HOUSING_BOSS_EXTENSION        # slab face into the gap
 
-    slab = pivot_boss_sector(
+    # Full disc.
+    disc = pivot_boss_sector(
         BRAKE_PIVOT_X,
-        y_out_face_world,                                                   # y0 (lower y)
-        y_in_face_world,                                                    # y1 (higher y, flush with column)
-        # Sweep CCW housing α from the rest pin's α (where the slab
-        # connects to the pin) to the lever boss's HI bound minus the
-        # far-end trim, so the slab spans exactly 180° (a half-circle
-        # around the pivot).
-        alpha_lo_deg=STOP_REST_PIN_ALPHA_BRAKE_DEG,
-        alpha_hi_deg=BRAKE_BOSS_EXT_ALPHA_HI - REST_PIN_SLAB_FAR_END_TRIM_DEG,
+        y_out_face_world, y_in_face_world,
+        alpha_lo_deg=0.0, alpha_hi_deg=360.0,
         od=REST_PIN_SLAB_OUTER_D,
     )
-    # Cut the inner clearance hole through the slab so the M2 screw
+
+    # Connector bar — TRAPEZOIDAL in the bar's local XZ plane. The +Z
+    # (lever-facing) edge slopes the FULL length from disc to pin:
+    #   • -Z edge: straight from disc to pin at local Z = -STOP_PIN_D/2
+    #     (= -2), flush with the pin's -Z tangent.
+    #   • +Z edge: slopes from local Z = +STOP_PIN_D/2 (= +2) at the disc
+    #     end down to local Z = 0 at the pin end. The disc-end +Z corner
+    #     sits at radial distance √(2.2² + 2²) ≈ 2.98 mm from the pivot,
+    #     just inside the disc edge (radius 3).
+    # In the print frame (build plate normal = +X -Z, print direction =
+    # -X +Z), the resulting +Z face has a normal at 107° from the print
+    # direction → only ~17° of overhang from vertical, well inside the
+    # 45° self-supporting limit. The slope spans the entire bar length
+    # so the visual cut runs from the circle to the pin, not buried
+    # inside the pin column.
+    # Overshoots into BOTH the disc and the pin so the boolean union
+    # produces solid material (no kissing surfaces).
+    r_disc        = REST_PIN_SLAB_OUTER_D / 2
+    bar_overshoot = 0.8
+    bar_inner_r   = r_disc - bar_overshoot
+    bar_outer_r   = STOP_PIN_R + bar_overshoot
+    bar_length    = bar_outer_r - bar_inner_r
+    bar_thickness = BRAKE_HOUSING_BOSS_EXTENSION
+    bar_center_radial = (bar_inner_r + bar_outer_r) / 2
+    z_full        = STOP_PIN_D / 2          # +2 mm — full pin half-width (disc end)
+    z_narrow      = 0.0                      # narrow side at pin (on centerline)
+
+    alpha_rad = math.radians(STOP_REST_PIN_ALPHA_BRAKE_DEG)
+    bar_world_x = BRAKE_PIVOT_X + bar_center_radial * math.cos(alpha_rad)
+    bar_world_z = LEVER_PIVOT_Z - bar_center_radial * math.sin(alpha_rad)
+
+    trap_pts = [
+        (-bar_length / 2, -z_full),    # disc-end bottom
+        (+bar_length / 2, -z_full),    # pin-end bottom
+        (+bar_length / 2,  z_narrow),  # pin-end top (narrow side at pin)
+        (-bar_length / 2,  z_full),    # disc-end top (full side at disc)
+    ]
+
+    bar = (
+        cq.Workplane("XZ")
+        .polyline(trap_pts)
+        .close()
+        .extrude(-bar_thickness)
+        # Rotate around +Y so the local +X (radial) axis aligns with the
+        # housing's α direction (right-hand rule: positive α rotates +X
+        # toward -Z, matching x = R cos α, z = -R sin α). Local +Z
+        # (tangential) then maps to world (+sin α, 0, +cos α) = the
+        # lever-facing direction.
+        .rotate((0, 0, 0), (0, 1, 0), STOP_REST_PIN_ALPHA_BRAKE_DEG)
+        .translate((bar_world_x, y_out_face_world, bar_world_z))
+    )
+
+    # Cut the inner clearance hole through the disc so the M2 screw
     # passes straight through and the heat-set insert (already pressed
     # into the column at this same X-Z) doesn't get blocked.
     inner_hole = (
@@ -181,7 +247,7 @@ def _rest_pin_slab():
                     y_out_face_world - 0.2,
                     LEVER_PIVOT_Z))
     )
-    return slab.cut(inner_hole)
+    return disc.union(bar).cut(inner_hole)
 
 
 # Spring pin: rounded corner faces the lever pin via the +z_local half

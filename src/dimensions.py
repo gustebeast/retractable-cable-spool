@@ -23,7 +23,9 @@ FLANGE_OD      = DRUM_OD   # flange outer diameter — flush with drum (no
                            # by one inward 45° chamfer.
 FLANGE_H       =   7.0   # flange axial extent at inner edge (over the drum).
                          # = (FLANGE_OD−DRUM_OD)/2 + FLANGE_LIP_T → 45° underside.
-FLANGE_LIP_T   =   2.0   # flange thickness at outer edge (cable retention lip)
+FLANGE_LIP_T   =   3.2   # rim thickness: 1.7 mm of clean support material above
+                         # the ratchet teeth (which cut RATCHET_DEPTH=1.5 mm up
+                         # into the rim from below) before the 45° chamfer starts.
 
 # Universal thin-structural-wall thickness. Used for the hub wall, the
 # main spool spokes, the bearing-cap radial spokes, and the top-bearing
@@ -52,7 +54,16 @@ BEARING_LIP_ID =  20.0   # retention lip ID (< BEARING_OD → stops the bearing)
 
 # ── Axle ─────────────────────────────────────────────────────────────────────
 AXLE_D         =   8.0   # nominal — 608 bearing bore (the metal bearing's ID)
-AXLE_PRINT_D   =   AXLE_D - 0.3   # 7.7 — printed axle Ø, 0.15 mm per side under nominal
+AXLE_PRINT_D   =   AXLE_D - 0.2   # 7.8 — printed axle Ø, 0.10 mm per side under nominal
+
+# Bearing-retention lip on a printed axle: a short Ø(AXLE_LIP_OD) × AXLE_LIP_H
+# shoulder that sits flat against the bearing's INNER race rim. Mirrors the
+# main-body pocket's retention lip on the OUTER race: both protrude by
+# AXLE_LIP_W = 1 mm past their reference surface. Used by both the main spool
+# axle and the back guide axle (same shaft Ø → same lip Ø).
+AXLE_LIP_W     =   1.0
+AXLE_LIP_OD    =   AXLE_PRINT_D + 2 * AXLE_LIP_W   # 9.7 mm (was 10 — 1.15 mm/side)
+AXLE_LIP_H     =   1.0
                                    # printing. Side-printed cylinders grow
                                    # ~0.05 mm per side; this compensates so
                                    # the printed axle fits the bearing.
@@ -79,9 +90,19 @@ HOUSING_GAP_LEVER   =  2.0   # lever side (below the spool, z < 0). Mirrors
                              # Top of top stop-pin boss now at z=-2 (=
                              # plate top) — no boss material in the
                              # spool clearance gap.
-HOUSING_GAP_PANCAKE = 2.0    # pancake side (above the spool, z > SPOOL_H).
-                             # See above — wheel intrudes into a pocket
-                             # cut in the plate; 2 mm leaves a thin roof.
+HOUSING_GAP_PANCAKE = 2.5    # pancake side (above the spool, z > SPOOL_H).
+                             # Trimmed 3.2 → 2.5 (-0.7 mm) so the wheel's
+                             # Ø4.1 axle hole sits well below the plate's
+                             # outer face — avoids the hairline section
+                             # of material a smaller bump would leave
+                             # behind.
+                             # The original 3.2 mm gap was sized so the
+                             # plate material above the pancake guide-wheel
+                             # pocket grew from 0.5 to 1.7 mm, leaving room
+                             # for the mount_bracket's 1.7 mm-deep
+                             # connecting strip to cross over the wheel
+                             # without
+                             # leaving a knife-edge in the housing.
 # Axle extends past the spool. On the PANCAKE side the axle still goes
 # through the full housing plate (gap + plate thickness) so the cross-
 # pin sits at plate center with PLATE_T/2 of full-diameter material on
@@ -161,12 +182,14 @@ SPOKE_W        = STRUCT_WALL  # spoke tangential width — pinned to STRUCT_WALL
 # ── Anti-rotation keys (cap → main_body, pancake_spool → cap tongue) ─────────
 # Same key system used wherever a cylindrical part needs to lock rotationally
 # inside a host cylinder: SPOKE_COUNT radial tongues on the inner part, matching
-# grooves on the host. Groove oversized by KEY_CLR (per-side ≈ KEY_CLR/2) for
-# drop-in fit without wobble.
+# grooves on the host. Groove oversized by FIT_CLR per side tangentially;
+# radial tip clearance is supplied by the surrounding seat fit (tongue at
+# inner radius, groove at outer radius — already FIT_CLR apart).
 KEY_W      = 2.0    # tangential width of tongue
 KEY_DEPTH  = 1.0    # radial protrusion of tongue
-KEY_CLR    = 0.4    # groove oversized vs tongue (0.2 mm per side — key exception)
 KEY_ANGLES = [i * 360.0 / SPOKE_COUNT for i in range(SPOKE_COUNT)]
+# Groove sized by the shared FIT_CLR (defined below): 2*FIT_CLR tangentially
+# (bilateral) and FIT_CLR radially at the tip.
 
 # ── Top-flange widening + ratchet teeth ──────────────────────────────────────
 # Top flange's flat top now spans FLANGE_INNER_ID → FLANGE_OD instead of
@@ -207,7 +230,9 @@ RATCHET_TOOTH_OFFSET_DEG = 0.0    # placeholder — real value computed below
 # cross-pins, axle spring engagement). Keep these as the SINGLE source of
 # truth — every new feature that drills, recesses, or threads M2 should
 # reference these instead of redefining its own copy.
-M2_SHAFT_CLR_D     = 2.3     # 2 mm thread + 0.15 mm clearance per side
+M2_SHAFT_CLR_D     = 2.4     # 2 mm thread + 0.20 mm clearance per side (was 2.3 — too
+                             # tight; the guide-wheel axle hole stays at its own
+                             # GUIDE_AXLE_SHAFT_D = 2.2 mm tight-thread fit)
 M2_HEAD_RECESS_D   = 4.1     # M2 cap head ≈ 3.8 mm OD + 0.15 mm clearance per side
 M2_HEAD_RECESS_H   = 2.0     # cap-head counterbore depth
 M2_INSERT_PILOT_D  = 3.3     # McMaster 94459A110 heat-set insert pilot
@@ -227,7 +252,9 @@ BOOL_OVERSHOOT     =   0.5
 # from falling through. Slip fit (not grippy) so it can be removed for
 # service; in operation the top bearing's axial load is upward (bearing
 # press-fit into cap), and gravity keeps the cap seated.
-CAP_SEAT_CLR   =   0.15  # radial slip-fit clearance between cap OD and cavity ID
+FIT_CLR        =   0.15  # shared per-side slip-fit clearance for hand-assembled
+                         # cylindrical/rectangular fits (cap seat, anti-rotation
+                         # keys, etc.). Single source of truth for fitted parts.
 CAP_STOP_LIP_H =   1.0   # axial height of the cap-stop lip in main body.
                          # Must equal CAP_STOP_INSET so the lip's underside
                          # prints as a 45° self-supporting cone (rise = run).
@@ -256,7 +283,7 @@ DRUM_TOP_Z     = SPOOL_H - FLANGE_H                        # 31 mm
 
 # Cap geometry
 CAP_H          = BEARING_W + BEARING_LIP_H                 #  8 mm — lip (1) + pocket (7)
-CAP_OD         = HUB_CAVITY_D - 2 * CAP_SEAT_CLR           # 33.8 mm (slip fit in 34 mm cavity)
+CAP_OD         = HUB_CAVITY_D - 2 * FIT_CLR                # 33.8 mm (slip fit in 34 mm cavity)
 CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 32 mm — cavity ID at the stop lip
 
 # Main body cavity z-map (from top down):
@@ -319,4 +346,4 @@ assert CAP_STOP_LIP_H == CAP_STOP_INSET, \
     "cap-stop lip must be 45° (rise = run) for self-supporting print"
 assert SPOKE_COUNT >= 4, \
     "need at least 4 spokes for structural integrity"
-assert KEY_CLR > 0, "key groove must be larger than tongue"
+assert FIT_CLR > 0, "fit clearance must be positive"

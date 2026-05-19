@@ -9,8 +9,9 @@ import math
 import cadquery as cq
 
 from .dimensions import (
-    AXLE_D, AXLE_EXTRA_LEVER, AXLE_EXTRA_PANCAKE, AXLE_PRINT_D,
-    BEARING_BORE, BEARING_CLR, BEARING_OD, BEARING_W,
+    AXLE_D, AXLE_EXTRA_LEVER, AXLE_EXTRA_PANCAKE,
+    AXLE_LIP_H, AXLE_LIP_OD, AXLE_PRINT_D,
+    BEARING_BORE, BEARING_CLR, BEARING_LIP_ID, BEARING_OD, BEARING_W,
     BOOL_OVERSHOOT,
     DRUM_BOTTOM_Z, DRUM_OD,
     FLANGE_OD,
@@ -20,7 +21,8 @@ from .dimensions import (
     PANCAKE_CROSS_PIN_Z, PLATE_T,
     SPOOL_H,
 )
-from .helpers import cyl, cone_solid
+from .helpers import axle_print_flat, cyl, cone_solid
+from .spool import HELIX_OD_BOTTOM_Z
 
 # ────────────────────────────────────────────────────────────────────────────
 # HOUSING — U-bracket keyed only at the top of the axle.
@@ -40,12 +42,27 @@ from .helpers import cyl, cone_solid
 # ────────────────────────────────────────────────────────────────────────────
 
 HOUSING_W         =  22.0    # matches bearing OD
-HOUSING_CLR       =  10.0    # radial clearance past flange OD
-HOUSING_SPINE_T   =   2.0    # spine thickness (x direction)
-HOUSING_HOLE_CLR  =   0.15   # axle hole slip fit (radial)
+# Single shared "clearance past the drum OD" knob. Controls both:
+#   - BACK_AXLE_GAP_MAX: how far the back-axle surface sits from the drum
+#     OD when the slider is at its FAR (retracted) stop.
+#   - HOUSING_CLR: how far the front spine's inner face sits from the
+#     drum OD.
+# Bumping or lowering this number moves BOTH symmetrically so the
+# housing's two long sides stay mirrored — change in one place.
+SPOOL_CLEARANCE        = 5.0
+BACK_AXLE_OVERLAP_MIN  = 1.0    # axle-surface overlap into the drum OD at the close stop
+BACK_AXLE_GAP_MAX      = SPOOL_CLEARANCE
+BACK_AXLE_TRAVEL       = BACK_AXLE_OVERLAP_MIN + BACK_AXLE_GAP_MAX
+HOUSING_CLR            = SPOOL_CLEARANCE
+HOUSING_SPINE_T   =  10.0    # spine thickness (x direction) — bumped to
+                             # 10 mm to provide solid mounting material
+                             # for the wood-screw attachment of the cover.
+HOUSING_HOLE_CLR  =   0.25   # axle hole slip fit (radial); Ø AXLE_PRINT_D +
+                             # 2·HOUSING_HOLE_CLR = 7.8 + 0.5 = 8.3 mm hole
+                             # through the pancake plate
 
-SPINE_X_INNER     = FLANGE_OD / 2 + HOUSING_CLR         # 90 — 10 mm past flange OD
-SPINE_X_OUTER     = SPINE_X_INNER + HOUSING_SPINE_T     # 92
+SPINE_X_INNER     = FLANGE_OD / 2 + HOUSING_CLR         # 89.35 — 1 mm past back-axle FAR reach
+SPINE_X_OUTER     = SPINE_X_INNER + HOUSING_SPINE_T     # 99.35
 # Wrap-around: back spine on the opposite side of the housing, mirroring
 # the front (mounting) spine. Plates extend across the full width from
 # -SPINE_X_INNER to +SPINE_X_INNER, with a spine box at each end.
@@ -186,9 +203,8 @@ spine = (
 # stop the axle surface is 7 mm clear of the helix walls. The axle Ø is
 # AXLE_PRINT_D (rides in a 608 bore, like the main axle).
 BACK_AXLE_Y            = 0.0    # axle on the -X axis (aligned with the cable at α=180°)
-BACK_AXLE_OVERLAP_MIN  = 1.0    # axle-surface overlap into the drum OD at the close stop
-BACK_AXLE_GAP_MAX      = 7.0    # axle-surface clearance from the drum OD at the far stop
-BACK_AXLE_TRAVEL       = BACK_AXLE_OVERLAP_MIN + BACK_AXLE_GAP_MAX          # 8
+# BACK_AXLE_OVERLAP_MIN / BACK_AXLE_GAP_MAX / BACK_AXLE_TRAVEL are defined
+# up top (HOUSING_CLR depends on them).
 
 # Axle-center X at the two travel extremes (|x| = axle-center radius, y=0):
 BACK_AXLE_X_CLOSE = -(DRUM_OD / 2 - BACK_AXLE_OVERLAP_MIN + AXLE_PRINT_D / 2)   # -80.35
@@ -203,7 +219,12 @@ BACK_AXLE_X       = (BACK_AXLE_X_CLOSE + BACK_AXLE_X_FAR) / 2                   
 _BACK_AXLE_POCKET_D  = BEARING_OD + BEARING_CLR                # 22.3
 BACK_AXLE_CLR_PER_SIDE = 1.0
 _BACK_AXLE_CLR_D     = AXLE_PRINT_D + 2 * BACK_AXLE_CLR_PER_SIDE   # 9.7
-BACK_AXLE_BEARING_Z0 = PANCAKE_PLATE_Z_OUT - BEARING_W         # 56 — bearing bottom face
+# Bearing inset from the housing's top face: bearing top sits 2 mm below
+# PANCAKE_PLATE_Z_OUT so the (1 mm-tall) axle head can rise 1 mm above
+# the bearing's inner race and STILL leave 1 mm of clearance to the
+# wood that the top of the housing mounts against.
+BACK_AXLE_BEARING_INSET = 2.0
+BACK_AXLE_BEARING_Z0 = PANCAKE_PLATE_Z_OUT - BACK_AXLE_BEARING_INSET - BEARING_W   # 54 — bearing bottom face
 # The bearing seats on a thin rim at the OUTER edge of the pocket floor
 # (so only the stationary outer race touches the block); the rest of the
 # floor is recessed so the rotating inner race / shield clears it.
@@ -255,11 +276,16 @@ BACK_AXLE_CLAMP_X = _back_axle_block_face_x(BACK_AXLE_X) + BACK_AXLE_TENON_LEN /
 # screw Ø + 2 mm margin so the screw stays inside it across the full travel.
 _BACK_AXLE_SLOT_LEN = BACK_AXLE_TRAVEL + M2_SHAFT_CLR_D + 2.0                      # 12.3
 
-# Guide-axle (the printed shaft itself).
-BACK_AXLE_HEAD_D      = 12.0
-BACK_AXLE_HEAD_H      = 3.0
-BACK_AXLE_SHAFT_TOP_Z = PANCAKE_PLATE_Z_OUT                # 63 — flush with bearing top
-BACK_AXLE_SHAFT_BOT_Z = DRUM_BOTTOM_Z                      # 7  — bottom of the lowest helix turn
+# Guide-axle (the printed shaft itself). Same shaft Ø as the main spool axle
+# → same retention-lip geometry (AXLE_LIP_OD, AXLE_LIP_H from dimensions.py):
+# Ø 9.7 mm head overhangs the Ø 7.7 shaft by 1 mm per side, sitting flat on
+# the bearing inner-race rim (never the stationary outer race / pocket walls).
+# Shaft top is flush with the bearing's top face, which sits 2 mm below
+# PANCAKE_PLATE_Z_OUT (see BACK_AXLE_BEARING_INSET). The head adds AXLE_LIP_H
+# above this; with 1+1 mm budget the head's top face is 1 mm below
+# PANCAKE_PLATE_Z_OUT — clear of the wood cover.
+BACK_AXLE_SHAFT_TOP_Z = PANCAKE_PLATE_Z_OUT - BACK_AXLE_BEARING_INSET   # 61
+BACK_AXLE_SHAFT_BOT_Z = HELIX_OD_BOTTOM_Z                  # 3.55 — bottom of the V-groove cut at the drum OD (=HELIX_Z_BOT − HELIX_HALF_PITCH_AT_OD)
 
 
 def _back_axle_narrow_plate():
@@ -385,9 +411,14 @@ def _back_axle_block_part():
         .extrude(BACK_AXLE_TENON_H)
     )
     block = body.union(tenon)
-    # Bearing pocket: Ø22.3 from the OUTER face down BEARING_W, then a
-    # Ø9.7 axle clearance bore through the remaining plate thickness.
-    pocket = cyl(_BACK_AXLE_POCKET_D, BEARING_W + BOOL_OVERSHOOT, z=BACK_AXLE_BEARING_Z0) \
+    # Bearing pocket: Ø22.3 from BEARING_Z0 all the way THROUGH the block's
+    # top face, so the bearing can be dropped in from above and rests only
+    # on the seat below (BEARING_REST_RIM + recess). Below the seat, a
+    # Ø9.7 axle clearance bore continues through the remaining plate
+    # thickness. The axle head (Ø AXLE_LIP_OD) sits inside the upper
+    # ~2 mm of this pocket on top of the bearing inner race.
+    pocket_h = PANCAKE_PLATE_Z_OUT - BACK_AXLE_BEARING_Z0 + BOOL_OVERSHOOT
+    pocket = cyl(_BACK_AXLE_POCKET_D, pocket_h, z=BACK_AXLE_BEARING_Z0) \
         .translate((BACK_AXLE_X, BACK_AXLE_Y, 0))
     clr_h = (BACK_AXLE_BEARING_Z0 - PANCAKE_PLATE_Z_IN) + 2 * BOOL_OVERSHOOT
     clr = cyl(_BACK_AXLE_CLR_D, clr_h, z=PANCAKE_PLATE_Z_IN - BOOL_OVERSHOOT) \
@@ -427,40 +458,25 @@ def _back_axle_block_part():
 def _back_axle_part():
     """The printed guide axle: Ø AXLE_PRINT_D shaft riding in the back 608
     bearing, hanging down the -X side to pin the cable into the helix
-    groove. Ø BACK_AXLE_HEAD_D head on top rests on the bearing inner race.
-    Shaft only reaches the BOTTOM of the lowest helix turn (DRUM_BOTTOM_Z)."""
+    groove. Ø AXLE_LIP_OD lip on top rests on the bearing inner race.
+    Shaft only reaches the BOTTOM of the lowest helix turn (DRUM_BOTTOM_Z).
+    Lip geometry + side-print flat are shared with the main spool axle."""
     shaft = cyl(AXLE_PRINT_D, BACK_AXLE_SHAFT_TOP_Z - BACK_AXLE_SHAFT_BOT_Z,
                 z=BACK_AXLE_SHAFT_BOT_Z)
-    head = cyl(BACK_AXLE_HEAD_D, BACK_AXLE_HEAD_H, z=BACK_AXLE_SHAFT_TOP_Z)
-    return shaft.union(head).translate((BACK_AXLE_X, BACK_AXLE_Y, 0))
+    head = cyl(AXLE_LIP_OD, AXLE_LIP_H, z=BACK_AXLE_SHAFT_TOP_Z)
+    body = shaft.union(head).cut(axle_print_flat(
+        z_lo=BACK_AXLE_SHAFT_BOT_Z - 1.0,
+        z_hi=BACK_AXLE_SHAFT_TOP_Z + AXLE_LIP_H + 1.0,
+    ))
+    return body.translate((BACK_AXLE_X, BACK_AXLE_Y, 0))
 
 
 back_axle_block = _back_axle_block_part()
 back_axle       = _back_axle_part()
 
-# Wall-mount stud — single clearance hole through the front spine, on the
-# face that sits against the mounting surface (+x face). Install method:
-# 10-24 wood-screw stud (McMaster 90915A641) drives into the mounting
-# board, the housing slides on, and a 10-24 flange nut (McMaster 90389A112,
-# flange OD 12.7 mm) tightens on the +x face. Single hole at the centroid
-# of the front face — y = 0, z = midpoint between plate outer faces. (Eventual
-# top-mount conversion will replace this with a hole through the top of
-# the axle column instead; for now this just consolidates the previous
-# 2-hole diagonal pattern into one centered hole.)
-MOUNT_SCREW_CLR_D    = 5.3                                    # #10 clearance
-MOUNT_SCREW_Z        = (_LEVER_PLATE_Z_OUT + PANCAKE_PLATE_Z_OUT) / 2
-
-def _mount_hole(y, z):
-    """#10 clearance hole through the spine, axis along x. Enters from the
-    +x face (mounting face); extends slightly past both faces for clean
-    booleans."""
-    x_start = SPINE_X_INNER - BOOL_OVERSHOOT                  # 0.5 mm inside
-    x_len   = HOUSING_SPINE_T + 2 * BOOL_OVERSHOOT             # through + overshoot each side
-    return cq.Workplane("XY").add(cq.Solid.makeCylinder(
-        MOUNT_SCREW_CLR_D / 2, x_len,
-        pnt=cq.Vector(x_start, y, z),
-        dir=cq.Vector(1, 0, 0),
-    ))
+# (The old single Ø5.3 #10 wall-mount stud hole through the front spine
+# is gone — wall mounting is now handled entirely by the separately-
+# printed mount_bracket, which the housing slides onto.)
 
 # Lever pivots — two separate M2 cap screws, each threading into an M2 heat-
 # set insert embedded in the housing. (RATCHET_PIVOT_X and BRAKE_PIVOT_X are
@@ -541,18 +557,21 @@ def _pivot_insert_pilot(x, insert_face_sign, recess_depth=0.0):
 # Mirror of the lever pivot pattern, applied to each axle column. A single
 # M2 cap screw passes through the column on +y, through the axle, and into
 # a heat-set insert in the column on -y.
-def _axle_pin_clearance(z_center):
-    """M2 through-hole at a given z, axis along y, full housing y-width."""
+def _axle_pin_clearance(z_center, x_center=0.0):
+    """M2 through-hole at a given (x, z), axis along y, full housing y-width.
+    Used by both the axle cross-pin (x=0) and the mount-bracket M2 (the
+    chunk's centerline)."""
     return (
         cq.Workplane("XY")
         .circle(LEVER_SCREW_CLR_D / 2)
         .extrude(HOUSING_W + 2)
         .rotate((0, 0, 0), (1, 0, 0), -90)
-        .translate((0, -HOUSING_W / 2 - 1, z_center))
+        .translate((x_center, -HOUSING_W / 2 - 1, z_center))
     )
 
 
-def _axle_pin_insert_pilot(z_center, insert_face_sign, recess_depth=0.0):
+def _axle_pin_insert_pilot(z_center, insert_face_sign, recess_depth=0.0,
+                            x_center=0.0):
     """Heat-set insert pilot. recess_depth shifts the pilot's mouth inward
     from the housing face by that many mm — used when the same face also
     has a counterbore for the screw head, so the insert sits BEHIND the
@@ -566,10 +585,10 @@ def _axle_pin_insert_pilot(z_center, insert_face_sign, recess_depth=0.0):
     )
     if insert_face_sign > 0:
         return pilot.rotate((0, 0, 0), (1, 0, 0), +90) \
-                    .translate((0, HOUSING_W / 2 - recess_depth, z_center))
+                    .translate((x_center, HOUSING_W / 2 - recess_depth, z_center))
     else:
         return pilot.rotate((0, 0, 0), (1, 0, 0), -90) \
-                    .translate((0, -HOUSING_W / 2 + recess_depth, z_center))
+                    .translate((x_center, -HOUSING_W / 2 + recess_depth, z_center))
 
 # Stop pins — double-duty: mechanical travel stops AND anchors for the
 # torsion-spring legs. One pin on each lever's inner face (projects into
@@ -608,10 +627,14 @@ STOP_PIN_H       = 3.0     # mm, y-extent. With LEVER_RIM_H = 4.5 mm gap,
                            # the gap, leaving 1.5 mm of air between its tip
                            # and the opposing surface. Pin overlap region
                            # = 1.5 mm in the middle of the gap.
-STOP_PIN_R       = 4.5     # mm, radial offset from pivot. Pin inner edge at
-                           # r=2.5 (= R − D/2) clears the spring coil outer
-                           # at r=2.25 by 0.25 mm. Bumped from 3.5 when pin
-                           # OD grew from 2 → 4 mm.
+STOP_PIN_R       = 6.0     # mm, radial offset from pivot. Pin inner edge at
+                           # r=4 (= R − D/2) leaves 1 mm of clearance to the
+                           # LEVER_PIVOT_BOSS_OD/2=3 spring-retention boss, so
+                           # that boss can be a FULL CIRCLE (no sector trim)
+                           # without ever colliding with the pins at any
+                           # lever rotation. Also clears the spring coil
+                           # outer (r=2.25) by 1.75 mm. Bumped from 4.5 when
+                           # the boss extensions were promoted to full discs.
 SPRING_WIRE_R    = 0.25    # radius of the spring wire (0.5 mm wire)
 
 # Angular separation between two pin centers when their cylindrical OD
@@ -834,11 +857,12 @@ _pin_r      = STOP_PIN_D / 2
 # pin_center) − _pin_r; solve for angular separation Δ from pivot:
 #   distance² = R_boss² + R_pin² − 2·R_boss·R_pin·cos Δ
 #   gap = distance − _pin_r → distance = gap + _pin_r
-_RATCHET_BOSS_EXT_ANG_CLEAR_DEG = math.degrees(math.acos(
+_RATCHET_BOSS_EXT_ANG_CLEAR_DEG = math.degrees(math.acos(max(-1.0, min(1.0,
     (_BOSS_EXT_R**2 + STOP_PIN_R**2
         - (LEVER_BOSS_EXT_PIN_CLR + _pin_r)**2)
     / (2 * _BOSS_EXT_R * STOP_PIN_R)
-))   # ≈ 41.4°
+))))   # 0° once STOP_PIN_R is large enough that the boss is already
+       # radially clear of the pin by ≥ LEVER_BOSS_EXT_PIN_CLR.
 
 # Brake pin is square+rounded-corner; the ROUNDED corner faces the
 # lever stop pin, so the side facing the boss extension has a SHARP
@@ -849,10 +873,10 @@ _RATCHET_BOSS_EXT_ANG_CLEAR_DEG = math.degrees(math.acos(
 # back to the pin's radial axis.
 _corner_R_pivot      = math.sqrt((STOP_PIN_R - _pin_r)**2 + _pin_r**2)
 _corner_alpha_offset = math.degrees(math.atan2(_pin_r, STOP_PIN_R - _pin_r))
-_corner_ang_clear    = math.degrees(math.acos(
+_corner_ang_clear    = math.degrees(math.acos(max(-1.0, min(1.0,
     (_BOSS_EXT_R**2 + _corner_R_pivot**2 - LEVER_BOSS_EXT_PIN_CLR**2)
     / (2 * _BOSS_EXT_R * _corner_R_pivot)
-))
+))))
 _BRAKE_BOSS_EXT_ANG_CLEAR_DEG = _corner_alpha_offset + _corner_ang_clear   # ≈ 56.9°
 
 # LEVER-side sector α bounds (CCW from α_lo to α_hi). Worst-case
@@ -1050,7 +1074,11 @@ def pivot_boss_sector(pivot_x, y0, y1, alpha_lo_deg, alpha_hi_deg, *,
     range). Avoids the topology problems both extrude+arc and revolve
     approaches produced — and the polygonal approximation of the arc
     is clipped away by the cylinder's true cylindrical surface so the
-    sector ends up with a clean cylindrical outer face."""
+    sector ends up with a clean cylindrical outer face.
+
+    Special case: when (alpha_hi - alpha_lo) >= 360°, returns the
+    plain cylinder directly (no wedge intersection) — used when the
+    boss is a complete disc."""
     r = od / 2
     h = y1 - y0
     if alpha_hi_deg < alpha_lo_deg:
@@ -1063,6 +1091,9 @@ def pivot_boss_sector(pivot_x, y0, y1, alpha_lo_deg, alpha_hi_deg, *,
         .circle(r)
         .extrude(-h)   # XZ extrudes along -Y; negate to grow in +Y
     )
+    if (alpha_hi_deg - alpha_lo_deg) >= 360.0 - 1e-9:
+        # Full disc — skip the wedge intersection entirely.
+        return cylinder.translate((pivot_x, y0, LEVER_PIVOT_Z))
     R_outer = r * 2
     n_seg = max(2, int(math.ceil((a_hi - a_lo) / math.radians(20))))
     # Polygon points use housing α: workplane y maps to world z via
@@ -1294,17 +1325,36 @@ def _build_housing_skeleton():
                                HOUSING_W / 2 - _PIN_BOSS_OVERLAP,
                                HOUSING_W / 2 + STOP_PIN_H))
         # Ratchet HOUSING-side boss extension into the lever-housing gap
-        # — sectored to clear the housing stop pins. Mirrors the lever-
-        # side boss extension on the opposite side of the spring; pushes
-        # the spring axially so it sits at the gap midpoint instead of
-        # bottoming against the housing column. Y range starts 0.5 mm
-        # inside the column for clean union, ends RATCHET_HOUSING_BOSS_
-        # EXTENSION mm out into the gap.
+        # — FULL DISC around the pivot. The stop pins sit at STOP_PIN_R=6
+        # with their inner edge at r=4, giving 1 mm clearance to the
+        # Ø LEVER_PIVOT_BOSS_OD disc (outer at r=3), so no sector trim is
+        # needed. Pushes the spring axially so it sits at the gap
+        # midpoint instead of bottoming against the housing column.
+        # Y range starts 0.5 mm inside the column for clean union, ends
+        # RATCHET_HOUSING_BOSS_EXTENSION mm out into the gap.
         .union(pivot_boss_sector(RATCHET_PIVOT_X,
                                   HOUSING_W / 2 - 0.5,
                                   HOUSING_W / 2 + RATCHET_HOUSING_BOSS_EXTENSION,
-                                  RATCHET_HOUSING_BOSS_EXT_ALPHA_LO,
-                                  RATCHET_HOUSING_BOSS_EXT_ALPHA_HI))
+                                  0.0, 360.0))
+        # Below-pivot wall thickener. Pivot z=-10.13 sits only 1.87 mm
+        # above the lever plate's outer face (_Z_OUT = -12), so the M2
+        # insert pilot (Ø3.3) leaves a 0.22 mm wall in -Z and the head
+        # counterbore (Ø4.1) actually pokes 0.18 mm past the plate face.
+        # A Ø LEVER_PIVOT_BOSS_OD sector around α=90° (straight down)
+        # gives ~1.35 mm wall around the pilot and ~0.95 mm around the
+        # counterbore — and matches the OD of the +Y boss extension
+        # above, so the two are flush concentric instead of stepped.
+        # Spans the full housing width (Y) — flush with both outer
+        # faces. α range [25°, 155°] keeps the sector's flat boundary
+        # faces ~0.6 mm INSIDE the plate (endpoint z ≈ -11.4, plate
+        # _Z_OUT = -12). With Ø6 the old [40°, 140°] put the endpoint
+        # 0.06 mm OUTSIDE the plate face, leaving a sliver crack at
+        # the join. Unioned BEFORE the mount-bracket pocket so the
+        # bracket can carve through it.
+        .union(pivot_boss_sector(RATCHET_PIVOT_X,
+                                  -HOUSING_W / 2,
+                                  +HOUSING_W / 2,
+                                  25.0, 155.0))
         # ── ALL CUTS LAST ───────────────────────────────────────────────
         # Lever pivots: clearance through + insert on one face. No head
         # counterbore — the screw IS the lever's pivot axle.
@@ -1344,17 +1394,16 @@ def _build_housing_skeleton():
         # no plate material at x=0 to anchor the screw, and the axle is
         # already constrained on the lever side by the bottom 608 bearing.
         .cut(_axle_pin_clearance(PANCAKE_CROSS_PIN_Z))
-        .cut(_axle_pin_insert_pilot(PANCAKE_CROSS_PIN_Z, insert_face_sign=-1))
-        # Wall-mount stud hole through the spine.
-        .cut(_mount_hole(0, MOUNT_SCREW_Z))
+        .cut(_axle_pin_insert_pilot(PANCAKE_CROSS_PIN_Z, insert_face_sign=+1))
         # Back-axle sliding mortise + the 45° self-support wedges added
         # back inside it + clamp-screw cuts in the -X extension.
         .cut(_back_axle_mortise())
         .union(_back_axle_mortise_supports())
         .cut(_back_axle_clamp_cuts())
         # Pancake cross-pin head counterbore (LAST so boss material in its
-        # volume is removed).
-        .cut(_screw_head_counterbore(0, PANCAKE_CROSS_PIN_Z, entry_face_sign=+1))
+        # volume is removed). Insert on +Y, head on -Y (flipped from the
+        # original).
+        .cut(_screw_head_counterbore(0, PANCAKE_CROSS_PIN_Z, entry_face_sign=-1))
     )
 
 # Final housing assembly: U-bracket skeleton (this module) + pancake-side
@@ -1371,6 +1420,17 @@ def _build_housing():
     # clearance + insert pilot so the M2 lever screw can pass.
     h = h.cut(_pivot_clearance(RATCHET_PIVOT_X))
     h = h.cut(_pivot_insert_pilot(RATCHET_PIVOT_X, insert_face_sign=+1))
+    # Drill the guide-wheel axle access channels LAST — Ø MOUNT_HEAD_HOLE_D
+    # bores from the +X face all the way back to each wheel's outboard
+    # slab face. Cut here (not inside apply_to_housing) so the subsequent
+    # plate / spine / boss unions don't fill the holes back in.
+    h = h.cut(housing_guide.axle_access_channel(), clean=False)
+    h = h.cut(housing_lever_guide.axle_access_channel(), clean=False)
+    # Carve the mount-bracket pocket (top + side chunks + connecting
+    # strip groove + M2 head pockets on the -Y outer face). The bracket
+    # is a separately-printed part.
+    from . import mount_bracket
+    h = mount_bracket.cut_from_housing(h)
     return h
 
 

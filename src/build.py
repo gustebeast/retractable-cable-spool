@@ -8,14 +8,17 @@ Run from the repo root:
 Produces all printed-part STEPs and an assembled assembly.step in cwd.
 
 Build order:
-  spool          → main_body (initial)
-  caps           → bearing caps + pancake_spool
-  axle           → axle
-  housing        → housing
-  housing_pins   → brake_housing_pin, brake_housing_rest_pin
-  guide_axle     → guide_axle_part
-  levers         → ratchet_lever, brake_lever
-  viz            → ratchet_spring, brake_spring, dummy 608 bearings
+  spool             → main_body (initial)
+  caps              → bearing_cap_bottom + cap-key grooves
+  axle              → axle
+  housing           → housing, back_axle, back_axle_block
+  housing_pins      → brake_housing_pin, brake_housing_rest_pin
+  housing_guide     → guide_wheel (pancake-side cable-pinch wheel)
+  housing_lever_guide → lever_guide_wheel (lever-side cable-pinch wheel)
+  levers            → ratchet_lever, brake_lever
+  mount_bracket     → mount_bracket
+  viz               → ratchet_spring, brake_spring, brake_pad_rubber,
+                      dummy 608 bearings (assembly-only — not exported)
 
 Then this module composes the final main_body by applying caps' cap-key
 groove cuts and levers' ratchet-teeth + drum-cable-hole cuts. The
@@ -40,19 +43,17 @@ from . import housing_pins as _housing_pins_mod
 from . import housing_guide as _guide_mod
 from . import housing_lever_guide as _lever_guide_mod
 from . import levers as _lev_mod
+from . import mount_bracket as _bracket_mod
 from . import viz as _viz_mod
 
 # Compose the final main_body by applying the cap-key grooves and the
 # lever-dependent cuts (ratchet teeth, drum cable hole) explicitly.
 main_body = caps.apply_to_main_body(spool.main_body)
 main_body = _lev_mod.apply_to_main_body(main_body)
-# Constant-thickness drum-wall relief, applied LAST: it thins the drum
-# wall behind the cable cradle's edges/bands down to STRUCT_WALL (the
-# wall behind the cradle bottom is already STRUCT_WALL). It leaves
-# geometry that's valid but too fragile for further booleans, so it goes
-# after every cap/lever cut — nothing cuts main_body after this except
-# the final heal() below.
-main_body = main_body.cut(spool._helical_groove_following_relief())
+# V-notch helical cable groove — cut LAST so the fragile swept geometry
+# never has to survive another boolean. The drum leaves spool.py as a
+# plain thick cylindrical shell; this cut carves the angled outer wall.
+main_body = main_body.cut(spool._helical_v_groove_cut())
 
 # Re-bind module-level part variables for export.
 bearing_cap_bottom     = caps.bearing_cap_bottom
@@ -64,6 +65,7 @@ brake_housing_pin      = _housing_pins_mod.brake_housing_pin
 brake_housing_rest_pin = _housing_pins_mod.brake_housing_rest_pin
 guide_wheel              = _guide_mod.guide_wheel
 lever_guide_wheel        = _lever_guide_mod.lever_guide_wheel
+mount_bracket            = _bracket_mod.mount_bracket
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
 ratchet_spring         = _viz_mod.ratchet_spring
@@ -107,15 +109,16 @@ PARTS = {
     "housing":                (housing,                    "housing.step",                None),
     "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
     "brake_lever":            (brake_lever,                "brake_lever.step",            None),
-    "ratchet_spring":         (ratchet_spring,             "ratchet_spring.step",         "dummy — purchased torsion spring"),
-    "brake_spring":           (brake_spring,               "brake_spring.step",           "dummy — purchased torsion spring"),
-    "brake_pad_rubber":       (brake_pad_rubber,           "brake_pad_rubber.step",       "dummy — 3.3 mm rubber pad bonded to printed brake pad"),
+    # Springs and the rubber pad are purchased/applied parts — they're
+    # included in assembly.step for visualization only, no need to export
+    # them as individual STEP files for printing.
     "brake_housing_pin":      (brake_housing_pin,          "brake_housing_pin.step",      "print separately — glue-install"),
     "brake_housing_rest_pin": (brake_housing_rest_pin,     "brake_housing_rest_pin.step", "print separately — glue-install"),
     "back_axle":              (back_axle,                  "back_axle.step",              "cable-retention guide axle (rides in the back 608 bearing)"),
     "back_axle_block":        (back_axle_block,            "back_axle_block.step",        "sliding bearing carrier (tenon clamps into the housing mortise)"),
     "guide_wheel":               (guide_wheel,              "guide_wheel.step",               "pancake-side printed guide wheel; user paints rubber on OD"),
     "lever_guide_wheel":         (lever_guide_wheel,        "lever_guide_wheel.step",         "lever-side printed guide wheel; user paints rubber on OD"),
+    "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
 }
 
 
@@ -126,14 +129,18 @@ def _export(name):
     print(f"Wrote {path}{suffix}")
 
 
-# Visualization aid — set True to rotate the ratchet lever to its
-# fully-disconnected position (= max CW throw at RATCHET_OUTER_TRAVEL_DEG)
-# in the assembly.step. Useful for eyeballing pawl-to-tooth clearance.
-SHOW_RATCHET_DISCONNECTED = False
+# Visualization aid — when True, both levers are rotated to their fully-
+# actuated (ENGAGED) position in assembly.step: ratchet pawl raised clear
+# of the teeth (RATCHET_OUTER_TRAVEL_DEG of CW throw), brake pad descended
+# onto the brake ring (BRAKE_INNER_TRAVEL_DEG of CCW throw). Per the
+# matched-ROM design these happen simultaneously, so showing both engaged
+# is the meaningful "actuated" snapshot of the mechanism. Set False to
+# show both levers at REST instead.
+SHOW_LEVERS_ENGAGED = True
 
 
 def _ratchet_lever_for_assembly():
-    if not SHOW_RATCHET_DISCONNECTED:
+    if not SHOW_LEVERS_ENGAGED:
         return ratchet_lever
     from .housing import RATCHET_PIVOT_X, LEVER_PIVOT_Z
     from .levers import RATCHET_OUTER_TRAVEL_DEG
@@ -146,6 +153,43 @@ def _ratchet_lever_for_assembly():
         .translate((-RATCHET_PIVOT_X, 0, -LEVER_PIVOT_Z))
         .rotate((0, 0, 0), (0, 1, 0), angle)
         .translate((RATCHET_PIVOT_X, 0, LEVER_PIVOT_Z))
+    )
+
+
+def _brake_lever_for_assembly():
+    if not SHOW_LEVERS_ENGAGED:
+        return brake_lever
+    return _brake_engaged_rotation(brake_lever)
+
+
+def _brake_pad_rubber_for_assembly():
+    if not SHOW_LEVERS_ENGAGED:
+        return brake_pad_rubber
+    # The rubber pad is a separate viz-only solid added to the assembly
+    # alongside the lever — it has its own copy of the lever's rest-pose
+    # pre-rotation in viz.py. To follow the lever into the engaged pose
+    # it needs the same rotation applied here.
+    return _brake_engaged_rotation(brake_pad_rubber)
+
+
+def _brake_engaged_rotation(part):
+    """Rotate `part` from the brake's REST pose to its ENGAGED pose.
+
+    Both the printed brake lever and the rubber pad are built at the
+    ENGAGED design pose and then pre-rotated +BRAKE_INNER_TRAVEL_DEG to
+    reach the REST (print) pose (see _brake_pad_contact in levers.py and
+    _brake_pad_rubber in viz.py). Applying -BRAKE_INNER_TRAVEL_DEG here
+    undoes that pre-rotation and returns the part to the engaged pose —
+    the brake pad rises onto the brake ring (+Z) at the same lever
+    throw that the ratchet pawl clears the teeth."""
+    from .housing import BRAKE_PIVOT_X, LEVER_PIVOT_Z
+    from .levers import BRAKE_INNER_TRAVEL_DEG
+    angle = -BRAKE_INNER_TRAVEL_DEG
+    return (
+        part
+        .translate((-BRAKE_PIVOT_X, 0, -LEVER_PIVOT_Z))
+        .rotate((0, 0, 0), (0, 1, 0), angle)
+        .translate((BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z))
     )
 
 
@@ -195,13 +239,14 @@ def _export_assembly():
         .add(back_axle,          name="back_axle",          loc=cq.Location((0, 0, 0)))
         .add(guide_wheel,            name="guide_wheel",            loc=cq.Location((0, 0, 0)))
         .add(lever_guide_wheel,      name="lever_guide_wheel",      loc=cq.Location((0, 0, 0)))
+        .add(mount_bracket,          name="mount_bracket",          loc=cq.Location((0, 0, 0)))
         .add(axle,          name="axle")
         .add(housing, name="housing")
         .add(_ratchet_lever_for_assembly(), name="ratchet_lever")
-        .add(brake_lever,   name="brake_lever")
+        .add(_brake_lever_for_assembly(),   name="brake_lever")
         .add(ratchet_spring, name="ratchet_spring")
         .add(brake_spring,   name="brake_spring")
-        .add(brake_pad_rubber, name="brake_pad_rubber")
+        .add(_brake_pad_rubber_for_assembly(), name="brake_pad_rubber")
         .add(brake_housing_pin, name="brake_housing_pin")
         .add(brake_housing_rest_pin, name="brake_housing_rest_pin")
     )
@@ -210,24 +255,27 @@ def _export_assembly():
         assembly.add(counter, name="build_counter")
     assembly.save("assembly.step")
     print(f"Wrote assembly.step  [build #{build_n}]"
-          + ("  [ratchet shown DISCONNECTED]" if SHOW_RATCHET_DISCONNECTED else ""),
+          + ("  [levers ENGAGED]" if SHOW_LEVERS_ENGAGED else ""),
           flush=True)
     _push_onshape()
 
 
 def _push_onshape() -> None:
-    """Best-effort upload of assembly.step to an Onshape blob element via
-    tools/onshape_push.py. No-op unless tools/onshape_credentials.json (or
-    the ONSHAPE_* env vars) are configured. Never fatal to the build."""
-    import os, pathlib, subprocess
+    """Best-effort upload of assembly.step to Onshape via
+    tools/onshape_push.py. No-op unless tools/onshape_credentials.json
+    (or the ONSHAPE_* env vars) are configured. Never fatal to the build."""
+    import os, subprocess
     script = pathlib.Path(__file__).resolve().parent.parent / "tools" / "onshape_push.py"
     if not script.exists():
         return
+    files = [f for f in ("assembly.step",) if pathlib.Path(f).exists()]
+    if not files:
+        return
     try:
-        subprocess.run([sys.executable, str(script), "assembly.step"],
+        subprocess.run([sys.executable, str(script), *files],
                        check=False, cwd=os.getcwd())
     except Exception as e:                                  # noqa: BLE001 — push must never break the build
-        print(f"[onshape] push step skipped: {e}", file=sys.stderr)
+        print(f"[onshape] push skipped: {e}", file=sys.stderr)
 
 
 def main() -> None:

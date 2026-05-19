@@ -15,7 +15,7 @@ from .dimensions import (
     HUB_CAVITY_D, HUB_OD,
     M2_SHAFT_CLR_D,
     RATCHET_DEPTH, RATCHET_TEETH,
-    SPOKE_W, SPOOL_H,
+    SPOKE_W, SPOOL_H, STRUCT_WALL,
 )
 from .helpers import cyl, cone_solid, heal, ratchet_cutter
 from .housing import (
@@ -235,7 +235,10 @@ RATCHET_TOOTH_OFFSET_DEG = _theta_pawl_mid_deg % _tooth_pitch_deg
 # Long axis 12 mm runs along Z (axial, parallel to spoke); short axis
 # 7 mm gives ~1 mm clearance around the 6 mm cable.
 CABLE_HOLE_AZIMUTH_DEG = 180.0
-CABLE_HOLE_Z_CENTER    =  SPOOL_H - 2.0 - 13.0 / 2   # top of hole sits 2 mm below spool top
+# Top of hole sits STRUCT_WALL (1.7 mm) below the spool top — matches the
+# top-rim-cap thickness so the rim above the hole has a clean STRUCT_WALL
+# of support material, no more, no less.
+CABLE_HOLE_Z_CENTER    =  SPOOL_H - STRUCT_WALL - 13.0 / 2
 CABLE_HOLE_LONG_AXIS   =  13.0                       # along Z
 CABLE_HOLE_SHORT_AXIS  =   7.0                       # along Y
 
@@ -418,16 +421,17 @@ def _build_ratchet_lever():
         _lever_body(RATCHET_LEVER_X_PAWL_SIDE, RATCHET_LEVER_X_HANDLE,
                     RATCHET_LEVER_Y0, RATCHET_LEVER_Y1)
         .union(_ratchet_pawl_contact(RATCHET_LEVER_Y0, RATCHET_LEVER_Y1))
-        # Pivot boss extension into the gap — sectored to clear both
-        # housing stop pins at every rotation. Unioned BEFORE the
-        # cylinder boss because OCCT's boolean produces an invalid face
-        # if the cylinder boss is unioned in first (only on the +X-side
-        # ratchet — the -X-side brake is fine in either order).
+        # Pivot boss extension into the gap — FULL DISC around the pivot.
+        # Sector trim no longer needed: with STOP_PIN_R=6 the pin inner
+        # edges sit at r=4 while the boss outer is at r=3, giving 1 mm
+        # clearance to every stop pin at every rotation. Unioned BEFORE
+        # the cylinder boss because OCCT's boolean produces an invalid
+        # face if the cylinder boss is unioned in first (only on the +X-
+        # side ratchet — the -X-side brake is fine in either order).
         .union(pivot_boss_sector(RATCHET_PIVOT_X,
                                   RATCHET_LEVER_Y0 - RATCHET_LEVER_BOSS_EXTENSION,
                                   RATCHET_LEVER_Y0 + 0.5,
-                                  RATCHET_BOSS_EXT_ALPHA_LO,
-                                  RATCHET_BOSS_EXT_ALPHA_HI))
+                                  0.0, 360.0))
         # Pivot boss inside the lever body.
         .union(_lever_pivot_boss(RATCHET_PIVOT_X,
                                  RATCHET_LEVER_Y0,
@@ -551,15 +555,14 @@ def _build_brake_lever():
         _lever_body(BRAKE_PIVOT_X, BRAKE_LEVER_X_HANDLE,
                     BRAKE_LEVER_Y0, BRAKE_LEVER_Y1)
         .union(_brake_pad_contact(BRAKE_LEVER_Y1, BRAKE_LEVER_Y0))
-        # Pivot boss + sectored extension — see ratchet for rationale.
+        # Pivot boss + FULL-DISC extension — see ratchet for rationale.
         .union(_lever_pivot_boss(BRAKE_PIVOT_X,
                                  BRAKE_LEVER_Y0,
                                  BRAKE_LEVER_Y1))
         .union(pivot_boss_sector(BRAKE_PIVOT_X,
                                   BRAKE_LEVER_Y1 - 0.5,    # 0.01 mm overlap
                                   BRAKE_LEVER_Y1 + BRAKE_LEVER_BOSS_EXTENSION,
-                                  BRAKE_BOSS_EXT_ALPHA_LO,
-                                  BRAKE_BOSS_EXT_ALPHA_HI))
+                                  0.0, 360.0))
         # Lever stop pin + teardrop spring-leg through-hole.
         .union(stop_pin_solid(BRAKE_PIVOT_X, STOP_LEVER_PIN_ALPHA_BRAKE_DEG,
                                BRAKE_LEVER_Y0,

@@ -4,7 +4,8 @@ import math
 import cadquery as cq
 
 from .dimensions import (
-    AXLE_CROSS_HOLE_D, AXLE_D, AXLE_EXTRA_LEVER, AXLE_H, AXLE_PRINT_D,
+    AXLE_CROSS_HOLE_D, AXLE_D, AXLE_EXTRA_LEVER, AXLE_H,
+    AXLE_LIP_H, AXLE_LIP_OD, AXLE_PRINT_D,
     FIN_Z1,
     LEVER_CAP_SEAT_Z1,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
@@ -12,7 +13,7 @@ from .dimensions import (
     PANCAKE_CAP_SEAT_Z0, PANCAKE_CROSS_PIN_Z,
     SPOOL_H,
 )
-from .helpers import cyl, cone_solid
+from .helpers import axle_print_flat, cyl, cone_solid
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -44,10 +45,14 @@ from .helpers import cyl, cone_solid
 # SPRING_SCREW_OFFSET. Smooth tangent walls instead of a necked figure-8
 # give a much beefier connection in the loading direction.
 #
-# Print orientation: vertical (axle along Z). Each boss has a 45°
-# underside chamfer lofted from the axle Ø8 circle up to the full
-# lozenge profile, so the +X overhang is self-supporting. The boss top
-# faces are inward steps (lozenge → axle Ø8) and need no chamfer.
+# Print orientation: SIDE (axle along the bed, flat -X face on the bed
+# — see the post-cut at the end of _build_axle). With layer lines along
+# the axle's length, the bosses' +X cantilever is no longer an overhang
+# in the layer-deposition sense, so the underside chamfer that used to
+# exist for vertical printing has been removed: cleaner geometry, +2.5 mm
+# clearance above each boss face (head boss → more room to the pancake
+# bearing; insert boss → more bare M2 shaft exposed in the spring leg's
+# engagement gap).
 SPRING_BOSS_OD            = 7.5     # boss OD = head pocket (4.0) + 2 × wall (1.75)
 SPRING_SCREW_OFFSET       = 7.0     # radial offset of screw axis from axle centerline.
                                     # Min: head_R + axle_R = 1.85 + 4 = 5.85 (else head
@@ -55,17 +60,20 @@ SPRING_SCREW_OFFSET       = 7.0     # radial offset of screw axis from axle cent
 SPRING_HEAD_POCKET_D      = M2_HEAD_RECESS_D       # 4.0 mm — shared with housing recesses
 SPRING_INSERT_POCKET_D    = M2_INSERT_PILOT_D      # 3.3 mm — heat-set insert hole
 SPRING_SHAFT_CLEARANCE_D  = M2_SHAFT_CLR_D         # 2.5 mm — same M2 clearance everywhere
-SPRING_HEAD_POCKET_DEPTH  = M2_HEAD_RECESS_H + 0.5 # 2.5 mm: M2 head (2 mm) + 0.5 mm clearance
+SPRING_HEAD_POCKET_DEPTH  = M2_HEAD_RECESS_H + 2.0 # 4.0 mm: M2 head (2 mm) + 2.0 mm of
+                                                  # Allen-key access channel above the
+                                                  # head — adds material ABOVE the screw
+                                                  # head (between head top and cavity-
+                                                  # facing entry face) so it isn't flush
+                                                  # at the boss top. Matches the insert
+                                                  # boss's 4 mm pocket depth → both
+                                                  # bosses are 5 mm tall overall.
 SPRING_INSERT_POCKET_DEPTH = M2_INSERT_DEPTH + 0.5 # 4.0 mm: insert (3.5 mm) + 0.5 mm clearance
 SPRING_SHAFT_GAP          = 17.0    # head bearing-face → insert entry-face. The
                                     # screw's full unsupported shaft length (per
                                     # the screw the user has on hand).
 SPRING_WALL_ABOVE_HEAD    = 1.0     # boss material above the counterbore step
 SPRING_WALL_BELOW_INSERT  = 1.0     # boss material below the insert pocket
-_SPRING_CHAMFER_H         = 2.5     # underside chamfer height. Limited by the
-                                    # bottom cap (z=8): chamfer can't extend into
-                                    # the bearing region. Steeper-than-45° at the
-                                    # +X tip — slicer will add minimal supports.
 
 def _spring_lozenge_pts():
     """Compute the 4 anchor points of the convex-hull lozenge profile
@@ -92,38 +100,21 @@ def _spring_lozenge_wp():
     )
 
 def _spring_boss(z_bot, z_top):
-    """Lozenge boss spanning between z_top and z_bot. z_bot is the
-    larger-Z "underside" face that gets the printability chamfer
-    (z_top < z_bot). Chamfer is lofted from axle Ø8 (at z_bot + chamfer)
-    up to the full lozenge profile (at z_bot)."""
-    ax_r, _, d, p_axle, p_boss = _spring_lozenge_pts()
-    body = _spring_lozenge_wp().extrude(z_top - z_bot).translate((0, 0, z_bot))
-    chamfer = (
-        cq.Workplane("XY")
-        .workplane(offset=z_bot + _SPRING_CHAMFER_H)
-        .circle(ax_r)
-        .workplane(offset=-_SPRING_CHAMFER_H)
-        .moveTo(p_axle[0], p_axle[1])
-        .threePointArc((-ax_r, 0), (p_axle[0], -p_axle[1]))
-        .lineTo(p_boss[0], -p_boss[1])
-        .threePointArc((d + ax_r, 0), (p_boss[0], p_boss[1]))  # midpoint just needs to be on the right arc
-        .close()
-        .loft(combine=True)
-    )
-    return body.union(chamfer)
+    """Lozenge boss spanning between z_top and z_bot — a plain straight
+    extrusion. (Previously the larger-Z face had a 45° loft chamfer for
+    vertical-print self-support; obsolete now that the axle is printed
+    on its side.)"""
+    return _spring_lozenge_wp().extrude(z_top - z_bot).translate((0, 0, z_bot))
 
-# Bearing retention shoulders — 45° "hat" widenings at each bearing's
-# inner-cavity face. Bearings slide on from the outer ends of the axle
-# and stop at these shoulders, fixing their axial position. Both halves
-# of each hat are 45° (rise = run = (BEARING_AXLE_LIP_OD − AXLE_D) / 2),
-# so they're self-supporting in vertical print orientation: the lower
-# half widens going up; the upper half narrows going up (each upper
-# layer sits inside the lower layer's footprint). The axle returns to
-# AXLE_D on either side of each hat so the fin and other features
-# (which rely on AXLE_D) keep their correct geometry.
-BEARING_AXLE_LIP_OD = 10.0   # 1 mm radial protrusion to match the cap
-                             # lips (which protrude ~1 mm inward from the
-                             # bearing pocket bore)
+# Bearing retention shoulders — flat-faced Ø AXLE_LIP_OD × AXLE_LIP_H
+# cylinders at each bearing's inner-cavity face. Bearings slide on from
+# the outer ends of the axle and stop on these shoulders, fixing their
+# axial position. Dimensions are shared with the back guide axle via the
+# AXLE_LIP_* constants in dimensions.py.
+# (Previously each shoulder was a 45° "hat" — a cone up and a cone back
+# down — needed for vertical-print self-support. With side-printing the
+# layer lines run along the axle, so a plain cylinder prints just as
+# well and is shorter axially.)
 
 
 def _axle_cross_hole(z_center):
@@ -142,7 +133,19 @@ def _build_axle():
     # Z). The two bosses are stacked along Z with the head boss at higher Z
     # and the insert boss at lower Z; the M2 screw enters the head boss from
     # the HI face and threads into the insert at _SPRING_INSERT_OPENING.
-    _SPRING_HEAD_HI         = SPOOL_H - 15.0                                  # head boss face nearest the cavity
+    #
+    # Head boss Z is solved (rather than hard-coded) so the mount span
+    # (HEAD_POCKET_DEPTH + SHAFT_GAP + INSERT_POCKET_DEPTH = 23.5 mm) is
+    # centered axially between the two bearing-retention hats' inner faces
+    # — equal clearance on both sides means the spring leg sees a
+    # symmetric working volume regardless of which axial direction it
+    # deflects.
+    _pancake_lip_inner_z    = PANCAKE_CAP_SEAT_Z0 - AXLE_LIP_H        # cavity-facing face of pancake shoulder
+    _lever_lip_inner_z      = LEVER_CAP_SEAT_Z1   + AXLE_LIP_H        # cavity-facing face of lever shoulder
+    _mount_midpoint_z       = (_pancake_lip_inner_z + _lever_lip_inner_z) / 2
+    _mount_span             = (SPRING_HEAD_POCKET_DEPTH + SPRING_SHAFT_GAP
+                               + SPRING_INSERT_POCKET_DEPTH)                  # 23.5 mm
+    _SPRING_HEAD_HI         = _mount_midpoint_z + _mount_span / 2             # head boss face nearest the cavity
     _SPRING_HEAD_STEP       = _SPRING_HEAD_HI - SPRING_HEAD_POCKET_DEPTH      # head bearing-face step
     _SPRING_HEAD_LO         = _SPRING_HEAD_STEP - SPRING_WALL_ABOVE_HEAD      # head boss face away from cavity
     _SPRING_INSERT_OPENING  = _SPRING_HEAD_STEP - SPRING_SHAFT_GAP            # insert pocket entry (top of insert)
@@ -158,32 +161,29 @@ def _build_axle():
     )
 
     # Head counterbore — opens at the head boss "bottom" face (the larger-Z
-    # face, cavity-facing). Cut from z_step up to z_bot+chamfer so the
-    # chamfer's filled-in centre is also bored out (Allen-key access from
-    # that side).
+    # face, cavity-facing). Cut from z_step up to the boss face (Allen-key
+    # access from that side).
     spring_body = spring_body.cut(
         cyl(SPRING_HEAD_POCKET_D,
-            (_SPRING_HEAD_HI + _SPRING_CHAMFER_H) - _SPRING_HEAD_STEP,
+            _SPRING_HEAD_HI - _SPRING_HEAD_STEP,
             z=_SPRING_HEAD_STEP).translate((screw_x, 0, 0))
     )
-    # 45° internal chamfer at the counterbore step (Ø4.5 → Ø2.4 over 1.05 mm)
-    # replaces the right-angle ceiling so the step prints self-supporting.
-    step_chamfer_h = (SPRING_HEAD_POCKET_D - SPRING_SHAFT_CLEARANCE_D) / 2
-    spring_body = spring_body.cut(
-        cone_solid(SPRING_SHAFT_CLEARANCE_D, SPRING_HEAD_POCKET_D,
-                   step_chamfer_h, _SPRING_HEAD_STEP - step_chamfer_h).translate((screw_x, 0, 0))
-    )
-    # Shaft clearance through the head boss past the chamfered step.
+    # Shaft clearance through the head boss past the step — flat annular
+    # ring at z=_SPRING_HEAD_STEP for the screw head's underside to bear
+    # on. (Previously a 45° internal chamfer ramped Ø2.5 → Ø4 over 0.75 mm
+    # below the step so the pocket "ceiling" was self-supporting in
+    # vertical print orientation; obsolete with side-printing, and removing
+    # it gives the head a true flat seat instead of a conical one.)
     spring_body = spring_body.cut(
         cyl(SPRING_SHAFT_CLEARANCE_D,
-            (_SPRING_HEAD_STEP - step_chamfer_h) - _SPRING_HEAD_LO,
+            _SPRING_HEAD_STEP - _SPRING_HEAD_LO,
             z=_SPRING_HEAD_LO).translate((screw_x, 0, 0))
     )
     # Shaft clearance through the insert boss past the insert pocket
-    # (the wall_below_insert thickness, plus the chamfer region beyond).
+    # (the wall_below_insert thickness only — the chamfer above is gone).
     spring_body = spring_body.cut(
         cyl(SPRING_SHAFT_CLEARANCE_D,
-            (_SPRING_INSERT_BOSS_HI + _SPRING_CHAMFER_H) - _SPRING_INSERT_OPENING,
+            _SPRING_INSERT_BOSS_HI - _SPRING_INSERT_OPENING,
             z=_SPRING_INSERT_OPENING).translate((screw_x, 0, 0))
     )
     # Insert pocket — opens at the insert boss "top" face (the smaller-Z
@@ -195,26 +195,16 @@ def _build_axle():
 
     axle = axle_shaft.union(spring_body)
 
-    bearing_lip_h = (BEARING_AXLE_LIP_OD - AXLE_PRINT_D) / 2   # half-hat height (45° rise = run)
-    # Pancake-side hat: peaks at PANCAKE_CAP_SEAT_Z0 - lip_h, just below the
-    # pancake-side bearing pocket which sits at z=PANCAKE_CAP_SEAT_Z0..SPOOL_H.
-    pancake_hat_peak_z = PANCAKE_CAP_SEAT_Z0 - bearing_lip_h
-    # Lever-side hat: peaks at LEVER_CAP_SEAT_Z1 + lip_h, just above the
-    # lever-side bearing pocket which sits at z=0..CAP_H.
-    lever_hat_peak_z   = LEVER_CAP_SEAT_Z1 + bearing_lip_h
-
+    # Pancake-side shoulder: 1 mm cylinder seated against the inner face
+    # of the pancake bearing pocket (which starts at PANCAKE_CAP_SEAT_Z0).
+    # Lever-side shoulder: 1 mm cylinder seated against the inner face of
+    # the lever bearing pocket (which ends at LEVER_CAP_SEAT_Z1).
     axle = (
         axle
-        # Lever-side hat — widening up to the peak, then narrowing
-        .union(cone_solid(AXLE_PRINT_D, BEARING_AXLE_LIP_OD,
-                          bearing_lip_h, lever_hat_peak_z - bearing_lip_h))
-        .union(cone_solid(BEARING_AXLE_LIP_OD, AXLE_PRINT_D,
-                          bearing_lip_h, lever_hat_peak_z))
-        # Pancake-side hat — widening up to the peak, then narrowing
-        .union(cone_solid(AXLE_PRINT_D, BEARING_AXLE_LIP_OD,
-                          bearing_lip_h, pancake_hat_peak_z - bearing_lip_h))
-        .union(cone_solid(BEARING_AXLE_LIP_OD, AXLE_PRINT_D,
-                          bearing_lip_h, pancake_hat_peak_z))
+        .union(cyl(AXLE_LIP_OD, AXLE_LIP_H,
+                   z=LEVER_CAP_SEAT_Z1))
+        .union(cyl(AXLE_LIP_OD, AXLE_LIP_H,
+                   z=PANCAKE_CAP_SEAT_Z0 - AXLE_LIP_H))
     )
 
     # Cross-pin hole — pancake-side only. The lever-side plate was
@@ -223,6 +213,21 @@ def _build_axle():
     # pancake cross-pin alone locks the axle against rotation + axial
     # slide.
     axle = axle.cut(_axle_cross_hole(PANCAKE_CROSS_PIN_Z))
+
+    # Flatten the -X side of the bearing-retention hats so the axle can
+    # be printed on its SIDE (laid along the bed) rather than vertically.
+    # Side-printing aligns layer lines along the axle's length, giving
+    # much stronger bending strength than a vertically-printed shaft
+    # (where every layer line is a cleavage plane perpendicular to the
+    # applied load). The spring bosses sit on +X (offset SPRING_SCREW_-
+    # OFFSET); flattening the -X side leaves them untouched, and the
+    # axle's own -X tangent line is coplanar with the flattened hat
+    # faces — the whole part rests on a single line. Shared with the
+    # back guide axle via the axle_print_flat helper.
+    axle = axle.cut(axle_print_flat(
+        z_lo=-AXLE_EXTRA_LEVER - 2.0,
+        z_hi=-AXLE_EXTRA_LEVER + AXLE_H + 2.0,
+    ))
     return axle
 
 

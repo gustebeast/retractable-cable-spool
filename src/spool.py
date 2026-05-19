@@ -4,6 +4,8 @@ Lever-dependent cuts (ratchet teeth, drum cable hole) are applied later
 in `levers.py`.
 """
 
+import math
+
 import cadquery as cq
 
 from .dimensions import (
@@ -22,7 +24,7 @@ from .dimensions import (
     TOP_BEARING_BORE,
 )
 from .helpers import (
-    cyl, cone_solid,
+    cyl, cone_solid, heal,
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
@@ -42,10 +44,10 @@ DRUM_SKIRT_H = 0.0
 # ────────────────────────────────────────────────────────────────────────────
 
 def _build_main_body():
-    # Drum is extended downward by DRUM_SKIRT_H so its outer wall meets
-    # the brake-rim 45° slope partway down (closing the visual gap left
-    # by DRUM_OD > BRAKE_RIM_INNER_OD). The skirt overlaps with lever-
-    # flange material; the flange's slope-cut outer face becomes interior.
+    # Drum is a plain thick cylindrical shell (DRUM_ID → DRUM_OD); the
+    # V-notch cable cradle is cut LAST in build.py, after every cap/lever
+    # cut, so the fragile helical-swept geometry never has to survive
+    # another boolean. Inner wall stays flat at DRUM_ID/2.
     _drum_z_lo  = DRUM_BOTTOM_Z - DRUM_SKIRT_H
     _drum_h     = DRUM_H + DRUM_SKIRT_H
     drum = cyl(DRUM_OD, _drum_h, z=_drum_z_lo).cut(
@@ -107,7 +109,6 @@ def _build_main_body():
     main_body = main_body.cut(_top_bearing_void())
     main_body = main_body.union(_top_bearing_ribs())
     main_body = main_body.cut(_spring_slot())
-    main_body = main_body.cut(_helical_cable_groove())
     main_body = main_body.union(_top_rim_cap())
     # NB: the constant-thickness drum-wall relief (_helical_groove_following_
     # relief) is applied LAST in build.py, AFTER the cap/lever cuts — the
@@ -120,7 +121,7 @@ def _build_main_body():
 # Top rim cap — re-added AFTER the helix cut so the helix's topmost turn
 # can't erode the rim into a knife edge. 9 mm radial × 2 mm axial; sits
 # at the very top of the spool, restoring a uniform 2 mm-thick deck.
-TOP_RIM_CAP_H = 2.0
+TOP_RIM_CAP_H = STRUCT_WALL      # 1.7 — pinned to the spoke/wall thickness
 TOP_RIM_CAP_W = 9.0
 
 
@@ -177,11 +178,75 @@ def _top_bearing_ribs():
 # wall thickness everywhere along every helix turn.
 HELIX_GROOVE_D     = 6.0      # Ø of the half-round cable cradle (fits the Ø5.5 cable)
 HELIX_PITCH        = 7.0
-HELIX_Z_TOP        = SPOOL_H - 2.0       # 49 — matches cable-hole top
-HELIX_Z_BOT        = DRUM_BOTTOM_Z        # 7  — top of lever-flange slope
+# Top of the helix sits STRUCT_WALL (1.7 mm) below the spool top, matching
+# the top-rim-cap thickness and the cable-hole's new top z (levers.py).
+# 1.7 mm of unbroken material above guarantees the guide-wheel rim has its
+# full STRUCT_WALL of support, with no helix erosion reaching into the rim.
+HELIX_Z_TOP        = SPOOL_H - STRUCT_WALL   # 49.3
+HELIX_Z_BOT        = DRUM_BOTTOM_Z            # 7  — top of lever-flange slope
+# The cable exits the drum at the +y edge of the -x (α=180°) spoke, then
+# wraps the drum CLOCKWISE. The helix is rotated so its TOP terminates at
+# that same azimuth — the cut doesn't extend CCW past the exit point, so
+# none of the drum surface CCW of the spoke face is needlessly grooved
+# (it'd never be used by the cable anyway).
+_HELIX_START_DEG = math.degrees(math.atan2(
+    SPOKE_W / 2,
+    -math.sqrt((DRUM_OD / 2) ** 2 - (SPOKE_W / 2) ** 2),
+))                                            # ≈ 179.37°
 GROOVE_DEPTH       = DRUM_WALL - STRUCT_WALL                          # 2.8
 _GROOVE_CIRCLE_R   = HELIX_GROOVE_D / 2                               # 3.0 — cradle radius
 _GROOVE_CENTER_R   = DRUM_OD / 2 + (_GROOVE_CIRCLE_R - GROOVE_DEPTH)  # 77.7
+# Half-axial extent of the V cut measured at the drum OD: how far above
+# or below the helix-tangent z=z0 the cut breaks the outer surface.
+# Slightly less than HELIX_PITCH/2 so adjacent turns leave a 0.1 mm flat
+# (see _helical_v_groove_cut comment for why exactly 0.05 mm back-off).
+HELIX_HALF_PITCH_AT_OD = HELIX_PITCH / 2 - 0.05                        # 3.45
+# Lowest z reached by the V-groove cut at the drum OD: at the helix's
+# bottom turn the cut extends HELIX_HALF_PITCH_AT_OD axially below the
+# tangent point. Other modules use this (e.g. the back-axle's shaft
+# length) to align with the bottom of the cable track.
+HELIX_OD_BOTTOM_Z  = HELIX_Z_BOT - HELIX_HALF_PITCH_AT_OD              # 3.55
+
+
+# ── PROOF OF CONCEPT (step 3) — swept-only zig-zag drum wall (no cuts) ────
+# Both V-sides, widened to a full pitch so consecutive turns meet FLUSH —
+# no flat band, no air gap: a continuous thin zig-zag wall. The swept
+# profile is a ">"-shaped chevron — two STRUCT_WALL-thick parallelograms
+# (one per V-side) joined at the apex edge, spanning ±HELIX_PITCH/2
+# axially so turn k's upper peak edge coincides with turn k+1's lower
+# peak edge. All straight profile edges → all ruled-surface (helicoid)
+# faces, which is what survives the downstream cap/lever cuts (the round
+# C-sweep, with pipe surfaces, collapsed main_body).
+def _drum_chevron_poc():
+    z0       = HELIX_Z_BOT
+    R_out    = DRUM_OD / 2                                # 77.5 — OD / V opening / "peak"
+    R_in_od  = DRUM_OD / 2 - STRUCT_WALL                  # 75.8 — wall inner face at the peak
+    R_apex_o = DRUM_OD / 2 - GROOVE_DEPTH                 # 74.7 — V apex (cradle bottom), outer
+    R_apex_i = DRUM_OD / 2 - GROOVE_DEPTH - STRUCT_WALL   # 73.0 — V apex, inner
+    a        = HELIX_PITCH / 2                            # 3.5 — flush turns (a `heal()` below
+                                                          # merges the otherwise-coincident peak
+                                                          # edges that slicers flag as non-manifold)
+    # outer chevron: side-A top → outer apex → side-B top;
+    # inner chevron (STRUCT_WALL in): side-B inner → inner apex → side-A inner;
+    # closed by the two radial "end cap" edges at the OD ends.
+    prof = (
+        cq.Workplane("XZ")
+        .moveTo(R_out, z0 - a)
+        .lineTo(R_apex_o, z0)
+        .lineTo(R_out, z0 + a)
+        .lineTo(R_in_od, z0 + a)
+        .lineTo(R_apex_i, z0)
+        .lineTo(R_in_od, z0 - a)
+        .close()
+    )
+    helix_wire = cq.Wire.makeHelix(
+        pitch=HELIX_PITCH, height=HELIX_Z_TOP - HELIX_Z_BOT, radius=DRUM_OD / 2,
+        center=cq.Vector(0, 0, z0), dir=cq.Vector(0, 0, 1),
+    )
+    # heal() runs ShapeUpgrade_UnifySameDomain, which merges the coincident
+    # peak faces that pitch-wide profile sweeps leave between consecutive
+    # turns — cleans up the non-manifold seams slicers flag.
+    return heal(prof.sweep(cq.Workplane(obj=helix_wire), isFrenet=True))
 
 
 def _helix_sweep(helix_radius: float, circle_r: float):
@@ -201,6 +266,60 @@ def _helix_sweep(helix_radius: float, circle_r: float):
 
 def _helical_cable_groove():
     return _helix_sweep(_GROOVE_CENTER_R, _GROOVE_CIRCLE_R)
+
+
+# V-notch helical cable groove — applied as a CUT to the thick-wall drum
+# at the very END of build.py (after every cap/lever cut), so the
+# fragile helical-swept geometry never has to survive another boolean.
+# The profile is a triangle whose apex points radially INWARD: apex at
+# the desired cradle bottom (r = DRUM_OD/2 − GROOVE_DEPTH = 74.7), with
+# the two outer corners straddling the apex axially by ±HELIX_PITCH/2 at
+# a radius past the OD (so the cut breaks the surface cleanly). Sweeping
+# this triangle along a helix at the apex radius carves a full-pitch
+# V-groove — adjacent turns meet flush at the OD, giving the "angled
+# outer wall" the chevron POC had, without the chevron's fragility.
+_V_APEX_R   = DRUM_OD / 2 - GROOVE_DEPTH         # 74.7 — radial depth of the cut
+_V_OUTER_R  = DRUM_OD / 2 + BOOL_OVERSHOOT       # past the OD so the cut surfaces cleanly
+
+
+def _helical_v_groove_cut():
+    z0 = HELIX_Z_BOT
+    # The V must open the FULL pitch *at the OD* (not at the overshoot
+    # radius) so adjacent turns meet flush at the outer surface with zero
+    # flat band between them. The triangle's apex is at (_V_APEX_R, z0);
+    # we extend the profile's outer corners past the OD on the line whose
+    # axial half-width is HELIX_PITCH/2 *at r = DRUM_OD/2*. That overshoot
+    # ensures the cut breaks the OD surface cleanly even after the
+    # downstream booleans nudge things by float-eps.
+    # Back off 0.05 mm from "exactly flush" so adjacent turns' cuts leave
+    # a 0.1 mm flat at the OD instead of (a) touching at a knife edge
+    # (OCCT throws Standard_OutOfRange) or (b) overlapping (the single
+    # swept solid self-intersects between turns and produces a degenerate
+    # boolean). A 0.1 mm flat is well below print resolution (~0.4 mm
+    # extrusion width), so it's effectively invisible in the print.
+    slope_dz_dr = HELIX_HALF_PITCH_AT_OD / (DRUM_OD / 2 - _V_APEX_R)
+    a  = slope_dz_dr * (_V_OUTER_R - _V_APEX_R)   # extrapolated half-width at the overshoot radius
+    # Triangle profile in XZ: apex inward at (_V_APEX_R, z0); outer top
+    # and outer bottom at the overshoot radius, straddling z0 by ±a.
+    prof = (
+        cq.Workplane("XZ")
+        .moveTo(_V_APEX_R, z0)
+        .lineTo(_V_OUTER_R, z0 + a)
+        .lineTo(_V_OUTER_R, z0 - a)
+        .close()
+    )
+    helix_wire = cq.Wire.makeHelix(
+        pitch=HELIX_PITCH, height=HELIX_Z_TOP - HELIX_Z_BOT, radius=_V_APEX_R,
+        center=cq.Vector(0, 0, z0), dir=cq.Vector(0, 0, 1),
+    )
+    swept = prof.sweep(cq.Workplane(obj=helix_wire), isFrenet=True)
+    # makeHelix starts at angle 0° (at z=HELIX_Z_BOT) and accumulates
+    # (height/pitch)·360° by the top. Rotate by (target − top_angle) so
+    # the TOP of the helix — where the cable exits the drum — lands on
+    # the spoke's +y face. (The bottom's azimuth is wherever it falls;
+    # nothing depends on it.)
+    top_angle_deg = ((HELIX_Z_TOP - HELIX_Z_BOT) / HELIX_PITCH) * 360.0
+    return swept.rotate((0, 0, 0), (0, 0, 1), _HELIX_START_DEG - top_angle_deg)
 
 
 # Groove-following inner relief — makes the drum wall a constant STRUCT_WALL.
