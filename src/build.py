@@ -11,8 +11,7 @@ Build order:
   spool             → main_body (initial)
   caps              → bearing_cap_top + cap-key grooves
   axle              → axle
-  housing           → housing
-  housing_pins      → brake_housing_pin, brake_housing_rest_pin
+  housing           → housing (L-bracket; carries both lever pivots)
   levers            → ratchet_lever, brake_lever
   mount_bracket     → mount_bracket
   viz               → ratchet_spring, brake_spring, brake_pad_rubber,
@@ -37,7 +36,6 @@ from . import spool
 from . import caps
 from . import axle as _axle_mod
 from . import housing as _housing_mod
-from . import housing_pins as _housing_pins_mod
 from . import levers as _lev_mod
 from . import mount_bracket as _bracket_mod
 from . import cable_rim as _cable_rim_mod
@@ -56,8 +54,6 @@ cable_top_rim          = _cable_rim_mod.cable_top_rim
 cable_retainer         = _cable_retainer_mod.cable_retainer
 axle                   = _axle_mod.axle
 housing                = _housing_mod.housing
-brake_housing_pin      = _housing_pins_mod.brake_housing_pin
-brake_housing_rest_pin = _housing_pins_mod.brake_housing_rest_pin
 mount_bracket            = _bracket_mod.mount_bracket
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
@@ -103,8 +99,6 @@ PARTS = {
     # Springs and the rubber pad are purchased/applied parts — they're
     # included in assembly.step for visualization only, no need to export
     # them as individual STEP files for printing.
-    "brake_housing_pin":      (brake_housing_pin,          "brake_housing_pin.step",      "print separately — glue-install"),
-    "brake_housing_rest_pin": (brake_housing_rest_pin,     "brake_housing_rest_pin.step", "print separately — glue-install"),
     "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
 }
 
@@ -117,99 +111,58 @@ def _export(name):
 
 
 # Visualization aid — selects which lever pose to render in assembly.step:
-#   "rest"        : both levers at their printed/rest pose (handles horizontal,
-#                   pawl seated in valley, brake pad clear of track).
-#   "match"       : both levers at θ_pull = THETA_MATCH_DEG (pawl just clears
-#                   the tooth tip). With A1 relaxed, this is informative for
-#                   the RATCHET but the brake is NOT at first contact here.
-#   "transitions" : each lever at ITS OWN transition angle — ratchet at
-#                   THETA_MATCH_DEG (just leaving contact), brake at
-#                   THETA_BRAKE_CONTACT_DEG (just making contact). Shows the
-#                   two transition moments side-by-side even though they
-#                   no longer happen at the same θ_pull.
-#   "engaged"     : θ_pull = RATCHET_OUTER_TRAVEL_DEG (full pull) — pawl
-#                   fully clear of teeth, rubber compressed into the track.
+#   "rest"    : both levers at their printed/rest pose (ratchet pawl seated
+#               in the teeth = engaged; brake pad lifted off the band).
+#   "engaged" : both levers fully pulled (handles toward +X) — ratchet pawl
+#               swung clear of the teeth (disengaged), brake pad pressed
+#               onto the band (engaged). θ_pull = each lever's travel.
 LEVERS_POSE = "rest"
 
 
 def _ratchet_theta_pull_deg():
-    """θ_pull (degrees) to apply to the ratchet lever in the current pose."""
     if LEVERS_POSE == "rest":
         return 0.0
-    if LEVERS_POSE in ("match", "transitions"):
-        from .levers import THETA_MATCH_DEG
-        return THETA_MATCH_DEG
     if LEVERS_POSE == "engaged":
-        from .levers import RATCHET_OUTER_TRAVEL_DEG
+        from .housing import RATCHET_OUTER_TRAVEL_DEG
         return RATCHET_OUTER_TRAVEL_DEG
     raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
 
 
 def _brake_theta_pull_deg():
-    """θ_pull (degrees) to apply to the brake lever (and its pad rubber)
-    in the current pose. With A1 relaxed, the brake's transition angle
-    differs from the ratchet's, so the 'transitions' pose returns the
-    brake-specific contact angle here."""
     if LEVERS_POSE == "rest":
         return 0.0
-    if LEVERS_POSE == "match":
-        from .levers import THETA_MATCH_DEG
-        return THETA_MATCH_DEG
-    if LEVERS_POSE == "transitions":
-        from .levers import THETA_BRAKE_CONTACT_DEG
-        return THETA_BRAKE_CONTACT_DEG
     if LEVERS_POSE == "engaged":
-        from .levers import RATCHET_OUTER_TRAVEL_DEG
-        return RATCHET_OUTER_TRAVEL_DEG
+        from .housing import BRAKE_INNER_TRAVEL_DEG
+        return BRAKE_INNER_TRAVEL_DEG
     raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
 
 
-def _ratchet_lever_for_assembly():
-    theta = _ratchet_theta_pull_deg()
+def _pulled(part, pivot_x, pivot_z, theta):
+    """Assembly rotation: -θ_pull about +Y at the lever's pivot."""
     if theta == 0.0:
-        return ratchet_lever
-    from .housing import RATCHET_PIVOT_X, LEVER_PIVOT_Z
-    # Assembly rotation is -θ_pull around +Y at the ratchet pivot.
-    return (
-        ratchet_lever
-        .translate((-RATCHET_PIVOT_X, 0, -LEVER_PIVOT_Z))
-        .rotate((0, 0, 0), (0, 1, 0), -theta)
-        .translate((RATCHET_PIVOT_X, 0, LEVER_PIVOT_Z))
-    )
+        return part
+    return (part
+            .translate((-pivot_x, 0, -pivot_z))
+            .rotate((0, 0, 0), (0, 1, 0), -theta)
+            .translate((pivot_x, 0, pivot_z)))
+
+
+def _ratchet_lever_for_assembly():
+    from .housing import RATCHET_PIVOT_X, RATCHET_PIVOT_Z
+    return _pulled(ratchet_lever, RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
+                   _ratchet_theta_pull_deg())
 
 
 def _brake_lever_for_assembly():
-    if _brake_theta_pull_deg() == 0.0:
-        return brake_lever
-    return _brake_pulled_rotation(brake_lever)
+    from .housing import BRAKE_PIVOT_X, BRAKE_PIVOT_Z
+    return _pulled(brake_lever, BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
+                   _brake_theta_pull_deg())
 
 
 def _brake_pad_rubber_for_assembly():
-    if _brake_theta_pull_deg() == 0.0:
-        return brake_pad_rubber
-    # The rubber pad is a separate viz-only solid; it ships with the same
-    # rest-pose pre-rotation as the printed pad (see _brake_pad_rubber in
-    # viz.py), so it follows the printed lever into the pulled pose under
-    # the same transform.
-    return _brake_pulled_rotation(brake_pad_rubber)
-
-
-def _brake_pulled_rotation(part):
-    """Rotate `part` from the brake's REST pose to its current θ_pull.
-
-    Both the printed brake lever and the rubber pad are built at the
-    parallel design pose and then pre-rotated +PAD_PARALLEL_THETA_PULL_DEG
-    to reach the REST (print) pose (see _brake_pad_contact in levers.py
-    and _brake_pad_rubber in viz.py). Applying -θ_pull here drives the
-    part from rest toward (and past) the parallel pose."""
-    theta = _brake_theta_pull_deg()
-    from .housing import BRAKE_PIVOT_X, LEVER_PIVOT_Z
-    return (
-        part
-        .translate((-BRAKE_PIVOT_X, 0, -LEVER_PIVOT_Z))
-        .rotate((0, 0, 0), (0, 1, 0), -theta)
-        .translate((BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z))
-    )
+    from .housing import BRAKE_PIVOT_X, BRAKE_PIVOT_Z
+    return _pulled(brake_pad_rubber, BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
+                   _brake_theta_pull_deg())
 
 
 # ── Build counter — a 3D number floating well above the assembly, bumped
@@ -271,8 +224,6 @@ def _export_assembly():
         .add(ratchet_spring, name="ratchet_spring")
         .add(brake_spring,   name="brake_spring")
         .add(_brake_pad_rubber_for_assembly(), name="brake_pad_rubber")
-        .add(brake_housing_pin, name="brake_housing_pin")
-        .add(brake_housing_rest_pin, name="brake_housing_rest_pin")
     )
     counter = _build_counter_model(build_n)
     if counter is not None:
