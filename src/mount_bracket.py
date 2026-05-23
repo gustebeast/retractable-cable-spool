@@ -36,8 +36,6 @@ from .housing import (
     PANCAKE_PLATE_Z_OUT,
     SPINE_X_OUTER,
 )
-from . import wheel as _wheel
-from . import housing_guide as _guide
 
 # ── Bracket dimensions ──────────────────────────────────────────────────────
 WOOD_SCREW_SHAFT_D   = 4.0
@@ -78,15 +76,11 @@ TOP_CHUNK_X_LO       = AXLE_PRINT_D / 2 + 2.0              # 5.85
 TOP_CHUNK_X_HI       = TOP_CHUNK_X_LO + CHUNK_LENGTH       # 27.85
 TOP_CHUNK_Z_HI       = PANCAKE_PLATE_Z_OUT                 # flush with housing top face
 TOP_CHUNK_Z_LO       = TOP_CHUNK_Z_HI - CHUNK_DEPTH        # depth into pancake plate
-# Side chunk: -Z edge sits 7 mm past the TOP EDGE of the lever-side guide-
-# wheel axle-access hole (Ø MOUNT_HEAD_HOLE_D, centered at z=-5 on the +X
-# spine). Hole top edge is at z = -5 + MOUNT_HEAD_HOLE_D/2. The 7 mm
-# offset (was 2 mm) places the wood screws higher up on the wood plate,
-# ensuring clearance below the plate for the lever handles to extend to
-# their full upright position.
-_LEVER_WHEEL_Z       = -5.0
-SIDE_CHUNK_Z_LO      = _LEVER_WHEEL_Z + _wheel.MOUNT_HEAD_HOLE_D / 2 + 7.0    # ≈ +4.05
-SIDE_CHUNK_Z_HI      = SIDE_CHUNK_Z_LO + CHUNK_LENGTH      # 19
+# Side chunk: sits on the front-housing +X face between the ratchet pivot
+# (z≈20) and the pancake plate (z≈53), clear of both lever pivots and the
+# axle cross-pin. (Was anchored to the now-removed lever-side guide wheel.)
+SIDE_CHUNK_Z_LO      = 30.0
+SIDE_CHUNK_Z_HI      = SIDE_CHUNK_Z_LO + CHUNK_LENGTH      # 52
 SIDE_CHUNK_X_HI      = SPINE_X_OUTER                       # flush with housing +X face
 SIDE_CHUNK_X_LO      = SIDE_CHUNK_X_HI - CHUNK_DEPTH       # depth into spine
 
@@ -432,14 +426,6 @@ def _build_bracket():
         side_chunk = side_chunk.cut(ws)
         side_strip = side_strip.cut(ws)
     side_chunk = side_chunk.cut(_m2_chunk_cut(SIDE_M2_X_CENTER, SIDE_M2_Z_CENTER))
-    side_strip = side_strip.cut(
-        cq.Workplane("XY").add(cq.Solid.makeCylinder(
-            _wheel.MOUNT_HEAD_HOLE_D / 2,
-            STRIP_T + 2 * BOOL_OVERSHOOT,
-            pnt=cq.Vector(SIDE_STRIP_X_LO - BOOL_OVERSHOOT, 0, _guide.WHEEL_Z_CENTER),
-            dir=cq.Vector(1, 0, 0),
-        ))
-    )
 
     return (top_chunk
             .union(side_chunk)
