@@ -54,7 +54,7 @@ BEARING_LIP_ID =  20.0   # retention lip ID (< BEARING_OD → stops the bearing)
 
 # ── Axle ─────────────────────────────────────────────────────────────────────
 AXLE_D         =   8.0   # nominal — 608 bearing bore (the metal bearing's ID)
-AXLE_PRINT_D   =   AXLE_D - 0.2   # 7.8 — printed axle Ø, 0.10 mm per side under nominal
+AXLE_PRINT_D   =   AXLE_D - 0.1   # 7.9 — printed axle Ø, 0.05 mm per side under nominal
 
 # Bearing-retention lip on a printed axle: a short Ø(AXLE_LIP_OD) × AXLE_LIP_H
 # shoulder that sits flat against the bearing's INNER race rim. Mirrors the
