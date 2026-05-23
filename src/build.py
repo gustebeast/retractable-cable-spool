@@ -9,12 +9,10 @@ Produces all printed-part STEPs and an assembled assembly.step in cwd.
 
 Build order:
   spool             → main_body (initial)
-  caps              → bearing_cap_bottom + cap-key grooves
+  caps              → bearing_cap_top + cap-key grooves
   axle              → axle
-  housing           → housing, back_axle, back_axle_block
+  housing           → housing
   housing_pins      → brake_housing_pin, brake_housing_rest_pin
-  housing_guide     → guide_wheel (pancake-side cable-pinch wheel)
-  housing_lever_guide → lever_guide_wheel (lever-side cable-pinch wheel)
   levers            → ratchet_lever, brake_lever
   mount_bracket     → mount_bracket
   viz               → ratchet_spring, brake_spring, brake_pad_rubber,
@@ -40,31 +38,26 @@ from . import caps
 from . import axle as _axle_mod
 from . import housing as _housing_mod
 from . import housing_pins as _housing_pins_mod
-from . import housing_guide as _guide_mod
-from . import housing_lever_guide as _lever_guide_mod
 from . import levers as _lev_mod
 from . import mount_bracket as _bracket_mod
+from . import cable_rim as _cable_rim_mod
+from . import cable_retainer as _cable_retainer_mod
 from . import viz as _viz_mod
 
 # Compose the final main_body by applying the cap-key grooves and the
 # lever-dependent cuts (ratchet teeth, drum cable hole) explicitly.
 main_body = caps.apply_to_main_body(spool.main_body)
 main_body = _lev_mod.apply_to_main_body(main_body)
-# V-notch helical cable groove — cut LAST so the fragile swept geometry
-# never has to survive another boolean. The drum leaves spool.py as a
-# plain thick cylindrical shell; this cut carves the angled outer wall.
-main_body = main_body.cut(spool._helical_v_groove_cut())
+# (Helical V-groove cut removed — pancake rewrite has no drum/helix.)
 
 # Re-bind module-level part variables for export.
-bearing_cap_bottom     = caps.bearing_cap_bottom
+bearing_cap_top        = caps.bearing_cap_top
+cable_top_rim          = _cable_rim_mod.cable_top_rim
+cable_retainer         = _cable_retainer_mod.cable_retainer
 axle                   = _axle_mod.axle
 housing                = _housing_mod.housing
-back_axle              = _housing_mod.back_axle
-back_axle_block        = _housing_mod.back_axle_block
 brake_housing_pin      = _housing_pins_mod.brake_housing_pin
 brake_housing_rest_pin = _housing_pins_mod.brake_housing_rest_pin
-guide_wheel              = _guide_mod.guide_wheel
-lever_guide_wheel        = _lever_guide_mod.lever_guide_wheel
 mount_bracket            = _bracket_mod.mount_bracket
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
@@ -73,7 +66,6 @@ brake_spring           = _viz_mod.brake_spring
 brake_pad_rubber       = _viz_mod.brake_pad_rubber
 bearing_top            = _viz_mod.bearing_top
 bearing_bottom         = _viz_mod.bearing_bottom
-back_axle_bearing      = _viz_mod.back_axle_bearing
 
 # ────────────────────────────────────────────────────────────────────────────
 # Export — individual parts for printing, + a combined assembly STEP for
@@ -93,18 +85,17 @@ brake_lever   = heal(brake_lever)
 ratchet_spring = heal(ratchet_spring)
 brake_spring   = heal(brake_spring)
 brake_pad_rubber = heal(brake_pad_rubber)
-back_axle = heal(back_axle)
-back_axle_block = heal(back_axle_block)
 
-# Bearing cap is built in its assembled position; for a clean single-
-# part STEP export it stays as-is (already at z=0..CAP_H). The
-# assembly uses this positioned version.
-bearing_cap_bottom_export = bearing_cap_bottom
+# Bearing cap is built in its assembled position (top cap seat,
+# z=PANCAKE_CAP_SEAT_Z0..SPOOL_H). Exported as-is.
+bearing_cap_top_export = bearing_cap_top
 
 # Map of part name → (workplane, output filename, optional note).
 PARTS = {
     "main_body":              (main_body,                  "spool_main_body.step",        None),
-    "bearing_cap_bottom":     (bearing_cap_bottom_export,  "bearing_cap_bottom.step",     None),
+    "bearing_cap_top":        (bearing_cap_top_export,     "bearing_cap_top.step",        None),
+    "cable_top_rim":          (cable_top_rim,              "cable_top_rim.step",          None),
+    "cable_retainer":         (cable_retainer,             "cable_retainer.step",         None),
     "axle":                   (axle,                       "axle.step",                   None),
     "housing":                (housing,                    "housing.step",                None),
     "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
@@ -114,10 +105,6 @@ PARTS = {
     # them as individual STEP files for printing.
     "brake_housing_pin":      (brake_housing_pin,          "brake_housing_pin.step",      "print separately — glue-install"),
     "brake_housing_rest_pin": (brake_housing_rest_pin,     "brake_housing_rest_pin.step", "print separately — glue-install"),
-    "back_axle":              (back_axle,                  "back_axle.step",              "cable-retention guide axle (rides in the back 608 bearing)"),
-    "back_axle_block":        (back_axle_block,            "back_axle_block.step",        "sliding bearing carrier (tenon clamps into the housing mortise)"),
-    "guide_wheel":               (guide_wheel,              "guide_wheel.step",               "pancake-side printed guide wheel; user paints rubber on OD"),
-    "lever_guide_wheel":         (lever_guide_wheel,        "lever_guide_wheel.step",         "lever-side printed guide wheel; user paints rubber on OD"),
     "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
 }
 
@@ -129,66 +116,98 @@ def _export(name):
     print(f"Wrote {path}{suffix}")
 
 
-# Visualization aid — when True, both levers are rotated to their fully-
-# actuated (ENGAGED) position in assembly.step: ratchet pawl raised clear
-# of the teeth (RATCHET_OUTER_TRAVEL_DEG of CW throw), brake pad descended
-# onto the brake ring (BRAKE_INNER_TRAVEL_DEG of CCW throw). Per the
-# matched-ROM design these happen simultaneously, so showing both engaged
-# is the meaningful "actuated" snapshot of the mechanism. Set False to
-# show both levers at REST instead.
-SHOW_LEVERS_ENGAGED = True
+# Visualization aid — selects which lever pose to render in assembly.step:
+#   "rest"        : both levers at their printed/rest pose (handles horizontal,
+#                   pawl seated in valley, brake pad clear of track).
+#   "match"       : both levers at θ_pull = THETA_MATCH_DEG (pawl just clears
+#                   the tooth tip). With A1 relaxed, this is informative for
+#                   the RATCHET but the brake is NOT at first contact here.
+#   "transitions" : each lever at ITS OWN transition angle — ratchet at
+#                   THETA_MATCH_DEG (just leaving contact), brake at
+#                   THETA_BRAKE_CONTACT_DEG (just making contact). Shows the
+#                   two transition moments side-by-side even though they
+#                   no longer happen at the same θ_pull.
+#   "engaged"     : θ_pull = RATCHET_OUTER_TRAVEL_DEG (full pull) — pawl
+#                   fully clear of teeth, rubber compressed into the track.
+LEVERS_POSE = "rest"
+
+
+def _ratchet_theta_pull_deg():
+    """θ_pull (degrees) to apply to the ratchet lever in the current pose."""
+    if LEVERS_POSE == "rest":
+        return 0.0
+    if LEVERS_POSE in ("match", "transitions"):
+        from .levers import THETA_MATCH_DEG
+        return THETA_MATCH_DEG
+    if LEVERS_POSE == "engaged":
+        from .levers import RATCHET_OUTER_TRAVEL_DEG
+        return RATCHET_OUTER_TRAVEL_DEG
+    raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
+
+
+def _brake_theta_pull_deg():
+    """θ_pull (degrees) to apply to the brake lever (and its pad rubber)
+    in the current pose. With A1 relaxed, the brake's transition angle
+    differs from the ratchet's, so the 'transitions' pose returns the
+    brake-specific contact angle here."""
+    if LEVERS_POSE == "rest":
+        return 0.0
+    if LEVERS_POSE == "match":
+        from .levers import THETA_MATCH_DEG
+        return THETA_MATCH_DEG
+    if LEVERS_POSE == "transitions":
+        from .levers import THETA_BRAKE_CONTACT_DEG
+        return THETA_BRAKE_CONTACT_DEG
+    if LEVERS_POSE == "engaged":
+        from .levers import RATCHET_OUTER_TRAVEL_DEG
+        return RATCHET_OUTER_TRAVEL_DEG
+    raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
 
 
 def _ratchet_lever_for_assembly():
-    if not SHOW_LEVERS_ENGAGED:
+    theta = _ratchet_theta_pull_deg()
+    if theta == 0.0:
         return ratchet_lever
     from .housing import RATCHET_PIVOT_X, LEVER_PIVOT_Z
-    from .levers import RATCHET_OUTER_TRAVEL_DEG
-    # User pulls the handle UP (+z) to disengage; class-1 lever rotates so
-    # the lever pin (on the -X side of the pivot) moves DOWN. With +Y
-    # rotation taking +X toward -Z, that's NEGATIVE Y rotation.
-    angle = -RATCHET_OUTER_TRAVEL_DEG
+    # Assembly rotation is -θ_pull around +Y at the ratchet pivot.
     return (
         ratchet_lever
         .translate((-RATCHET_PIVOT_X, 0, -LEVER_PIVOT_Z))
-        .rotate((0, 0, 0), (0, 1, 0), angle)
+        .rotate((0, 0, 0), (0, 1, 0), -theta)
         .translate((RATCHET_PIVOT_X, 0, LEVER_PIVOT_Z))
     )
 
 
 def _brake_lever_for_assembly():
-    if not SHOW_LEVERS_ENGAGED:
+    if _brake_theta_pull_deg() == 0.0:
         return brake_lever
-    return _brake_engaged_rotation(brake_lever)
+    return _brake_pulled_rotation(brake_lever)
 
 
 def _brake_pad_rubber_for_assembly():
-    if not SHOW_LEVERS_ENGAGED:
+    if _brake_theta_pull_deg() == 0.0:
         return brake_pad_rubber
-    # The rubber pad is a separate viz-only solid added to the assembly
-    # alongside the lever — it has its own copy of the lever's rest-pose
-    # pre-rotation in viz.py. To follow the lever into the engaged pose
-    # it needs the same rotation applied here.
-    return _brake_engaged_rotation(brake_pad_rubber)
+    # The rubber pad is a separate viz-only solid; it ships with the same
+    # rest-pose pre-rotation as the printed pad (see _brake_pad_rubber in
+    # viz.py), so it follows the printed lever into the pulled pose under
+    # the same transform.
+    return _brake_pulled_rotation(brake_pad_rubber)
 
 
-def _brake_engaged_rotation(part):
-    """Rotate `part` from the brake's REST pose to its ENGAGED pose.
+def _brake_pulled_rotation(part):
+    """Rotate `part` from the brake's REST pose to its current θ_pull.
 
     Both the printed brake lever and the rubber pad are built at the
-    ENGAGED design pose and then pre-rotated +BRAKE_INNER_TRAVEL_DEG to
-    reach the REST (print) pose (see _brake_pad_contact in levers.py and
-    _brake_pad_rubber in viz.py). Applying -BRAKE_INNER_TRAVEL_DEG here
-    undoes that pre-rotation and returns the part to the engaged pose —
-    the brake pad rises onto the brake ring (+Z) at the same lever
-    throw that the ratchet pawl clears the teeth."""
+    parallel design pose and then pre-rotated +PAD_PARALLEL_THETA_PULL_DEG
+    to reach the REST (print) pose (see _brake_pad_contact in levers.py
+    and _brake_pad_rubber in viz.py). Applying -θ_pull here drives the
+    part from rest toward (and past) the parallel pose."""
+    theta = _brake_theta_pull_deg()
     from .housing import BRAKE_PIVOT_X, LEVER_PIVOT_Z
-    from .levers import BRAKE_INNER_TRAVEL_DEG
-    angle = -BRAKE_INNER_TRAVEL_DEG
     return (
         part
         .translate((-BRAKE_PIVOT_X, 0, -LEVER_PIVOT_Z))
-        .rotate((0, 0, 0), (0, 1, 0), angle)
+        .rotate((0, 0, 0), (0, 1, 0), -theta)
         .translate((BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z))
     )
 
@@ -231,14 +250,19 @@ def _export_assembly():
     assembly = (
         cq.Assembly(name="retractable_cable_spool")
         .add(main_body,     name="main_body")
-        .add(bearing_cap_bottom, name="bearing_cap_bottom", loc=cq.Location((0, 0, 0)))
+        .add(bearing_cap_top,    name="bearing_cap_top",    loc=cq.Location((0, 0, 0)))
+        # Cable top rim placed 6 mm above the TOP of the bottom rim
+        # (bottom rim top = RIM_H = 14, so its bottom face sits at z=20).
+        # Translation baked into the geometry (not via the assembly loc) so
+        # the STEP export unambiguously shows it at height. Slides freely on
+        # the hub for now — no height stop.
+        .add(cable_top_rim.translate((0, 0, spool.RIM_H + 6)),
+             name="cable_top_rim", loc=cq.Location((0, 0, 0)))
+        # Fixed (housing-attached) cable-retention cage — already modelled at
+        # its working position (cable-channel Z-band), floating for now.
+        .add(cable_retainer, name="cable_retainer", loc=cq.Location((0, 0, 0)))
         .add(bearing_bottom,     name="bearing_bottom",     loc=cq.Location((0, 0, 0)))
         .add(bearing_top,        name="bearing_top",        loc=cq.Location((0, 0, 0)))
-        .add(back_axle_bearing,  name="back_axle_bearing",  loc=cq.Location((0, 0, 0)))
-        .add(back_axle_block,    name="back_axle_block",    loc=cq.Location((0, 0, 0)))
-        .add(back_axle,          name="back_axle",          loc=cq.Location((0, 0, 0)))
-        .add(guide_wheel,            name="guide_wheel",            loc=cq.Location((0, 0, 0)))
-        .add(lever_guide_wheel,      name="lever_guide_wheel",      loc=cq.Location((0, 0, 0)))
         .add(mount_bracket,          name="mount_bracket",          loc=cq.Location((0, 0, 0)))
         .add(axle,          name="axle")
         .add(housing, name="housing")
@@ -255,7 +279,7 @@ def _export_assembly():
         assembly.add(counter, name="build_counter")
     assembly.save("assembly.step")
     print(f"Wrote assembly.step  [build #{build_n}]"
-          + ("  [levers ENGAGED]" if SHOW_LEVERS_ENGAGED else ""),
+          + (f"  [levers {LEVERS_POSE.upper()}]" if LEVERS_POSE != "rest" else ""),
           flush=True)
     _push_onshape()
 

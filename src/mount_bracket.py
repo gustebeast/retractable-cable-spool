@@ -78,11 +78,14 @@ TOP_CHUNK_X_LO       = AXLE_PRINT_D / 2 + 2.0              # 5.85
 TOP_CHUNK_X_HI       = TOP_CHUNK_X_LO + CHUNK_LENGTH       # 27.85
 TOP_CHUNK_Z_HI       = PANCAKE_PLATE_Z_OUT                 # flush with housing top face
 TOP_CHUNK_Z_LO       = TOP_CHUNK_Z_HI - CHUNK_DEPTH        # depth into pancake plate
-# Side chunk: -Z edge sits 2 mm past the TOP EDGE of the lever-side guide-
+# Side chunk: -Z edge sits 7 mm past the TOP EDGE of the lever-side guide-
 # wheel axle-access hole (Ø MOUNT_HEAD_HOLE_D, centered at z=-5 on the +X
-# spine). Hole top edge is at z = -5 + MOUNT_HEAD_HOLE_D/2.
+# spine). Hole top edge is at z = -5 + MOUNT_HEAD_HOLE_D/2. The 7 mm
+# offset (was 2 mm) places the wood screws higher up on the wood plate,
+# ensuring clearance below the plate for the lever handles to extend to
+# their full upright position.
 _LEVER_WHEEL_Z       = -5.0
-SIDE_CHUNK_Z_LO      = _LEVER_WHEEL_Z + _wheel.MOUNT_HEAD_HOLE_D / 2 + 2.0    # ≈ -0.95
+SIDE_CHUNK_Z_LO      = _LEVER_WHEEL_Z + _wheel.MOUNT_HEAD_HOLE_D / 2 + 7.0    # ≈ +4.05
 SIDE_CHUNK_Z_HI      = SIDE_CHUNK_Z_LO + CHUNK_LENGTH      # 19
 SIDE_CHUNK_X_HI      = SPINE_X_OUTER                       # flush with housing +X face
 SIDE_CHUNK_X_LO      = SIDE_CHUNK_X_HI - CHUNK_DEPTH       # depth into spine
@@ -181,28 +184,6 @@ def _top_strip_x_chamfer_cut():
             .lineTo(STRIP_W / 2, TOP_STRIP_Z_HI)
             .close()
             .extrude(TOP_STRIP_X_HI - TOP_STRIP_X_LO + BOOL_OVERSHOOT))
-
-
-# Sacrificial single-layer bridge disc — fills each bracket M2 clearance
-# hole at the pocket-roof level (y=CHUNK_Y_HI), so the printer's first
-# layer above the empty bracket pocket bridges as one solid sheet rather
-# than as an annulus around a Ø2.3 hole. Layer is drilled out post-print
-# with an M2 bit to restore the through-hole. BRIDGE_LAYER_H should be
-# set to whatever layer height the housing prints at (default 0.2 mm).
-BRIDGE_LAYER_H = 0.2
-
-
-def _m2_bridge_disc(x_center, z_center):
-    """Ø M2_SHAFT_CLR_D × BRIDGE_LAYER_H disc filling the M2 clearance
-    hole, sitting in the first print layer above the pocket roof.
-    Bottom face at y=CHUNK_Y_HI (the pocket roof / start of bridging),
-    top face at y=CHUNK_Y_HI + BRIDGE_LAYER_H."""
-    return cq.Workplane("XY").add(cq.Solid.makeCylinder(
-        M2_SHAFT_CLR_D / 2,
-        BRIDGE_LAYER_H,
-        pnt=cq.Vector(x_center, CHUNK_Y_HI, z_center),
-        dir=cq.Vector(0, 1, 0),
-    ))
 
 
 def _side_strip_z_chamfer_cut():
@@ -530,13 +511,12 @@ def cut_from_housing(housing):
                .cut(_h._axle_pin_clearance(z, x_center=x), clean=False)
                .cut(_h._screw_head_counterbore(x, z, entry_face_sign=+1), clean=False)
                .cut(_h._axle_pin_insert_pilot(z, insert_face_sign=-1, x_center=x), clean=False))
-    # Sacrificial single-layer bridge: fill each M2 clearance hole at
-    # the pocket-roof level so the printer's first layer above the
-    # bracket pocket bridges as one solid sheet (no hole in mid-bridge).
-    # Drilled out post-print with an M2 bit. Unioned AFTER the M2 cuts
-    # so the disc lands inside the just-cut hole.
-    out = out.union(_m2_bridge_disc(TOP_M2_X_CENTER,  TOP_M2_Z_CENTER),  clean=False)
-    out = out.union(_m2_bridge_disc(SIDE_M2_X_CENTER, SIDE_M2_Z_CENTER), clean=False)
+    # Note: previously added a single-layer sacrificial bridge disc inside
+    # each M2 clearance hole (drilled out post-print) to give the printer's
+    # first layer above the bracket pocket a solid roof to bridge from.
+    # Removed because the print needs supports inside the bracket pocket
+    # anyway for a clean roof surface, and with supports present the
+    # bridge layer just blocks the M2 hole during installation.
     return out
 
 

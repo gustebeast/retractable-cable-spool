@@ -10,12 +10,14 @@ import cadquery as cq
 
 from .dimensions import (
     AXLE_D,
+    BEARING_BORE, BEARING_LIP_H, BEARING_LIP_ID,
     BEARING_W, BOOL_OVERSHOOT,
     CAP_H, CAP_STOP_ID, CAP_STOP_LIP_H,
     CAVITY_Z0, CAVITY_Z1,
     DRUM_BOTTOM_Z, DRUM_H, DRUM_ID, DRUM_OD, DRUM_TOP_Z, DRUM_WALL,
-    FLANGE_H, FLANGE_INNER_ID,
+    FLANGE_H, FLANGE_INNER_ID, FLANGE_OD, FLANGE_LIP_T,
     HUB_CAVITY_D, HUB_OD,
+    RATCHET_TEETH, RATCHET_DEPTH,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
     LEVER_STOP_LIP_Z0, LEVER_STOP_LIP_Z1,
     PANCAKE_CAP_SEAT_Z0,
@@ -24,7 +26,7 @@ from .dimensions import (
     TOP_BEARING_BORE,
 )
 from .helpers import (
-    cyl, cone_solid, heal,
+    cyl, cone_solid, heal, make_keys,
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
@@ -44,78 +46,154 @@ DRUM_SKIRT_H = 0.0
 # ────────────────────────────────────────────────────────────────────────────
 
 def _build_main_body():
-    # Drum is a plain thick cylindrical shell (DRUM_ID → DRUM_OD); the
-    # V-notch cable cradle is cut LAST in build.py, after every cap/lever
-    # cut, so the fragile helical-swept geometry never has to survive
-    # another boolean. Inner wall stays flat at DRUM_ID/2.
-    _drum_z_lo  = DRUM_BOTTOM_Z - DRUM_SKIRT_H
-    _drum_h     = DRUM_H + DRUM_SKIRT_H
-    drum = cyl(DRUM_OD, _drum_h, z=_drum_z_lo).cut(
-           cyl(DRUM_ID, _drum_h, z=_drum_z_lo))
-
+    # PANCAKE-SPOOL REWRITE (Part 1): the tall cable drum, its helical
+    # groove, and the hub→drum spokes are GONE. The cable will spiral in a
+    # single Z-plane in a channel formed later by separately-printed cable-
+    # retention plates (Part 2). What remains here is the "inner spool
+    # body": the full-height hub plus two rims that the guide wheels and
+    # levers contact directly —
+    #   - bottom (lever-side) 14 mm rim: ratchet teeth + brake/guide track,
+    #     at the SAME radii as the old outer-spool flange (so the levers and
+    #     -z guide wheel keep their positions), tied to the hub by a 45°
+    #     ramp (also the eventual cable-channel floor slope).
+    #   - top (pancake-side) 7 mm rim: +z guide-wheel surface, tied to the
+    #     hub by a thin top deck.
     main_body = (
         cyl(HUB_OD, SPOOL_H, z=0)                       # hub cylinder (full height)
-        .union(pancake_flange_solid(DRUM_TOP_Z))         # pancake-side flange (z=SPOOL_H-FLANGE_H..SPOOL_H)
-        .union(drum)
-        .union(lever_flange_solid(DRUM_BOTTOM_Z))        # lever-side flange (z=0..FLANGE_H) with ratchet
-        .union(spokes_solid(0, SPOOL_H))                 # spokes with taper at lever side
+        .union(_lever_rim())                             # bottom 14 mm-tall cable rim
+        .union(_channel_spokes())                        # radial spokes: sole hub↔rim tie
+        .union(_hub_key_bumps())                         # key ridges for the sliding top rim
     )
 
-    # Interior z-map cuts — bottom is still a separately-printed cap;
-    # the pancake side has the bearing pocket fused directly into the
-    # spool material (replaces the formerly-separate bearing_cap_top).
-    #   SPOOL_H .. PANCAKE_CAP_SEAT_Z0     — fused bearing carrier
-    #     (bearing pocket → 45° funnel → axle clearance bore)
-    #   PANCAKE_CAP_SEAT_Z0 .. CAVITY_Z0   — spring cavity (HUB_CAVITY_D)
-    #     (used to narrow via a top cap-stop lip cone for the
-    #     separately-printed bearing_cap_top to rest on; that lip is
-    #     gone now that the bearing pocket is fused into the spool.)
-    #   CAVITY_Z0 .. LEVER_STOP_LIP_Z0     — bottom cap-stop lip
-    #   LEVER_CAP_SEAT_Z1 .. 0             — bottom cap seat (HUB_CAVITY_D)
+    # Interior z-map cuts — BEARING CAP FLIPPED: the LEVER-side (bottom)
+    # bearing is now FUSED into the hub; the PANCAKE-side (top) bearing
+    # lives in a separately-printed removable cap (bearing_cap_top).
+    #   z=0 .. _BOT_POCKET_TOP            — fused bottom bearing pocket
+    #   _BOT_POCKET_TOP .. _CAVITY_TOP    — spring cavity (HUB_CAVITY_D)
+    #   _CAVITY_TOP .. PANCAKE_CAP_SEAT_Z0 — top cap-stop lip cone
+    #   PANCAKE_CAP_SEAT_Z0 .. SPOOL_H    — top cap seat (removable cap drops in)
+    _BOT_POCKET_TOP = BEARING_LIP_H + BEARING_W                 # 8
+    _CAVITY_TOP     = PANCAKE_CAP_SEAT_Z0 - CAP_STOP_LIP_H       # 42
     main_body = (
         main_body
-        # Bottom cap seat (0..CAP_H)
-        .cut(cyl(HUB_CAVITY_D, CAP_H, z=LEVER_CAP_SEAT_Z0))
-        # Bottom cap-stop lip — inverted cone opening upward into the spring
-        # cavity. At z=LEVER_STOP_LIP_Z0 the ID is CAP_STOP_ID (narrow, holds
-        # cap from sliding up); at z=LEVER_STOP_LIP_Z1 it widens to HUB_CAVITY_D
-        # (matches the spring cavity above).
-        .cut(cone_solid(CAP_STOP_ID, HUB_CAVITY_D, CAP_STOP_LIP_H, LEVER_STOP_LIP_Z0))
-        # Spring cavity (9..29)
-        .cut(cyl(HUB_CAVITY_D,    CAVITY_Z1 - CAVITY_Z0,        z=CAVITY_Z0))
+        # Bottom FUSED bearing pocket: 90° retention lip (z=0..BEARING_LIP_H,
+        # ID=BEARING_LIP_ID) + press-fit pocket (ID=BEARING_BORE). Bearing
+        # presses in from the spring-cavity side (z=_BOT_POCKET_TOP); the
+        # axle exits the bottom face through the lip ID.
+        .cut(cyl(BEARING_LIP_ID, BEARING_LIP_H, z=0))
+        .cut(cyl(BEARING_BORE, BEARING_W, z=BEARING_LIP_H))
+        # Spring cavity.
+        .cut(cyl(HUB_CAVITY_D, _CAVITY_TOP - _BOT_POCKET_TOP, z=_BOT_POCKET_TOP))
+        # Top cap-stop lip — cone narrowing DOWN from HUB_CAVITY_D (at the cap
+        # seat) to CAP_STOP_ID, so the removable top cap can't slide down into
+        # the spring cavity.
+        .cut(cone_solid(CAP_STOP_ID, HUB_CAVITY_D, CAP_STOP_LIP_H, _CAVITY_TOP))
+        # Top cap seat — HUB_CAVITY_D bore the removable cap drops into.
+        .cut(cyl(HUB_CAVITY_D, SPOOL_H - PANCAKE_CAP_SEAT_Z0, z=PANCAKE_CAP_SEAT_Z0))
     )
-    # Pancake-side bearing pocket — carved directly into the solid hub
-    # material at z=PANCAKE_CAP_SEAT_Z0..SPOOL_H (no longer a separate
-    # cap part). Bearing slips in from the spring-cavity side (entering
-    # from below at z=PANCAKE_CAP_SEAT_Z0); 45° funnel narrows to an
-    # axle clearance bore that exits the spool's top face.
-    _axle_bore_d = AXLE_D + 2.0                                 # 1 mm radial clearance to axle
-    _funnel_h    = (TOP_BEARING_BORE - _axle_bore_d) / 2
-    _pocket_top  = pancake_bearing_z0 + BEARING_W
-    _funnel_top  = _pocket_top + _funnel_h
-    main_body = (
-        main_body
-        .cut(cyl(TOP_BEARING_BORE, BEARING_W, z=pancake_bearing_z0))
-        .cut(cone_solid(TOP_BEARING_BORE, _axle_bore_d, _funnel_h, _pocket_top))
-        .cut(cyl(_axle_bore_d, SPOOL_H - _funnel_top, z=_funnel_top))
-    )
-    # Lighten the otherwise-solid Ø-HUB_OD block surrounding the pancake-
-    # side bearing pocket (z=PANCAKE_CAP_SEAT_Z0..SPOOL_H): keep only a
-    # TOP_BEARING_BOSS_WALL collar around the bearing pocket and the hub OD
-    # wall (the spokes tie in there); hollow the whole annulus between,
-    # leaving SPOKE_COUNT radial ribs aligned with the spokes. The ribs'
-    # undersides at z=PANCAKE_CAP_SEAT_Z0 are the cassette assembly's upper
-    # axial backstop (it normally floats clear of them).
-    main_body = main_body.cut(_top_bearing_void())
-    main_body = main_body.union(_top_bearing_ribs())
+    # Lighten the fused bottom bearing block: hollow the annulus between the
+    # bearing collar and the hub wall, leaving SPOKE_COUNT (6) radial ribs —
+    # the same design the pancake bearing block used before the cap flip.
+    main_body = main_body.cut(_bot_bearing_void())
+    main_body = main_body.union(_bot_bearing_ribs())
     main_body = main_body.cut(_spring_slot())
-    main_body = main_body.union(_top_rim_cap())
-    # NB: the constant-thickness drum-wall relief (_helical_groove_following_
-    # relief) is applied LAST in build.py, AFTER the cap/lever cuts — the
-    # relieved drum geometry is valid but too fragile for further booleans
-    # (the cable-transit slot cut silently no-ops on it), so the spool
-    # leaves here with the full-thickness wall and gets relieved at the end.
     return main_body
+
+
+# ── Inner-spool-body cable rim (pancake rewrite, v2) ────────────────────────
+# The cable winds in the annular channel BETWEEN the hub OD and the rim's
+# inner wall, in a single Z-plane band RIM_H tall, stacking radially (and a
+# couple of layers axially). The ratchet teeth + brake track will live on
+# the rim's OUTER cylindrical face (radial-X load, structurally sound across
+# the cable air-gap) — that's the upcoming lever rework, not done here. The
+# rim is a plain vertical wall (no 45° chamfer) so the whole body prints
+# bottom-to-top without supports.
+RIM_H      = 14.0      # rim height in Z (the lever-grip surface height)
+# Rim INNER Ø sets the cable-channel outer wall. Sized so the hub→rim
+# channel (RIM_H tall, ~82% packing) holds ~7 ft of 6 mm cable (6 ft + margin)
+# — see capacity sweep. Cable winds INSIDE the rim so its OUTER face stays
+# free for the ratchet/brake.
+RIM_ID     = 108.0
+RIM_WALL   = STRUCT_WALL + RATCHET_DEPTH   # 3.2 — sized so the wall behind the
+                       # deepest ratchet-tooth valley (RIM_WALL − RATCHET_DEPTH)
+                       # equals STRUCT_WALL (1.7 mm).
+RIM_OD     = RIM_ID + 2 * RIM_WALL   # 114.4
+
+
+def _cyl_ratchet_band(z_lo, z_hi):
+    """Cylindrical (radial-engagement) ratchet on the rim's OUTER face over
+    [z_lo, z_hi]. A 90°-rotated version of the old axial ratchet: the
+    sawtooth now runs around the circumference with its catch face RADIAL,
+    so the pawl engages from OUTSIDE in X/Y. Tooth tips sit at RIM_OD/2
+    (flush with the brake band), valleys RATCHET_DEPTH deep."""
+    r_tip  = RIM_OD / 2
+    r_root = r_tip - RATCHET_DEPTH
+    n      = RATCHET_TEETH
+    pts = []
+    for i in range(n):
+        ts = 2 * math.pi * i / n
+        # radial catch face (valley → tip at the same angle), then the
+        # ramp is the straight chord from this tip to the next valley.
+        pts.append((r_root * math.cos(ts), r_root * math.sin(ts)))
+        pts.append((r_tip  * math.cos(ts), r_tip  * math.sin(ts)))
+    star = (
+        cq.Workplane("XY").workplane(offset=z_lo)
+        .polyline(pts).close()
+        .extrude(z_hi - z_lo)
+    )
+    # Carve the bore so it's an annular toothed ring (ID = RIM_ID).
+    return star.cut(cyl(RIM_ID, z_hi - z_lo, z=z_lo))
+
+
+CABLE_D = 6.0   # nominal cable diameter — also the max allowed inter-spoke gap
+
+
+def _channel_spokes():
+    """Radial spokes that are the SOLE connection between the inner spool
+    (hub) and the outer cable rim — there's no floor disc. They also keep
+    the wound cable from dropping out the open bottom: the count is set so
+    the circumferential gap between adjacent spokes where they meet the rim
+    (RIM_ID, the widest point) stays ≤ CABLE_D, so a cable strand bridges
+    the gap instead of falling through. Full rim height (z=0..RIM_H)."""
+    r_in   = HUB_OD / 2 - 0.5        # 0.5 mm overlap into the hub
+    r_out  = RIM_ID / 2 + 0.5        # 0.5 mm overlap into the rim wall
+    w      = STRUCT_WALL
+    r_rim  = RIM_ID / 2
+    n = math.ceil(2 * math.pi * r_rim / (CABLE_D + w))
+    out = None
+    for i in range(n):
+        sp = (
+            cq.Workplane("XY")
+            .center((r_in + r_out) / 2, 0)
+            .box(r_out - r_in, w, RIM_H, centered=(True, True, False))
+            .rotate((0, 0, 0), (0, 0, 1), i * 360.0 / n)
+        )
+        out = sp if out is None else out.union(sp)
+    return out
+
+
+def _hub_key_bumps():
+    """6 vertical key ridges on the hub OD at KEY_ANGLES, full hub height.
+    They (a) key the sliding cable top-rim against rotation, and (b) sit
+    radially aligned with the top bearing-cap key grooves on the INSIDE of
+    the hub wall (z=43..51), adding material back across that thinned
+    section. KEY_DEPTH (1 mm) tall, KEY_W (2 mm) wide."""
+    return make_keys(HUB_OD / 2, 0.0, SPOOL_H)
+
+
+def _lever_rim():
+    """Bottom cable rim — the RIM_H-tall outer wall only (NO floor disc; the
+    spokes carry the hub↔rim connection). Its 14 mm height splits into:
+      - bottom 7 mm: SMOOTH brake band (RIM_ID..RIM_OD), and
+      - top 7 mm: cylindrical RATCHET teeth on the outer face.
+    Cable winds in the hub→RIM_ID channel, resting on the spoke grid."""
+    z_mid = RIM_H / 2                                    # 7 — brake/ratchet split
+    brake = (
+        cyl(RIM_OD, z_mid, z=0)
+        .cut(cyl(RIM_ID, z_mid, z=0))
+    )
+    ratchet = _cyl_ratchet_band(z_mid, RIM_H)            # teeth on the top 7 mm
+    return brake.union(ratchet)
 
 
 # Top rim cap — re-added AFTER the helix cut so the helix's topmost turn
@@ -131,36 +209,43 @@ def _top_rim_cap():
     return cyl(DRUM_OD, TOP_RIM_CAP_H, z=z_lo).cut(cyl(inner_d, TOP_RIM_CAP_H, z=z_lo))
 
 
-# Top-bearing block lightening — the pancake-side bearing pocket otherwise
-# sits in a solid Ø-HUB_OD hub block over z=PANCAKE_CAP_SEAT_Z0..SPOOL_H.
-TOP_BEARING_BOSS_WALL = 3.0          # collar wall kept around the Ø(TOP_BEARING_BORE) pocket
-TOP_BEARING_RIB_W     = STRUCT_WALL  # radial-rib tangential width — pinned to STRUCT_WALL
+# Bottom-bearing block lightening — the fused lever-side bearing pocket
+# otherwise sits in a solid Ø-HUB_OD hub block over z=0..BOT_POCKET_TOP.
+# Same collar + 6-rib design the pancake (top) bearing block used before
+# the cap flip.
+BOT_POCKET_TOP        = BEARING_LIP_H + BEARING_W   # 8 — top of the fused bottom pocket
+BOT_BEARING_BOSS_WALL = 3.0          # collar wall kept around the Ø(BEARING_BORE) pocket
+BOT_BEARING_RIB_W     = STRUCT_WALL  # radial-rib tangential width — pinned to STRUCT_WALL
 
 
-def _top_bearing_void():
-    """Annular air pocket spanning the full z-extent between the bearing-
-    pocket collar and the hub OD wall — extends the Ø(HUB_CAVITY_D) spring
-    cavity upward through the top face. The ribs alone tie boss → wall."""
-    boss_od = TOP_BEARING_BORE + 2 * TOP_BEARING_BOSS_WALL
-    z_lo    = PANCAKE_CAP_SEAT_Z0
-    h       = SPOOL_H - z_lo + BOOL_OVERSHOOT          # through the spool's top face
+def _bot_bearing_void():
+    """Annular air pocket between the bottom bearing-pocket collar and the
+    hub OD wall — extends the Ø(HUB_CAVITY_D) spring cavity DOWN through the
+    bottom face. The 6 ribs alone tie collar → hub wall."""
+    boss_od = BEARING_BORE + 2 * BOT_BEARING_BOSS_WALL
+    z_lo    = 0.0 - BOOL_OVERSHOOT                     # through the spool's bottom face
+    h       = BOT_POCKET_TOP - z_lo
     return cyl(HUB_CAVITY_D, h, z=z_lo).cut(cyl(boss_od, h, z=z_lo))
 
 
-def _top_bearing_ribs():
-    """SPOKE_COUNT radial ribs spanning the bearing-pocket collar out to the
-    hub OD wall (and into the spoke roots), at the spoke angles."""
-    boss_od = TOP_BEARING_BORE + 2 * TOP_BEARING_BOSS_WALL
+def _bot_bearing_ribs():
+    """SPOKE_COUNT radial ribs spanning the bottom bearing-pocket collar out
+    to the hub OD wall, at the spoke angles."""
+    boss_od = BEARING_BORE + 2 * BOT_BEARING_BOSS_WALL
+    # Span the bearing collar (inner) to the inner-spool outer wall (HUB_OD),
+    # ending flush at the hub OD — no protrusion past it. The inner end
+    # overlaps into the collar; the outer end is fully inside the hub wall
+    # ring (HUB_CAVITY_D/2..HUB_OD/2) so the union is volumetric.
     r_in    = boss_od / 2 - 0.5            # overlap into the collar
-    r_out   = HUB_OD / 2 + 0.5             # overlap into the hub OD wall / spoke root
-    z_lo, z_hi = PANCAKE_CAP_SEAT_Z0, SPOOL_H
+    r_out   = HUB_OD / 2                   # flush with the inner-spool outer wall
+    z_lo, z_hi = 0.0, BOT_POCKET_TOP
     out = None
     for i in range(SPOKE_COUNT):
         rib = (
             cq.Workplane("XZ")
             .polyline([(r_in, z_lo), (r_out, z_lo), (r_out, z_hi), (r_in, z_hi)])
             .close()
-            .extrude(TOP_BEARING_RIB_W / 2, both=True)
+            .extrude(BOT_BEARING_RIB_W / 2, both=True)
             .rotate((0, 0, 0), (0, 0, 1), i * 360.0 / SPOKE_COUNT)
         )
         out = rib if out is None else out.union(rib)

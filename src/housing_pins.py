@@ -19,6 +19,7 @@ from .dimensions import M2_INSERT_PILOT_D
 from .housing import (
     BRAKE_BOSS_EXT_ALPHA_HI, BRAKE_BOSS_EXT_ALPHA_LO,
     BRAKE_HOUSING_BOSS_EXTENSION, BRAKE_HOUSING_LEG_ALPHA_DEG,
+    BRAKE_HOUSING_PIN_KITTY_CHAMFER,
     BRAKE_PIVOT_X, HOUSING_W,
     LEVER_PIVOT_BOSS_OD, LEVER_PIVOT_Z,
     STOP_PIN_D, STOP_PIN_H, STOP_PIN_HOLE_D, STOP_PIN_R,
@@ -29,7 +30,7 @@ from .housing import (
 )
 
 
-def _brake_pin_local(rounded_z_sign, with_spring_hole):
+def _brake_pin_local(rounded_z_sign, with_spring_hole, kitty_chamfer=0.0):
     """Pin built in a LOCAL frame for readability:
       +y_local = pin axis, pointing from the exposed tip INTO the housing.
       +x_local = radial-outward (spring leg through-hole, when present,
@@ -48,7 +49,7 @@ def _brake_pin_local(rounded_z_sign, with_spring_hole):
     L_ins = BRAKE_PIN_INSERT_DEPTH
 
     pin = (
-        brake_pin_xz_profile(r, rounded_z_sign)
+        brake_pin_xz_profile(r, rounded_z_sign, kitty_chamfer=kitty_chamfer)
         # Workplane "XZ" extrudes along -Y (verified empirically — the
         # workplane's normal direction in cadquery's "XZ" string preset
         # is -Y, not +Y as one might naively expect). Pass a negative
@@ -59,37 +60,28 @@ def _brake_pin_local(rounded_z_sign, with_spring_hole):
     )
 
     if with_spring_hole:
-        # Diametral spring-leg hole, along ±x_local. Cross-section is a
-        # 2r × 2r square + 45° peak (matches the lever-stop-pin teardrop
-        # convention). Geometry in the YZ plane:
+        # Diametral spring-leg hole, along ±x_local. Plain circular bore
+        # of Ø STOP_PIN_HOLE_D — same as the ratchet lever's spring-leg
+        # hole. This pin prints ON ITS SIDE (axis horizontal), so the
+        # bore is vertical-ish in print orientation and forms cleanly
+        # without the 45°-peak teardrop the old face-up orientation
+        # needed for self-supporting horizontal holes.
         #
-        #   +y_local: pin axis, away from the lever-facing tip.
-        #
-        # The square's back edge sits at local y = SPRING_HOLE_Y_OFFSET,
-        # leaving a SPRING_HOLE_Y_OFFSET-mm cap of solid material at the
-        # pin tip (the lever-facing end) so the spring leg sits in an
-        # enclosed pocket. The peak points in +y (into the pin body,
-        # hidden inside the housing-buried portion of the pin). +y in
-        # print orientation maps to +z (peak points UP), so the
-        # horizontal hole self-supports without bridges.
+        # The bore is centered SPRING_HOLE_Y_OFFSET + hole_r from the
+        # exposed tip, leaving a SPRING_HOLE_Y_OFFSET-mm cap of solid
+        # material at the pin tip so the spring leg sits in an enclosed
+        # pocket.
         SPRING_HOLE_Y_OFFSET = 1.0
         hole_r = STOP_PIN_HOLE_D / 2
-        rect_y_len = STOP_PIN_HOLE_D    # 2 mm — square YZ section
-        peak_h = hole_r                 # 1 mm — 45° peak
         through_len = 2 * r + 0.4
-        y0 = SPRING_HOLE_Y_OFFSET
-        y1 = y0 + rect_y_len
-        y_peak = y1 + peak_h
-        profile = (
+        y_center = SPRING_HOLE_Y_OFFSET + hole_r
+        through = (
             cq.Workplane("YZ")
-            .moveTo(y0, -hole_r)
-            .lineTo(y0, +hole_r)
-            .lineTo(y1, +hole_r)
-            .lineTo(y_peak, 0)
-            .lineTo(y1, -hole_r)
-            .close()
+            .center(y_center, 0.0)
+            .circle(hole_r)
+            .extrude(through_len)
+            .translate((-r - 0.2, 0, 0))
         )
-        through = profile.extrude(through_len).translate((-r - 0.2, 0, 0))
         pin = pin.cut(through)
 
     return pin
@@ -257,7 +249,8 @@ def _rest_pin_slab():
 # spring leg's actual tangent direction at this pin (rather than with
 # the pin's radial direction, which differs by SPRING_LEG_PIN_OFFSET_DEG).
 brake_housing_pin = brake_pin_place(
-    _brake_pin_local(rounded_z_sign=-1, with_spring_hole=True),
+    _brake_pin_local(rounded_z_sign=-1, with_spring_hole=True,
+                     kitty_chamfer=BRAKE_HOUSING_PIN_KITTY_CHAMFER),
     rotation_alpha=spring_leg_hole_dir_alpha_deg(BRAKE_HOUSING_LEG_ALPHA_DEG))
 # Rest pin: catches the brake lever pin at its design rest position so
 # the spring's restoring force can't over-rotate it. Lever-pin direction

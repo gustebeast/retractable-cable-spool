@@ -287,15 +287,13 @@ def _bearing_dummy(z_base):
         .cut(cyl(AXLE_D, BEARING_W, z=z_base))
     )
 
-# Bottom bearing: in bearing_cap_bottom's pocket, sits on the lip.
+# Bottom bearing: now in the hub's FUSED bottom pocket, sits on the lip.
 bearing_bottom = _bearing_dummy(BEARING_LIP_H)
-# Top bearing: in bearing_cap_top's pocket. Bottom face at z=pancake_bearing_z0
-# (= cap interior face); top face wedges into the cone funnel where it has
-# narrowed to Ø22.
+# Top bearing: in the removable bearing_cap_top's pocket. Bottom face at
+# z=pancake_bearing_z0 (= cap interior / spring-cavity face).
 bearing_top    = _bearing_dummy(pancake_bearing_z0)
-# Back-axle bearing: in the pancake-plate -X extension's pocket, holding
-# the cable-retention guide axle.
-back_axle_bearing = _bearing_dummy(BACK_AXLE_BEARING_Z0).translate((BACK_AXLE_X, BACK_AXLE_Y, 0))
+# (Back-axle guide bearing removed — the -X extension is now a plain
+# rectangular prism with no bearing pocket.)
 
 
 # ── Brake pad rubber (dummy / visualization only) ─────────────────────
@@ -307,7 +305,8 @@ def _brake_pad_rubber():
     from .housing import BRAKE_INNER_TRAVEL_DEG, BRAKE_PIVOT_X
     from .levers import (
         BRAKE_LEVER_Y0, BRAKE_LEVER_Y1,
-        BRAKE_RUBBER_T, LEVER_Z_TOP, PAD_REST_LIFT,
+        BRAKE_RUBBER_T, LEVER_Z_TOP, PAD_BOT_DESIGN_Z,
+        PAD_PARALLEL_THETA_PULL_DEG,
     )
 
     y_near = BRAKE_LEVER_Y1
@@ -323,15 +322,10 @@ def _brake_pad_rubber():
     x_in_mid  = math.sqrt(r_in ** 2  - y_mid ** 2)
     x_out_mid = math.sqrt(r_out ** 2 - y_mid ** 2)
 
-    # Inverse-kinematic z of the printed pad's contact face at engaged
-    # (matches _brake_pad_contact's pad_bot_engaged_z exactly).
-    BRAKE_TRACK_Z = 0.0
-    _pad_inner_rest_z = BRAKE_TRACK_Z - PAD_REST_LIFT - BRAKE_RUBBER_T
-    _y_max_abs        = max(abs(y_near), abs(y_far))
-    _x_rel_corner     = math.sqrt(r_in ** 2 - _y_max_abs ** 2) - BRAKE_PIVOT_X
-    _theta            = math.radians(BRAKE_INNER_TRAVEL_DEG)
-    _z_rel = (_pad_inner_rest_z - LEVER_PIVOT_Z + _x_rel_corner * math.sin(_theta)) / math.cos(_theta)
-    rubber_bot_engaged_z = LEVER_PIVOT_Z + _z_rel
+    # Rubber sits on top of the printed pad's spool-facing face. Both share
+    # PAD_BOT_DESIGN_Z (derived from the matched-ROM constraint in
+    # src/lever_kinematics.py).
+    rubber_bot_engaged_z = PAD_BOT_DESIGN_Z
     rubber_top_engaged_z = rubber_bot_engaged_z + BRAKE_RUBBER_T
 
     rubber_solid = (
@@ -348,7 +342,17 @@ def _brake_pad_rubber():
     rubber_solid = rubber_solid.rotate(
         (BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z),
         (BRAKE_PIVOT_X, 1, LEVER_PIVOT_Z),
-        BRAKE_INNER_TRAVEL_DEG,
+        PAD_PARALLEL_THETA_PULL_DEG,
+    )
+
+    # Match the lever's rest-angle print pre-compensation so the rubber
+    # stays seated on the brake pad in the assembly (see _apply_rest_precomp
+    # in levers.py).
+    from .housing import LEVER_REST_PRECOMP_DEG
+    rubber_solid = rubber_solid.rotate(
+        (BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z),
+        (BRAKE_PIVOT_X, 1, LEVER_PIVOT_Z),
+        LEVER_REST_PRECOMP_DEG,
     )
 
     return rubber_solid

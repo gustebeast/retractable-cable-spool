@@ -75,7 +75,7 @@ SPINE_X_OUTER     = SPINE_X_INNER + HOUSING_SPINE_T     # 99.35
 #   - Pancake-side plate starts at PANCAKE_HOUSING_X_TAIL = -6: 2 mm past
 #     the axle hole's -x edge (axle radius 4 → -x edge at -4). Keeps the
 #     axle hole + cross-pin.
-LEVER_HOUSING_X_TAIL   = 57.0
+LEVER_HOUSING_X_TAIL   = 53.5
 PANCAKE_HOUSING_X_TAIL = -6.0
 
 # Lever pivot Z — paired with HOUSING_GAP_LEVER so the plate's inner
@@ -106,22 +106,21 @@ _LEVER_PIVOT_OFFSET_FROM_INNER = 8.13
 #     descends onto the brake ring. Pivot position TUNED for the
 #     handle-throw to match the ratchet's, paired with the chosen lever
 #     ratio.
-RATCHET_PIVOT_X   = 70.0   # was 76 — moved inboard to clear the new lever-side
-                           # guide bearing, which sits at x≈73..81 (between the
-                           # levers, riding on the brake track at z=0). Throw
-                           # ratio increases (handle/pawl ≈ 4.7 vs ~2.5 before),
-                           # i.e., the user moves the handle a bit more for the
-                           # same pawl rise. Kinematic match to the brake side
-                           # has shifted; revisit if engagement timing matters.
-BRAKE_PIVOT_X     = 62.0   # was 55 — moved to maintain the matched ROM
-                           # constraint when the ratchet pivot moved 76 → 70.
-                           # New ratio (pawl_arm / pad_arm = 9.55 / 11.5 = 0.83)
-                           # is the same +11% deviation from ideal that the
-                           # original (76, 55) design had, so engagement timing
-                           # feel matches the prior prototype. Engagement angle
-                           # is now ~9.5° vs the old ~6° (more lever throw to
-                           # the same engagement state, but ratchet/brake still
-                           # transition together).
+RATCHET_PIVOT_X   = 76.0   # Set by the A2 constraint: pawl must clear the
+                           # toothed swept-volume by ≥1 mm at full engagement
+                           # (RATCHET_OUTER_TRAVEL_DEG = 12°). The pawl's
+                           # outboard-near corner (largest x_rest in the pawl
+                           # top face) sets the worst case; with pawl r_out
+                           # = 65.5, that corner is at x ≈ 64.4, requiring
+                           # pivot_x ≥ 64.4 + 10.80 ≈ 75.2. 76 leaves a small
+                           # safety margin. See src/lever_kinematics.py for
+                           # the assertion that codifies this.
+BRAKE_PIVOT_X     = 58.5   # Set by the A3/A4 constraints (rest clearance and
+                           # full-pull overlap) combined with the A5 symmetric-
+                           # contact-tilt constraint. With A3=1.0 and A4=0.5 mm
+                           # and the pad's first-contact corner at x ≈ 65.33,
+                           # BRAKE_PIVOT_X ≤ ~58.8 is required; 58.5 leaves a
+                           # small arm margin so A4 passes comfortably.
 
 # Derived z-coordinates: LEVER side sits below the spool body (Z < 0),
 # PANCAKE side sits above (Z > SPOOL_H). _Z_IN is the spool-facing face
@@ -622,11 +621,13 @@ STOP_PIN_HOLE_D  = 2.0     # mm, through-hole in pin for the spring leg. Way
                            # peak adds STOP_PIN_HOLE_D/2 of length on top of
                            # that. Hole is perpendicular to pin axis, along
                            # the radial-from-pivot direction.
-STOP_PIN_H       = 3.0     # mm, y-extent. With LEVER_RIM_H = 4.5 mm gap,
-                           # each pin extends 3 mm from its own face into
-                           # the gap, leaving 1.5 mm of air between its tip
-                           # and the opposing surface. Pin overlap region
-                           # = 1.5 mm in the middle of the gap.
+STOP_PIN_H       = 3.5     # mm, y-extent. With LEVER_RIM_H = 4.5 mm gap,
+                           # each pin extends 3.5 mm from its own face into
+                           # the gap, leaving 1.0 mm of air between its tip
+                           # and the opposing surface (was 1.5 mm at 3.0).
+                           # Pin overlap region = 2·3.5 − 4.5 = 2.5 mm in the
+                           # middle of the gap (was 1.5 mm) — 1 mm more
+                           # contact surface, so the stop pins are stronger.
 STOP_PIN_R       = 6.0     # mm, radial offset from pivot. Pin inner edge at
                            # r=4 (= R − D/2) leaves 1 mm of clearance to the
                            # LEVER_PIVOT_BOSS_OD/2=3 spring-retention boss, so
@@ -683,11 +684,24 @@ STOP_HOUSING_PIN_ALPHA_BRAKE_DEG = (
     - _STOP_CONTACT_SEP_DEG
 )
 
+# Rest-angle print pre-compensation. The printed levers warp ~5° toward
+# their direction of motion (+z, handle up), so they sit ~5° above parallel
+# at rest. We pre-rotate the printed levers 5° the OTHER way (handle down,
+# which on the ratchet pushes the pawl slightly into the spool body in the
+# assembly) so the as-printed warp brings them back to true parallel. The
+# levers' SHAPE and all kinematics are still defined at the functional
+# (parallel) rest; this rotation is applied as a final step to the printed
+# solids (see levers.py) and the housing REST pins are shifted by the same
+# angle so they catch the pre-rotated lever pins at the pre-comp rest.
+LEVER_REST_PRECOMP_DEG = 5.0
+
 STOP_REST_PIN_ALPHA_RATCHET_DEG = (
     STOP_LEVER_PIN_ALPHA_RATCHET_DEG + _STOP_CONTACT_SEP_DEG
+    + LEVER_REST_PRECOMP_DEG
 )
 STOP_REST_PIN_ALPHA_BRAKE_DEG = (
     STOP_LEVER_PIN_ALPHA_BRAKE_DEG + _STOP_CONTACT_SEP_DEG
+    + LEVER_REST_PRECOMP_DEG
 )
 
 # ── Spring leg geometry (shared with viz.py) ───────────────────────────────
@@ -779,6 +793,14 @@ BRAKE_PIN_HOLE_BASE_CLR = STOP_PIN_HOLE_D / 2 + 0.4   # 0.9 mm — distance from
                                  # through-hole's centerline. Leaves 0.4 mm
                                  # of solid pin material between the hole's
                                  # far edge and the housing face.
+# 45° chamfer on the brake HOUSING (spring) pin's kitty corner (the corner
+# diagonally opposite the rounded, lever-facing corner). Without it the
+# pocket's kitty corner reaches z=-2.5, only 0.5 mm below the plate's
+# spool-facing face (z=-2). The corner sits at ~32.7° in world XZ, so a
+# chamfer leg c drops it by c·sin(32.7°)=0.54·c; c=0.925 mm drops it
+# 0.5 mm to z=-3.0, leaving 1 mm of wall. Applied to both the pin and its
+# housing pocket so the pin still fits.
+BRAKE_HOUSING_PIN_KITTY_CHAMFER = 0.925
 
 # Lever–housing gap. The torsion-spring coil itself acts as the spacer:
 # its body bears directly on the lever's bare-boss-stub stack and the
@@ -980,7 +1002,8 @@ def stop_pin_solid(pivot_x: float, alpha_deg: float,
 def stop_pin_hole(pivot_x: float, alpha_deg: float, hole_y: float,
                   cover_d: float = STOP_PIN_D,
                   teardrop: bool = False,
-                  hole_dir_alpha_deg: float | None = None) -> cq.Workplane:
+                  hole_dir_alpha_deg: float | None = None,
+                  extra_back: float = 0.0) -> cq.Workplane:
     """Diametral spring-leg through-hole CUTTER for a stop pin.
 
     Pin POSITION uses housing α convention `z = pivot_z − R sin α`,
@@ -1002,7 +1025,12 @@ def stop_pin_hole(pivot_x: float, alpha_deg: float, hole_y: float,
     sin_a = math.sin(alpha_rad)
     x = pivot_x + STOP_PIN_R * cos_a
     z = LEVER_PIVOT_Z - STOP_PIN_R * sin_a
-    hole_len = cover_d + 0.4
+    # `extra_back` (default 0) extends the cylinder ONLY on the start side
+    # (opposite of hole_dir) — useful for clearing extra material on the
+    # back side of the pin (e.g. a unioned pawl tab sitting just behind
+    # the pin in the spring-leg's entry path). The front (exit) side
+    # keeps the standard 0.2 mm overshoot.
+    hole_len = cover_d + 0.4 + extra_back
 
     if hole_dir_alpha_deg is None:
         hole_dir_alpha_deg = alpha_deg
@@ -1011,9 +1039,9 @@ def stop_pin_hole(pivot_x: float, alpha_deg: float, hole_y: float,
 
     if not teardrop:
         hole_start = cq.Vector(
-            x - (cover_d / 2 + 0.2) * rad_x,
+            x - (cover_d / 2 + 0.2 + extra_back) * rad_x,
             hole_y,
-            z - (cover_d / 2 + 0.2) * rad_z,
+            z - (cover_d / 2 + 0.2 + extra_back) * rad_z,
         )
         return cq.Workplane("XY").add(cq.Solid.makeCylinder(
             STOP_PIN_HOLE_D / 2, hole_len,
@@ -1122,7 +1150,8 @@ def pivot_boss_sector(pivot_x, y0, y1, alpha_lo_deg, alpha_hi_deg, *,
 def _stop_pin_support(pivot_x, alpha_deg, *, pin_z_sign=None,
                        trim_z_post=None, trim_keep_above=True,
                        neg_x_shift_local=None, pos_x_shift_local=None,
-                       rect_local=None):
+                       rect_local=None, support_d=None,
+                       rotation_alpha_deg=None):
     """Raised support ridge coaxial with a housing stop pin, spanning the
     full column y width.
 
@@ -1155,9 +1184,10 @@ def _stop_pin_support(pivot_x, alpha_deg, *, pin_z_sign=None,
     x = pivot_x + STOP_PIN_R * math.cos(alpha_rad)
     z = LEVER_PIVOT_Z - STOP_PIN_R * math.sin(alpha_rad)
     if pin_z_sign is None:
+        d = STOP_PIN_SUPPORT_D if support_d is None else support_d
         return (
             cq.Workplane("XY")
-            .circle(STOP_PIN_SUPPORT_D / 2)
+            .circle(d / 2)
             .extrude(HOUSING_W)
             .rotate((0, 0, 0), (1, 0, 0), -90)
             .translate((x, -HOUSING_W / 2, z))
@@ -1185,10 +1215,11 @@ def _stop_pin_support(pivot_x, alpha_deg, *, pin_z_sign=None,
             .lineTo(-boss_r + nx, -s * boss_r + nz)
             .close()
         )
+    rot = alpha_deg if rotation_alpha_deg is None else rotation_alpha_deg
     boss = (
         profile
         .extrude(HOUSING_W / 2, both=True)
-        .rotate((0, 0, 0), (0, 1, 0), alpha_deg)
+        .rotate((0, 0, 0), (0, 1, 0), rot)
         .translate((x, 0, z))
     )
     if trim_z_post is not None:
@@ -1213,7 +1244,8 @@ def _stop_pin_support(pivot_x, alpha_deg, *, pin_z_sign=None,
         boss = boss.cut(cutter)
     return boss
 
-def brake_pin_xz_profile(r: float, rounded_z_sign: int) -> cq.Workplane:
+def brake_pin_xz_profile(r: float, rounded_z_sign: int,
+                         kitty_chamfer: float = 0.0) -> cq.Workplane:
     """2D cross-section in the XZ plane: 2r×2r square with one corner
     rounded into a quarter-circle of radius r. Rounded corner sits at
     (-r, +r) for rounded_z_sign=+1 or (-r, -r) for rounded_z_sign=-1
@@ -1226,38 +1258,68 @@ def brake_pin_xz_profile(r: float, rounded_z_sign: int) -> cq.Workplane:
 
     Spring pin and rest pin sit on opposite sides of the lever pin's
     rest position, so they need rounded corners on opposite sides of
-    their respective local frames — modeled as separately-printed parts."""
+    their respective local frames — modeled as separately-printed parts.
+
+    kitty_chamfer (default 0): if > 0, applies a 45° chamfer of this leg
+    length at the corner DIAGONALLY OPPOSITE the rounded corner — i.e.
+    at (+r, -s·r). Used on the brake housing (spring) pin to trim the
+    corner that otherwise pokes within 0.5 mm of the housing's spool-
+    facing face, giving 1 mm of wall instead."""
     s = rounded_z_sign  # ±1
     sqrt2 = math.sqrt(2.0)
+    c = kitty_chamfer
     # Walk the boundary; cadquery doesn't care about CW/CCW orientation
     # for a single closed wire, so use a fixed walk pattern across both
     # signs of s.
+    if c <= 0.0:
+        return (
+            cq.Workplane("XZ")
+            .moveTo(+r, -s * r)
+            .lineTo(+r, +s * r)
+            .lineTo(0,  +s * r)                                  # tangent point on top edge
+            .threePointArc((-r / sqrt2, s * r / sqrt2), (-r, 0))  # rounded corner
+            .lineTo(-r, -s * r)
+            .close()
+        )
+    # Chamfered kitty corner: replace (+r, -s·r) with a 45° face running
+    # from (+r, -s·(r−c)) on the x=+r edge to (+r−c, -s·r) on the z=-s·r edge.
     return (
         cq.Workplane("XZ")
-        .moveTo(+r, -s * r)
+        .moveTo(+r, -s * (r - c))
         .lineTo(+r, +s * r)
         .lineTo(0,  +s * r)                                  # tangent point on top edge
         .threePointArc((-r / sqrt2, s * r / sqrt2), (-r, 0))  # rounded corner
         .lineTo(-r, -s * r)
+        .lineTo(+r - c, -s * r)                              # z=-s·r edge, stop short of kitty corner
+        .lineTo(+r, -s * (r - c))                            # 45° chamfer
         .close()
     )
 
 
-def _brake_hole_local(rounded_z_sign):
+def _brake_hole_local(rounded_z_sign, extra_depth=0.0, kitty_chamfer=0.0):
     """Housing-hole cutter in the same LOCAL frame as _brake_pin_local().
     Same square+rounded-corner profile as the pin, oversized in every
     direction by BRAKE_PIN_HOLE_CLR/2 (= 0.25 mm radial). Spans only the
     portion BURIED in the housing (insert shank); the exposed portion
-    doesn't exist in the hole."""
+    doesn't exist in the hole.
+
+    extra_depth (default 0) drills the pocket this much DEEPER than the
+    pin's insert shank. Use it for a pin that seats against an external
+    feature (e.g. the rest pin's spacer slab sitting flush on the
+    housing surface) rather than bottoming out at the end of the hole —
+    the extra depth guarantees the pin tip doesn't bottom first.
+
+    kitty_chamfer (default 0) applies the matching 45° chamfer at the
+    kitty corner (must match the pin's chamfer so the pin still fits)."""
     r       = STOP_PIN_D / 2 + BRAKE_PIN_HOLE_CLR / 2
     L_exp   = STOP_PIN_H
     L_ins   = BRAKE_PIN_INSERT_DEPTH
     eps     = 0.05
 
     return (
-        brake_pin_xz_profile(r, rounded_z_sign)
+        brake_pin_xz_profile(r, rounded_z_sign, kitty_chamfer=kitty_chamfer)
         # Negative extrude — see _brake_pin_local for the explanation.
-        .extrude(-(L_ins + eps))
+        .extrude(-(L_ins + eps + extra_depth))
         .translate((0, L_exp - eps, 0))
     )
 
@@ -1292,6 +1354,29 @@ def brake_pin_place(part: cq.Workplane,
             .rotate((0, 0, 0), (0, 1, 0), rotation_alpha)
             .translate((x_pin, y_tip, z_pin)))
 
+def _ratchet_housing_pin_bridge():
+    """Rectangular column connecting the ratchet HOUSING pin to the
+    lever-side plate. See call site for the rationale.
+
+    The column's x extents match the pin's x extents (essentially flush
+    on both sides) — a 0.005 mm offset avoids coincident-face boolean
+    failures with the cylindrical pin."""
+    alpha = math.radians(STOP_HOUSING_PIN_ALPHA_RATCHET_DEG)
+    pin_x = RATCHET_PIVOT_X + STOP_PIN_R * math.cos(alpha)
+    pin_z = LEVER_PIVOT_Z - STOP_PIN_R * math.sin(alpha)
+    flush_margin = 0.005      # essentially flush with the pin's x edges
+    x_lo = pin_x - (STOP_PIN_D / 2 + flush_margin)
+    x_hi = pin_x + (STOP_PIN_D / 2 + flush_margin)
+    z_top = _LEVER_PLATE_Z_IN                 # spool-facing face of plate
+    z_bot = pin_z                             # pin's center z — no -z waste
+    return (
+        cq.Workplane("XY").workplane(offset=z_bot)
+        .center((x_lo + x_hi) / 2, 0)
+        .box(x_hi - x_lo, HOUSING_W, z_top - z_bot,
+             centered=(True, True, False))
+    )
+
+
 def _build_housing_skeleton():
     """U-bracket + pivot bosses + stop pins + lever-pivot/cross-pin/mount
     holes. Guide-bearing area is added on top in ``_build_housing()`` once
@@ -1300,15 +1385,38 @@ def _build_housing_skeleton():
         # ── UNIONS FIRST ────────────────────────────────────────────────────
         top_plate.union(bot_plate).union(spine)
         .union(_back_axle_narrow_plate())
-        # Support bosses around each housing stop pin (full housing y width).
-        .union(_stop_pin_support(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG))
-        # Top (spring pin) boss: axis-aligned rectangle in the boss's local
-        # frame. -X wall is "inside housing", extended 0.110 mm outward in
-        # local (= 0.1 mm in world toward the axle hole). Other 3 walls at
-        # ±3.05 in local — 0.8 mm wall thickness around the 4.5 mm pin hole.
+        # Support boss for the ratchet HOUSING pin. The pin sits at STOP_PIN_R
+        # from the pivot, outside the regular plate footprint, so it needs the
+        # boss to connect it to the housing. Sized 0.01 mm beyond STOP_PIN_D
+        # so the boss is essentially flush with the 4 mm pin — the tiny
+        # offset avoids a coincident-face boolean failure when the two
+        # cylinders union along their shared y-overlap region.
+        .union(_stop_pin_support(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG,
+                                 support_d=STOP_PIN_D + 0.01))
+        # Bridging column between the ratchet HOUSING pin and the lever-side
+        # plate above it. The pin sits at z ≈ -14.79, mostly below the plate's
+        # outer face (z = -13), so it's only weakly attached. A rectangular
+        # column from the pin's CENTER z up to the plate's spool-facing face,
+        # spanning the pin's x extent + 1 mm of side margin, fills the gap
+        # in +z (between pin and plate) without adding waste material in -z
+        # (below the pin). Full housing y width so the column thickens the
+        # plate locally across the housing width.
+        .union(_ratchet_housing_pin_bridge())
+        # Top (spring pin) boss: default brake_pin_xz_profile at boss_r =
+        # STOP_PIN_D/2 + STOP_PIN_BOSS_WALL_T (= 3.0 mm OD). Rotation must
+        # match the POCKET's rotation (which is rotated to align with the
+        # spring leg's tangent, not the pin's radial α) — otherwise the
+        # boss's rounded-corner orientation no longer aligns with the
+        # pocket's, leaving a sliver crack and a misaligned bump.
+        # trim_z_post=_LEVER_PLATE_Z_IN clips the ~0.675 mm of boss that
+        # would otherwise poke above the plate's spool-facing face into
+        # the spool/housing gap.
         .union(_stop_pin_support(BRAKE_PIVOT_X,   STOP_HOUSING_PIN_ALPHA_BRAKE_DEG,
                                  pin_z_sign=-1,
-                                 rect_local=(6.287, 6.10, -0.0935, 0.0)))
+                                 rotation_alpha_deg=spring_leg_hole_dir_alpha_deg(
+                                     BRAKE_HOUSING_LEG_ALPHA_DEG),
+                                 trim_z_post=_LEVER_PLATE_Z_IN,
+                                 trim_keep_above=False))
         # Second support boss for the REST pin on each pivot.
         .union(_stop_pin_support(RATCHET_PIVOT_X, STOP_REST_PIN_ALPHA_RATCHET_DEG))
         # Bottom (rest pin) boss: -X wall stays housing-flush. Local +Z
@@ -1317,6 +1425,15 @@ def _build_housing_skeleton():
         .union(_stop_pin_support(BRAKE_PIVOT_X,   STOP_REST_PIN_ALPHA_BRAKE_DEG,
                                  pin_z_sign=+1,
                                  rect_local=(7.88, 6.315, -0.89, +0.1075)))
+        # Brake pivot reinforcement: thin full-disc boss around the M2 hole
+        # at the brake pivot. The lever-side plate is otherwise unreinforced
+        # at the brake pivot, so a 1 mm wall of extra material around the
+        # insert-pilot Ø ensures sufficient support for the press-fit insert.
+        .union(pivot_boss_sector(BRAKE_PIVOT_X,
+                                  -HOUSING_W / 2,
+                                  +HOUSING_W / 2,
+                                  0.0, 360.0,
+                                  od=M2_INSERT_PILOT_D + 2.0))
         # Ratchet housing stop pins (printed in-place).
         .union(stop_pin_solid(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG,
                                HOUSING_W / 2 - _PIN_BOSS_OVERLAP,
@@ -1378,15 +1495,19 @@ def _build_housing_skeleton():
         # tangent direction (rather than the pin's radial direction)
         # so the leg slides cleanly through the pin's diametral hole.
         .cut(brake_pin_place(
-            _brake_hole_local(rounded_z_sign=-1),
+            _brake_hole_local(rounded_z_sign=-1,
+                              kitty_chamfer=BRAKE_HOUSING_PIN_KITTY_CHAMFER),
             rotation_alpha=spring_leg_hole_dir_alpha_deg(BRAKE_HOUSING_LEG_ALPHA_DEG)))
+        # Rest pin pocket depth matches the insert shank so the pin bottoms
+        # out at the END OF THE HOLE during install — the hole end takes the
+        # press-in load, NOT the spacer slab/ring (an earlier 1 mm-deeper
+        # pocket let the ring take the load and it snapped off).
         .cut(brake_pin_place(_brake_hole_local(rounded_z_sign=+1),
                               alpha=STOP_REST_PIN_ALPHA_BRAKE_DEG))
         # Ratchet spring-leg through-hole (cut AFTER the support boss
         # exists so the hole spans the full STOP_PIN_SUPPORT_D).
         .cut(stop_pin_hole(RATCHET_PIVOT_X, STOP_HOUSING_PIN_ALPHA_RATCHET_DEG,
                             hole_y=+(HOUSING_W / 2 + STOP_PIN_HOLE_OFFSET),
-                            cover_d=STOP_PIN_SUPPORT_D,
                             hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(
                                 RATCHET_HOUSING_LEG_ALPHA_DEG)))
         # Axle cross-pin hole — pancake side only. The lever-side cross-pin
@@ -1395,11 +1516,8 @@ def _build_housing_skeleton():
         # already constrained on the lever side by the bottom 608 bearing.
         .cut(_axle_pin_clearance(PANCAKE_CROSS_PIN_Z))
         .cut(_axle_pin_insert_pilot(PANCAKE_CROSS_PIN_Z, insert_face_sign=+1))
-        # Back-axle sliding mortise + the 45° self-support wedges added
-        # back inside it + clamp-screw cuts in the -X extension.
-        .cut(_back_axle_mortise())
-        .union(_back_axle_mortise_supports())
-        .cut(_back_axle_clamp_cuts())
+        # (Back-axle guide bearing removed — the -X extension stays a plain
+        # rectangular prism for now: no mortise, clamp cuts, or M2 hole.)
         # Pancake cross-pin head counterbore (LAST so boss material in its
         # volume is removed). Insert on +Y, head on -Y (flipped from the
         # original).
@@ -1410,22 +1528,9 @@ def _build_housing_skeleton():
 # guide-bearing (housing_guide.py) + lever-side guide-bearing
 # (housing_lever_guide.py).
 def _build_housing():
-    from . import housing_guide, housing_lever_guide
     h = _build_housing_skeleton()
-    h = housing_guide.apply_to_housing(h)
-    h = housing_lever_guide.apply_to_housing(h)
-    # The lever-side inboard slab finger spans x=69.5..73.5 and is unioned
-    # AFTER the lever-pivot M2 hole was cut by the skeleton. The finger
-    # therefore re-fills the ratchet pivot hole at x=70. Re-cut the pivot
-    # clearance + insert pilot so the M2 lever screw can pass.
-    h = h.cut(_pivot_clearance(RATCHET_PIVOT_X))
-    h = h.cut(_pivot_insert_pilot(RATCHET_PIVOT_X, insert_face_sign=+1))
-    # Drill the guide-wheel axle access channels LAST — Ø MOUNT_HEAD_HOLE_D
-    # bores from the +X face all the way back to each wheel's outboard
-    # slab face. Cut here (not inside apply_to_housing) so the subsequent
-    # plate / spine / boss unions don't fill the holes back in.
-    h = h.cut(housing_guide.axle_access_channel(), clean=False)
-    h = h.cut(housing_lever_guide.axle_access_channel(), clean=False)
+    # (Pancake + lever-side guide wheels removed — no wheel pockets, hubs,
+    # M2 wheel-axle holes, or +X access channels.)
     # Carve the mount-bracket pocket (top + side chunks + connecting
     # strip groove + M2 head pockets on the -Y outer face). The bracket
     # is a separately-printed part.

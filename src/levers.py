@@ -18,12 +18,16 @@ from .dimensions import (
     SPOKE_W, SPOOL_H, STRUCT_WALL,
 )
 from .helpers import cyl, cone_solid, heal, ratchet_cutter
+from .lever_kinematics import (
+    assert_kinematics, pad_design_bot_z, theta_pawl_just_clears,
+    theta_brake_first_contact, pad_parallel_prerot_symmetric_contact,
+)
 from .housing import (
     BRAKE_BOSS_EXT_ALPHA_HI, BRAKE_BOSS_EXT_ALPHA_LO,
     BRAKE_INNER_TRAVEL_DEG, BRAKE_LEVER_BOSS_EXTENSION,
     BRAKE_LEVER_LEG_ALPHA_DEG, BRAKE_PIVOT_X,
     HOUSING_W,
-    LEVER_PIVOT_BOSS_OD, LEVER_PIVOT_Z, LEVER_RIM_H,
+    LEVER_PIVOT_BOSS_OD, LEVER_PIVOT_Z, LEVER_REST_PRECOMP_DEG, LEVER_RIM_H,
     LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END,
     RATCHET_BOSS_EXT_ALPHA_HI, RATCHET_BOSS_EXT_ALPHA_LO,
     RATCHET_LEVER_BOSS_EXTENSION, RATCHET_LEVER_LEG_ALPHA_DEG,
@@ -103,7 +107,9 @@ LEVER_HANDLE_TRAVEL_MAX = 8.12                          # max handle z-travel fr
 BRAKE_RUBBER_T         = 3.3
 
 LEVER_W              = 11.0    # grip width, perpendicular to pull (in y)
-LEVER_T              =  2.0    # thickness in z (swing plane direction)
+LEVER_T              =  4.0    # thickness in z (swing plane direction).
+                               # Centered on LEVER_PIVOT_Z, so lever spans
+                               # [LEVER_PIVOT_Z − 2, LEVER_PIVOT_Z + 2].
 LEVER_PIVOT_HOLE_D   = M2_SHAFT_CLR_D    # M2 shaft clearance (shared)
 LEVER_Z_CENTER       = LEVER_PIVOT_Z                 # 53
 LEVER_Z_BOT          = LEVER_Z_CENTER - LEVER_T / 2  # 52 (lever body bottom)
@@ -131,11 +137,11 @@ BRAKE_LEVER_Y0       = BRAKE_LEVER_Y1 - LEVER_W      # -23
 #   Both handles extend LEVER_GRIP_OVERHANG past the housing spine for
 #     a consistent grip distance regardless of housing/spool diameter.
 LEVER_GRIP_OVERHANG          = 25.0     # mm past spine for the user grip
-RATCHET_LEVER_PAWL_OVERHANG  = 2.0      # mm of lever body past pawl inner corner
+# The ratchet lever's inboard edge follows the pawl's inner-radius arc
+# (r = FLANGE_INNER_ID/2) — no straight-line overhang past the pawl.
 _RATCHET_PAWL_X_INNER        = math.sqrt(
     (FLANGE_INNER_ID / 2) ** 2 - RATCHET_LEVER_Y1 ** 2
 )
-RATCHET_LEVER_X_PAWL_SIDE = _RATCHET_PAWL_X_INNER - RATCHET_LEVER_PAWL_OVERHANG
 RATCHET_LEVER_X_HANDLE    = SPINE_X_INNER + LEVER_GRIP_OVERHANG
 BRAKE_LEVER_X_HANDLE      = SPINE_X_INNER + LEVER_GRIP_OVERHANG
 
@@ -145,6 +151,29 @@ def _lever_body(x0, x1, y0, y1):
         cq.Workplane("XY").workplane(offset=LEVER_Z_BOT)
         .center((x0 + x1) / 2, (y0 + y1) / 2)
         .box(x1 - x0, y1 - y0, LEVER_T, centered=(True, True, False))
+    )
+
+def _ratchet_lever_body(x_handle, y0, y1):
+    """Ratchet lever body — like _lever_body but with the inboard edge
+    following the pawl's r_in arc instead of a straight chord. This
+    eliminates the small sliver of lever body that used to extend
+    inboard of the pawl footprint as a straight overhang."""
+    r_in = FLANGE_INNER_ID / 2
+    y_near = y0 if abs(y0) < abs(y1) else y1
+    y_far  = y1 if abs(y0) < abs(y1) else y0
+    x_in_near = math.sqrt(r_in ** 2 - y_near ** 2)
+    x_in_far  = math.sqrt(r_in ** 2 - y_far ** 2)
+    y_mid     = (y_near + y_far) / 2
+    x_in_mid  = math.sqrt(r_in ** 2 - y_mid ** 2)
+    return (
+        cq.Workplane("XY").workplane(offset=LEVER_Z_BOT)
+        .moveTo(x_in_near, y_near)
+        .lineTo(x_handle,  y_near)
+        .lineTo(x_handle,  y_far)
+        .lineTo(x_in_far,  y_far)
+        .threePointArc((x_in_mid, y_mid), (x_in_near, y_near))
+        .close()
+        .extrude(LEVER_T)
     )
 
 def _lever_pivot_hole(pivot_x, y_start, y_end):
@@ -202,10 +231,13 @@ def _lever_pivot_boss(pivot_x, y0, y1, *, od=LEVER_PIVOT_BOSS_OD):
 # sawtooth top surface, so the pawl nests into every valley it covers
 # (providing the catch face at each tooth drop) and skims every tip it
 # covers.
-PAWL_BRAKE_GAP = 1.5    # radial gap between pawl outer edge and brake
-                        # surface inner edge. Prevents pawl from dragging
-                        # on the brake ring if there's any side play in
-                        # the pivot / lever bearing.
+PAWL_BRAKE_GAP = 5.0    # radial gap between pawl outer edge and brake
+                        # surface inner edge. Bumped from 1.5 to 5.0 so the
+                        # pawl radial thickness is 2 mm (r=63.5..65.5),
+                        # matching the lever body's 2 mm Z thickness. The
+                        # narrower pawl's outboard corner drops far enough
+                        # on engagement to clear the swept tooth volume by
+                        # ≥1mm with RATCHET_PIVOT_X moved outboard (>=75.2).
 
 # ── Dynamic ratchet tooth phase ──────────────────────────────────────────────
 # Center a tooth boundary (HIGH→LOW step) at the angular midpoint of the
@@ -355,24 +387,17 @@ def _build_top_merged_slot():
 
 
 def apply_to_main_body(main_body: cq.Workplane) -> cq.Workplane:
-    """Apply the lever-dependent cuts to the main spool body: ratchet
-    teeth (phase aligned with the ratchet pawl footprint), the drum-
-    wall cable-transit slot, and the cable-entry slot through the
-    hub wall. Returns the modified body."""
-    main_body = main_body.cut(
-        ratchet_cutter(RATCHET_TEETH,
-                       r_in=FLANGE_INNER_ID / 2,
-                       r_out=FLANGE_RIM_MID_R,
-                       z_top=RATCHET_DEPTH,
-                       depth=RATCHET_DEPTH,
-                       theta_offset_deg=RATCHET_TOOTH_OFFSET_DEG)
-    )
-    # Heal between the ratchet cut and the transit-slot cut — the slot
-    # passes through the spool's groove-relieved drum wall, whose geometry
-    # is valid but fragile, and the cut otherwise silently no-ops.
-    main_body = heal(main_body)
-    main_body = main_body.cut(_build_top_merged_slot())
-    main_body = main_body.cut(_build_entry_hole())
+    """No lever-dependent cuts on the spool body for now.
+
+    PANCAKE REWRITE: the ratchet teeth used to be cut into the lever
+    flange's bottom face at the old flange radii. With the ratchet/brake
+    moving to the cable rim's OUTER cylindrical face (radial load), the
+    teeth will be re-added there during the lever rework. Cutting them at
+    the old radii now would just carve a stray toothed ring into the new
+    cable-channel floor, so it's disabled until the rework.
+
+    The drum-wall cable-transit slot and the hub-wall cable-entry slot are
+    also gone (no drum); the cable path will be set by the Part-2 plates."""
     return main_body
 
 def _ratchet_pawl_contact(y_near, y_far):
@@ -418,8 +443,8 @@ def _ratchet_pawl_contact(y_near, y_far):
 
 def _build_ratchet_lever():
     return (
-        _lever_body(RATCHET_LEVER_X_PAWL_SIDE, RATCHET_LEVER_X_HANDLE,
-                    RATCHET_LEVER_Y0, RATCHET_LEVER_Y1)
+        _ratchet_lever_body(RATCHET_LEVER_X_HANDLE,
+                            RATCHET_LEVER_Y0, RATCHET_LEVER_Y1)
         .union(_ratchet_pawl_contact(RATCHET_LEVER_Y0, RATCHET_LEVER_Y1))
         # Pivot boss extension into the gap — FULL DISC around the pivot.
         # Sector trim no longer needed: with STOP_PIN_R=6 the pin inner
@@ -442,7 +467,8 @@ def _build_ratchet_lever():
                                RATCHET_LEVER_Y1))
         .cut(stop_pin_hole(RATCHET_PIVOT_X, STOP_LEVER_PIN_ALPHA_RATCHET_DEG,
                             hole_y=+((LEVER_INNER_Y - STOP_PIN_H)
-                                     + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END),
+                                     + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END)
+                                  - 0.344,
                             teardrop=False,
                             hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(
                                 RATCHET_LEVER_LEG_ALPHA_DEG)))
@@ -461,6 +487,62 @@ def _build_ratchet_lever():
 #     so the pad exactly fills the lever-aligned strip of the brake surface.
 #   - Bottom face sits at z = SPOOL_H (flat on the brake ring).
 #   - Top face at LEVER_Z_BOT (arm connection in the next subtask).
+
+# ── Kinematic linkage: matched-ROM (A1) and pawl-clearance (A2) ─────────────
+# Compute θ_match (the lever throw at which the ratchet pawl's worst-case
+# top corner just clears the tooth tip), then derive the brake pad's
+# design-pose z so the pad rubber-top's first-contact corner reaches the
+# track AT exactly that same θ_match. Both values feed _brake_pad_contact
+# below, and are checked at module load by assert_kinematics (which also
+# enforces A2: pawl clears tooth swept-volume by ≥1mm at full pull).
+PAWL_R_OUT       = FLANGE_RIM_MID_R - PAWL_BRAKE_GAP
+# θ_match is the lever throw at which the ratchet pawl's worst corner
+# just clears the tooth tip. Kept for INFORMATIONAL use (e.g. in build.py's
+# LEVERS_POSE = "match" pose) but no longer drives the brake pad pose
+# since A1 (matched ROM) has been relaxed in favor of independent rest /
+# full-pull clearance constraints (A3 / A4).
+THETA_MATCH_DEG  = theta_pawl_just_clears(
+    pawl_y_near=RATCHET_LEVER_Y0,
+    pawl_r_out=PAWL_R_OUT,
+)
+assert THETA_MATCH_DEG is not None, (
+    "Ratchet pawl never clears the tooth tip within the rotation search "
+    "range. Geometry is broken — check RATCHET_PIVOT_X and pawl extents."
+)
+# Pad orientation: build the pad flat at the midpoint of the brake's
+# CONTACT range [θ_brake_contact, TRAVEL] rather than the midpoint of
+# the full lever travel. This minimizes the maximum tilt of the pad
+# DURING CONTACT — pad tilts by +(TRAVEL−θ_bc)/2 at first contact and
+# by −(TRAVEL−θ_bc)/2 at full pull (symmetric, smaller magnitude than
+# a "midpoint of [0, TRAVEL]" choice would give at full pull). Solved
+# iteratively because θ_bc itself depends on the pad pose.
+PAD_PARALLEL_THETA_PULL_DEG = pad_parallel_prerot_symmetric_contact(
+    pad_y_near=BRAKE_LEVER_Y1, pad_y_far=BRAKE_LEVER_Y0,
+    rubber_t=BRAKE_RUBBER_T,
+)
+PAD_BOT_DESIGN_Z = pad_design_bot_z(
+    pad_y_near=BRAKE_LEVER_Y1,
+    pad_y_far=BRAKE_LEVER_Y0,
+    rubber_t=BRAKE_RUBBER_T,
+    prerot_deg=PAD_PARALLEL_THETA_PULL_DEG,
+)
+assert_kinematics(
+    pawl_y_near=RATCHET_LEVER_Y0, pawl_y_far=RATCHET_LEVER_Y1,
+    pawl_r_out=PAWL_R_OUT,
+    pad_y_near=BRAKE_LEVER_Y1, pad_y_far=BRAKE_LEVER_Y0,
+    rubber_t=BRAKE_RUBBER_T,
+    pad_bot_design_z=PAD_BOT_DESIGN_Z,
+    prerot_deg=PAD_PARALLEL_THETA_PULL_DEG,
+)
+# θ at which the brake pad's first-contact corner just touches the brake
+# track. With A1 relaxed this no longer equals THETA_MATCH_DEG.
+THETA_BRAKE_CONTACT_DEG = theta_brake_first_contact(
+    pad_y_near=BRAKE_LEVER_Y1, pad_y_far=BRAKE_LEVER_Y0,
+    rubber_t=BRAKE_RUBBER_T,
+    prerot_deg=PAD_PARALLEL_THETA_PULL_DEG,
+    pad_bot_design_z=PAD_BOT_DESIGN_Z,
+)
+
 
 def _brake_pad_contact(y_near, y_far):
     """Pad carved from the brake annulus by the strip y ∈ [y_far, y_near]
@@ -492,25 +574,16 @@ def _brake_pad_contact(y_near, y_far):
     y_mid = (y_near + y_far) / 2
     x_in_mid  = math.sqrt(r_in**2  - y_mid**2)
     x_out_mid = math.sqrt(r_out**2 - y_mid**2)
-    # ENGAGED-pose pad: built at the pose where the brake is fully engaged
-    # — class-2 lever rises to engage, rubber's TOP touches the lever-side
-    # flange BOTTOM (brake track at z=0). Then rotated +BRAKE_INNER_TRAVEL_DEG
-    # around the brake pivot to get the REST pose.
-    #
-    # Tuned so that at REST (post-rotation), the pad's CORNER closest to
-    # the track has rubber-top-to-track clearance = PAD_REST_LIFT — i.e.,
-    # the brake just-touches at the same lever throw the ratchet just-
-    # clears (matched ROM). The +12° rotation tilts the inboard / -X end
-    # of the pad UP, so the spool-facing peak is at the pad's inner arc
-    # at the y with largest magnitude. That x value is the relevant
-    # x_rel for the matched-ROM constraint.
-    BRAKE_TRACK_Z = 0.0
-    _pad_inner_rest_z = BRAKE_TRACK_Z - PAD_REST_LIFT - BRAKE_RUBBER_T
-    _y_max_abs        = max(abs(y_near), abs(y_far))
-    _x_rel_corner     = math.sqrt(r_in ** 2 - _y_max_abs ** 2) - BRAKE_PIVOT_X
-    _theta            = math.radians(BRAKE_INNER_TRAVEL_DEG)
-    _z_rel = (_pad_inner_rest_z - LEVER_PIVOT_Z + _x_rel_corner * math.sin(_theta)) / math.cos(_theta)
-    pad_bot_engaged_z = LEVER_PIVOT_Z + _z_rel
+    # DESIGN-pose pad: built flat at the engaged design pose. Its
+    # spool-facing-face z is DERIVED from the matched-ROM constraint —
+    # see src/lever_kinematics.py: the pad rubber-top's first-contact
+    # corner is solved to reach the brake track (z=0) at exactly the
+    # lever throw θ_match where the ratchet pawl's worst corner just
+    # clears the tooth tip (z=0). At θ_pull > θ_match the rubber
+    # compresses uniformly into the track. Pre-rotation by
+    # +BRAKE_INNER_TRAVEL_DEG around the brake pivot takes design → rest
+    # pose (the print pose).
+    pad_bot_engaged_z = PAD_BOT_DESIGN_Z
     # Extend the top past LEVER_Z_TOP so the rotated solid still
     # interpenetrates the lever body (its inner face is at LEVER_Z_TOP and
     # the rotated pad top is tilted; we need the union to absorb the
@@ -526,13 +599,14 @@ def _brake_pad_contact(y_near, y_far):
         .close()
         .extrude(pad_top_engaged_z - pad_bot_engaged_z)
     )
-    # Rotate -BRAKE_INNER_TRAVEL_DEG around the brake pivot's Y axis to
-    # get the REST pose (the print pose). Engagement applies the
-    # opposite rotation, returning the pad to the engaged design pose.
+    # Pre-rotate +PAD_PARALLEL_THETA_PULL_DEG around the brake pivot's Y axis
+    # to get the REST pose (the print pose). Assembly rotation -θ_pull from
+    # rest reaches the design (flat/parallel) pose at θ_pull =
+    # PAD_PARALLEL_THETA_PULL_DEG — midway through the contact region.
     pad_solid = pad_solid.rotate(
         (BRAKE_PIVOT_X, 0, LEVER_PIVOT_Z),
         (BRAKE_PIVOT_X, 1, LEVER_PIVOT_Z),
-        BRAKE_INNER_TRAVEL_DEG,
+        PAD_PARALLEL_THETA_PULL_DEG,
     )
     # The rotation tilts the pad's top face (originally at LEVER_Z_BOT +
     # 5 mm so the boolean union with the lever body would still
@@ -569,7 +643,8 @@ def _build_brake_lever():
                                -LEVER_INNER_Y + STOP_PIN_H))
         .cut(stop_pin_hole(BRAKE_PIVOT_X, STOP_LEVER_PIN_ALPHA_BRAKE_DEG,
                             hole_y=-((LEVER_INNER_Y - STOP_PIN_H)
-                                     + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END),
+                                     + LEVER_STOP_PIN_HOLE_Y_FROM_GAP_END)
+                                  + 0.344,
                             teardrop=False,
                             hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(
                                 BRAKE_LEVER_LEG_ALPHA_DEG)))
@@ -579,5 +654,18 @@ def _build_brake_lever():
     )
 
 
-ratchet_lever = _build_ratchet_lever()
-brake_lever   = _build_brake_lever()
+def _apply_rest_precomp(part, pivot_x):
+    """Rotate a finished lever by +LEVER_REST_PRECOMP_DEG about its pivot
+    (handle down / pawl into the spool) — the print warp pre-compensation.
+    Applied AFTER the lever shape and all kinematics are defined in the
+    functional (parallel) frame, so it doesn't feed back into the A2-A5
+    constraints; it only pre-tilts the printed solid."""
+    return part.rotate(
+        (pivot_x, 0, LEVER_PIVOT_Z),
+        (pivot_x, 1, LEVER_PIVOT_Z),
+        LEVER_REST_PRECOMP_DEG,
+    )
+
+
+ratchet_lever = _apply_rest_precomp(_build_ratchet_lever(), RATCHET_PIVOT_X)
+brake_lever   = _apply_rest_precomp(_build_brake_lever(),   BRAKE_PIVOT_X)
