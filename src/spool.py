@@ -184,16 +184,19 @@ def _hub_key_bumps():
 def _lever_rim():
     """Bottom cable rim — the RIM_H-tall outer wall only (NO floor disc; the
     spokes carry the hub↔rim connection). Its 14 mm height splits into:
-      - bottom 7 mm: SMOOTH brake band (RIM_ID..RIM_OD), and
-      - top 7 mm: cylindrical RATCHET teeth on the outer face.
-    Cable winds in the hub→RIM_ID channel, resting on the spoke grid."""
-    z_mid = RIM_H / 2                                    # 7 — brake/ratchet split
+      - bottom 7 mm: cylindrical RATCHET teeth on the outer face, and
+      - top 7 mm: SMOOTH brake band (RIM_ID..RIM_OD).
+    Bands swapped (ratchet low, brake high) so the brake lever's pivot —
+    which must sit BELOW its band — lands above the spool bottom instead of
+    being dragged negative, keeping the levers/housing from hanging as far
+    below the spool. Cable winds in the hub→RIM_ID channel on the spoke grid."""
+    z_mid = RIM_H / 2                                    # 7 — ratchet/brake split
+    ratchet = _cyl_ratchet_band(0.0, z_mid)             # teeth on the bottom 7 mm
     brake = (
-        cyl(RIM_OD, z_mid, z=0)
-        .cut(cyl(RIM_ID, z_mid, z=0))
+        cyl(RIM_OD, RIM_H - z_mid, z=z_mid)
+        .cut(cyl(RIM_ID, RIM_H - z_mid, z=z_mid))
     )
-    ratchet = _cyl_ratchet_band(z_mid, RIM_H)            # teeth on the top 7 mm
-    return brake.union(ratchet)
+    return ratchet.union(brake)
 
 
 # Top rim cap — re-added AFTER the helix cut so the helix's topmost turn

@@ -19,7 +19,7 @@ cuts teeth into the body — apply_to_main_body is a no-op pass-through.
 import math
 import cadquery as cq
 
-from .spool import RIM_OD, RIM_H
+from .spool import RIM_OD, RIM_H, _cyl_ratchet_band
 from .lever_kinematics import assert_kinematics, R_ROOT
 from .housing import (
     HOUSING_W, LEVER_RIM_H, LEVER_PIVOT_BOSS_OD,
@@ -41,8 +41,13 @@ RATCHET_Y0, RATCHET_Y1 = LEVER_INNER_Y, LEVER_INNER_Y + LEVER_T   #  15.5 .. 19.
 BRAKE_Y1,  BRAKE_Y0    = -LEVER_INNER_Y, -LEVER_INNER_Y - LEVER_T # -15.5 .. -19.5
 
 ARM_W        = 8.0        # width of the lever arms in the swing (X-Z) plane
-HANDLE_Z_BOT = -26.0      # common grab height for both handles (raised from -38
-                          # to reduce how far the levers hang below the spool)
+GRIP_W       = 15.0       # width of the rounded handle paddle (X-Z) at the grab end
+HANDLE_Z_BOT = -19.0      # common grab height for both handles. Raised again
+                          # (was -26) thanks to the ratchet/brake band swap,
+                          # which lifts the brake pivot above the spool bottom.
+PAWL_MESH_CLR_DEG = 0.6   # tangential backlash: the rim-tooth cutter is also
+                          # applied ±this so the pawl's meshing faces aren't a
+                          # zero-clearance press fit (lets it click/seat)
 
 R_RIM        = RIM_OD / 2                        # 57.2 — brake-band / tooth-tip radius
 
@@ -86,6 +91,36 @@ def _arc_strip(r_in, r_out, y_near, y_far, z_lo, z_hi):
             .extrude(z_hi - z_lo))
 
 
+def _handle_paddle(pivot_x, pivot_z, y0, y1):
+    """Handle: tapers from ARM_W at the pivot to GRIP_W at the grab end, with a
+    rounded (semicircular) bottom — a comfortable pull-tab. Flat extrusion in
+    Y, so it prints clean lying on its side."""
+    hw_top = ARM_W / 2
+    hw_bot = GRIP_W / 2
+    z_arc = HANDLE_Z_BOT + hw_bot          # center of the bottom semicircle
+    return (cq.Workplane("XZ")
+            .moveTo(pivot_x - hw_top, pivot_z)
+            .lineTo(pivot_x - hw_bot, z_arc)
+            .threePointArc((pivot_x, HANDLE_Z_BOT), (pivot_x + hw_bot, z_arc))
+            .lineTo(pivot_x + hw_top, pivot_z)
+            .close()
+            .extrude(-(y1 - y0)).translate((0, y0, 0)))
+
+
+def _mesh_pawl(r_in, r_out, y_near, y_far, z_lo, z_hi):
+    """Ratchet pawl: an arc block whose rim-facing region is carved by the
+    actual rim teeth (± PAWL_MESH_CLR_DEG of backlash) so it meshes — its
+    inner face becomes the negative sawtooth that seats onto the rim teeth.
+    Because the rim teeth are an asymmetric sawtooth (radial catch face + ramp),
+    the meshed pawl LOCKS the unwind direction and CLICKS over the other."""
+    block = _arc_strip(r_in, r_out, y_near, y_far, z_lo, z_hi)
+    teeth = _cyl_ratchet_band(z_lo - 0.2, z_hi + 0.2)
+    cutter = teeth
+    for d in (PAWL_MESH_CLR_DEG, -PAWL_MESH_CLR_DEG):
+        cutter = cutter.union(teeth.rotate((0, 0, 0), (0, 0, 1), d))
+    return block.cut(cutter)
+
+
 def _pivot_hole(pivot_x, pivot_z, y0, y1):
     """M2 shaft clearance along the pivot axis (Y), with overshoot."""
     return (cq.Workplane("XY").circle(M2_SHAFT_CLR_D / 2)
@@ -113,9 +148,9 @@ def _lever_stop_pin_and_hole(part, pivot_x, pivot_z, lever_alpha, y_inner,
 
 
 # ── Ratchet lever ────────────────────────────────────────────────────────────
-# Pawl is an arc strip spanning the teeth band (z=7..14); its inner face seats
-# at the tooth valley (R_ROOT) so it nests against a catch face at rest.
-PAWL_Z_LO, PAWL_Z_HI = RIM_H / 2, RIM_H          # 7 .. 14
+# Pawl is an arc strip spanning the teeth band (now the BOTTOM 7 mm, z=0..7);
+# its inner face meshes with the rim teeth.
+PAWL_Z_LO, PAWL_Z_HI = 0.0, RIM_H / 2            # 0 .. 7
 PAWL_Y_MID = (RATCHET_Y0 + RATCHET_Y1) / 2       # 17.5
 PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2         # 10.5
 _PAWL_R_IN  = R_ROOT                             # 55.7 — seats in the valley
@@ -127,10 +162,9 @@ def _build_ratchet_lever():
     arm    = _bar(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
                   _RATCHET_CONTACT_X, PAWL_Z_MID, ARM_W,
                   RATCHET_Y0, RATCHET_Y1)
-    handle = _bar(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-                  RATCHET_PIVOT_X, HANDLE_Z_BOT, ARM_W,
-                  RATCHET_Y0, RATCHET_Y1)
-    pawl   = _arc_strip(_PAWL_R_IN, _PAWL_R_OUT, RATCHET_Y0, RATCHET_Y1,
+    handle = _handle_paddle(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
+                            RATCHET_Y0, RATCHET_Y1)
+    pawl   = _mesh_pawl(_PAWL_R_IN, _PAWL_R_OUT, RATCHET_Y0, RATCHET_Y1,
                         PAWL_Z_LO, PAWL_Z_HI)
     boss   = pivot_boss_sector(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
                                RATCHET_Y0 - (LEVER_RIM_H - 2.5) / 2, RATCHET_Y1)
@@ -153,9 +187,9 @@ PAD_REST_GAP   = 1.0                           # rubber-to-band gap at rest (A_B
 RUBBER_FACE_R  = R_RIM + PAD_REST_GAP          # 58.2 — rubber rim-facing arc at rest
 _PAD_R_IN      = RUBBER_FACE_R + BRAKE_RUBBER_T    # 61.5 — printed pad inner arc
 _PAD_R_OUT     = _PAD_R_IN + 3.0               # 64.5 — back of the printed pad
-PAD_Z_LO, PAD_Z_HI = 0.0, RIM_H / 2            # 0 .. 7
+PAD_Z_LO, PAD_Z_HI = RIM_H / 2, RIM_H          # 7 .. 14 (brake band now on top)
 PAD_Y_MID = (BRAKE_Y0 + BRAKE_Y1) / 2          # -17.5
-PAD_Z_MID = (PAD_Z_LO + PAD_Z_HI) / 2          # 3.5
+PAD_Z_MID = (PAD_Z_LO + PAD_Z_HI) / 2          # 10.5
 _BRAKE_CONTACT_X = (_PAD_R_IN + _PAD_R_OUT) / 2
 
 
@@ -163,9 +197,8 @@ def _build_brake_lever():
     arm    = _bar(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
                   _BRAKE_CONTACT_X, PAD_Z_MID, ARM_W,
                   BRAKE_Y0, BRAKE_Y1)
-    handle = _bar(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                  BRAKE_PIVOT_X, HANDLE_Z_BOT, ARM_W,
-                  BRAKE_Y0, BRAKE_Y1)
+    handle = _handle_paddle(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
+                            BRAKE_Y0, BRAKE_Y1)
     pad    = _arc_strip(_PAD_R_IN, _PAD_R_OUT, BRAKE_Y0, BRAKE_Y1,
                         PAD_Z_LO, PAD_Z_HI)
     boss   = pivot_boss_sector(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
