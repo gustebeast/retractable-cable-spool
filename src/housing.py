@@ -53,14 +53,36 @@ HOUSING_SPINE_T = 10.0    # X thickness of the vertical front-housing block —
                           # solid mounting material for the wood-screw cover.
 HOUSING_HOLE_CLR = 0.25   # axle hole slip fit (radial)
 
-# Front-housing inner face re-anchored to the brake rim. The spool's
-# largest rotating feature is now the lever rim (RIM_OD = 114.4, r = 57.2);
-# the block sits FRONT_HOUSING_CLR past it. The clearance doubles as the
-# lever leverage knob: the pivot (block mid-X) ends up FRONT_HOUSING_CLR +
-# HOUSING_SPINE_T/2 outboard of the rim, setting the contact-arm length.
-FRONT_HOUSING_CLR = 5.0                                 # = old SPOOL_CLEARANCE
-SPINE_X_INNER = RIM_OD / 2 + FRONT_HOUSING_CLR          # 62.2
-SPINE_X_OUTER = SPINE_X_INNER + HOUSING_SPINE_T         # 75.2
+# ── Stop-pin geometry (defined early so the front-housing +X face can be
+#    positioned to swallow the pins — see SPINE_X_OUTER below) ──────────────
+STOP_PIN_D = 4.0          # pin OD (0.75 mm walls around the 2 mm leg hole)
+STOP_PIN_R = 6.0          # radial offset of the pins from the pivot
+STOP_LEVER_PIN_ALPHA_DEG = 90.0   # lever pin straight down from the pivot
+LEVER_TRAVEL_DEG = 18.0   # equal pull travel for both levers (A_ANGLES_MATCH)
+_STOP_CONTACT_SEP_DEG = math.degrees(2 * math.asin(STOP_PIN_D / (2 * STOP_PIN_R)))
+
+# Lever pivot X is fixed by the contact arm to the rim (10 mm), DECOUPLED from
+# the block's mid-plane — so the block can slide outward to clear the stop
+# pins without dragging the pivot (and the pins) out with it.
+PIVOT_X         = RIM_OD / 2 + 10.0                     # 67.2
+RATCHET_PIVOT_X = PIVOT_X
+BRAKE_PIVOT_X   = PIVOT_X
+
+# The +X-most fixed stop pin is the SPRING pin (lowest α). Its outer edge must
+# sit inside the block's +X (wood-mount) face so the housing mounts flush on a
+# slab. Place the +X face MOUNT_PIN_CLR beyond that edge; the inner face — and
+# hence the spool gap — then follows from the fixed HOUSING_SPINE_T. (This is
+# why the spool gap grew: the block slid out to recess the pins, leaving the
+# pivot/pins where they were. The -X-most pin now pokes past the INNER face
+# into the spool gap; it clears the rim and gets a small support boss.)
+_SPRING_PIN_ALPHA_DEG = (STOP_LEVER_PIN_ALPHA_DEG - LEVER_TRAVEL_DEG
+                         - _STOP_CONTACT_SEP_DEG)
+_PIN_MAX_X    = (PIVOT_X + STOP_PIN_R * math.cos(math.radians(_SPRING_PIN_ALPHA_DEG))
+                 + STOP_PIN_D / 2)
+MOUNT_PIN_CLR = 0.5                                     # pins recessed this far behind the +X face
+SPINE_X_OUTER = _PIN_MAX_X + MOUNT_PIN_CLR              # ≈ 74.73
+SPINE_X_INNER = SPINE_X_OUTER - HOUSING_SPINE_T         # ≈ 64.73
+FRONT_HOUSING_CLR = SPINE_X_INNER - RIM_OD / 2          # derived spool gap (≈ 7.5)
 
 # Pancake plate (horizontal arm of the L) sits above the spool; thickness
 # grows OUTWARD (away from the spool) so the bearing gap is unchanged.
@@ -80,25 +102,21 @@ BACK_EXT_X_TAIL        = -65.3      # -X extension tip (temporary, per design)
 # block's outer Y faces (ratchet +Y, brake -Y) and hang downward — nothing
 # of the lever passes through the block.
 # ────────────────────────────────────────────────────────────────────────────
-PIVOT_X         = (SPINE_X_INNER + SPINE_X_OUTER) / 2   # block mid-X
-RATCHET_PIVOT_X = PIVOT_X
-BRAKE_PIVOT_X   = PIVOT_X
-# Pivot heights are set by the kinematic assertions (lever_kinematics.py):
-#   - ratchet high enough above the teeth that a 16° pull retracts the pawl
-#     clear of the tooth tips by ≥1 mm,
-#   - brake as HIGH as the pad-overlap assertion allows (to minimise how far
-#     the levers hang below the spool), but still below the band so the pull
-#     swings the pad inward.
-# Set to the assertion FLOORS at LEVER_TRAVEL_DEG: ratchet as LOW as it can be
-# while still clearing the teeth by 1 mm at full pull, brake as HIGH as it can
-# be while still compressing the pad 0.5 mm — both chosen to minimise how far
-# the levers hang below the spool (-Z extent).
-RATCHET_PIVOT_Z = 17.0                                  # above teeth top (14)
-BRAKE_PIVOT_Z   = -3.5                                  # below brake band bottom (0)
+# (PIVOT_X / RATCHET_PIVOT_X / BRAKE_PIVOT_X are defined in the envelope
+# section above — decoupled from the block faces.)
+# Pivot heights are set to the kinematic-assertion FLOORS (lever_kinematics.py)
+# at LEVER_TRAVEL_DEG. With the bands swapped (ratchet teeth on the BOTTOM
+# z=0..7, brake band on TOP z=7..14):
+#   - ratchet pivot just above the teeth (pull swings the pawl radially out),
+#   - brake pivot just below the brake band — which now lands ABOVE the spool
+#     bottom, so neither pivot is dragged negative.
+# Both at their floors to minimise how far the levers hang below the spool.
+RATCHET_PIVOT_Z = 10.0                                  # above teeth top (7)
+BRAKE_PIVOT_Z   = 3.5                                   # below brake band top (14)
 
 # Front-housing block Z extent: from below the brake pivot (room for the
 # screw + wall) up to the pancake plate's outer face.
-FRONT_Z_BOT = BRAKE_PIVOT_Z - 7.0                       # -12
+FRONT_Z_BOT = min(RATCHET_PIVOT_Z, BRAKE_PIVOT_Z) - 7.0  # -3.5
 FRONT_Z_TOP = PANCAKE_PLATE_Z_OUT                       # 64
 
 # Lever-side gap + spring sizing (shared with levers.py and viz.py).
@@ -107,6 +125,11 @@ LEVER_RIM_H     = 4.5     # Y gap between each lever's inner face and the
                           # lives in this gap around the pivot screw.
 SPRING_BODY_LEN = 2.5     # axial (Y) extent of the coil
 LEVER_PIVOT_BOSS_OD = 6.0 # reinforcement boss OD coaxial with each pivot
+# Spring positioning ring: a short boss around each pivot hole on the block's
+# lever-facing Y face. It bears on the coil's housing-side end, holding the
+# spring centred in the gap. Paired 1:1 with the lever's own pivot-boss
+# extension, the two split the (LEVER_RIM_H − SPRING_BODY_LEN) = 2 mm buffer.
+HOUSING_BOSS_EXT = (LEVER_RIM_H - SPRING_BODY_LEN) / 2   # 1.0
 
 LEVER_SCREW_CLR_D      = M2_SHAFT_CLR_D
 LEVER_INSERT_PILOT_D   = M2_INSERT_PILOT_D
@@ -133,33 +156,24 @@ SCREW_HEAD_RECESS_H    = M2_HEAD_RECESS_H
 # DECREASES the lever pin's α; the spring restores it (increasing α) until
 # the lever pin re-seats on the REST pin.
 # ────────────────────────────────────────────────────────────────────────────
-STOP_PIN_D      = 4.0     # pin OD (0.75 mm walls around the 2 mm leg hole)
-STOP_PIN_HOLE_D = 2.0     # spring-leg through-hole Ø (loose; prints reliably)
+STOP_PIN_HOLE_D = 1.5     # spring-leg through-hole Ø
 STOP_PIN_H      = 3.5     # Y projection of each pin into the lever gap
-STOP_PIN_R      = 6.0     # radial offset of the pins from the pivot
 SPRING_WIRE_R   = 0.25
+# (STOP_PIN_D, STOP_PIN_R, STOP_LEVER_PIN_ALPHA_DEG, LEVER_TRAVEL_DEG, and
+# _STOP_CONTACT_SEP_DEG are defined early in the envelope section so the
+# block's +X face can be placed to clear the pins.)
 
-# Both levers seat their LEVER pin straight down from the pivot (α = 90°),
-# in the spring gap (so it never collides with the contact arm or handle
-# body, which sit further out in Y).
-STOP_LEVER_PIN_ALPHA_DEG = 90.0
-
-# Angular separation at which two STOP_PIN_D pins on a circle of STOP_PIN_R
-# just touch (chord = STOP_PIN_D).
-_STOP_CONTACT_SEP_DEG = math.degrees(2 * math.asin(STOP_PIN_D / (2 * STOP_PIN_R)))
-
-# Pull travel for each lever (handle pulled +X until the lever pin meets the
-# spring pin). Both rotate the same real direction (α decreasing). EQUAL for
-# the two levers so they start and end at the same angles (asserted in
-# lever_kinematics.py: A_ANGLES_MATCH).
-LEVER_TRAVEL_DEG         = 18.0   # > old 12° — more travel lets the pivots sit
-                                  # closer to the bands, reducing -Z hang
+# Both levers rotate the same real direction (α decreasing) by LEVER_TRAVEL_DEG,
+# so they start and end at the same angles (asserted: A_ANGLES_MATCH).
 RATCHET_OUTER_TRAVEL_DEG = LEVER_TRAVEL_DEG   # disengage travel
 BRAKE_INNER_TRAVEL_DEG   = LEVER_TRAVEL_DEG   # engage travel
 
-# Print warp pre-compensation: printed levers warp a few degrees toward
-# their motion; pre-rotate the rest pose back by this so they settle true.
-LEVER_REST_PRECOMP_DEG = 5.0
+# Print warp pre-compensation: pre-rotate the rest pose back by this so the
+# printed lever settles true. Set to 0 for now — the old 5° was tuned for the
+# old (axial) levers' print orientation; the radial levers print flat on their
+# Y face, a different warp profile, so leave it at 0 until measured. (Also
+# keeps the rendered rest pose showing the pawl truly meshed.)
+LEVER_REST_PRECOMP_DEG = 0.0
 
 # Per-lever pin α positions. Lever pin at α=90; spring pin TRAVEL+SEP below
 # (lower α), rest pin SEP+precomp above (higher α).
@@ -247,9 +261,11 @@ def _pivot_clearance(x, z):
     )
 
 
-def _pivot_insert_pilot(x, z, insert_face_sign):
+def _pivot_insert_pilot(x, z, insert_face_sign, boss_ext=0.0):
     """M2 heat-set insert pilot drilled from one Y face, with a 45° cone
-    lead-in to the shaft clearance so the step prints self-supporting."""
+    lead-in to the shaft clearance so the step prints self-supporting.
+    boss_ext shifts the pilot mouth OUTWARD by that much (so the Ø3.3 bore
+    carries through a spring-positioning ring protruding from the face)."""
     pilot = (
         cq.Workplane("XY").circle(LEVER_INSERT_PILOT_D / 2)
         .extrude(LEVER_INSERT_DEPTH)
@@ -257,8 +273,8 @@ def _pivot_insert_pilot(x, z, insert_face_sign):
                           LEVER_INSERT_CHAMFER_H, LEVER_INSERT_DEPTH))
     )
     if insert_face_sign > 0:
-        return pilot.rotate((0, 0, 0), (1, 0, 0), +90).translate((x, HOUSING_W / 2, z))
-    return pilot.rotate((0, 0, 0), (1, 0, 0), -90).translate((x, -HOUSING_W / 2, z))
+        return pilot.rotate((0, 0, 0), (1, 0, 0), +90).translate((x, HOUSING_W / 2 + boss_ext, z))
+    return pilot.rotate((0, 0, 0), (1, 0, 0), -90).translate((x, -HOUSING_W / 2 - boss_ext, z))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -332,35 +348,53 @@ def _axle_round_hole():
 def _build_lever_mounts(h):
     """Add both levers' pivot-insert/clearance cuts and their housing stop
     pins (+ spring-leg holes). Ratchet on +Y, brake on -Y."""
+    # Spring-positioning rings: a HOUSING_BOSS_EXT-tall boss around each pivot
+    # on the lever-facing Y face, unioned BEFORE the pivot bores so the screw-
+    # clearance + insert pilot carry through them. The coil bears on the ring.
+    yf = HOUSING_W / 2
+    h = h.union(pivot_boss_sector(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
+                                  yf - 0.5, yf + HOUSING_BOSS_EXT))
+    h = h.union(pivot_boss_sector(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
+                                  -yf - HOUSING_BOSS_EXT, -yf + 0.5))
     # ── Ratchet (+Y side): screw enters from -Y, insert in +Y face ──
     h = (h.cut(_pivot_clearance(RATCHET_PIVOT_X, RATCHET_PIVOT_Z))
-          .cut(_pivot_insert_pilot(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, insert_face_sign=+1)))
+          .cut(_pivot_insert_pilot(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
+                                   insert_face_sign=+1, boss_ext=HOUSING_BOSS_EXT)))
     # ── Brake (-Y side): screw enters from +Y, insert in -Y face ──
     h = (h.cut(_pivot_clearance(BRAKE_PIVOT_X, BRAKE_PIVOT_Z))
-          .cut(_pivot_insert_pilot(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, insert_face_sign=-1)))
+          .cut(_pivot_insert_pilot(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
+                                   insert_face_sign=-1, boss_ext=HOUSING_BOSS_EXT)))
 
-    # Housing stop pins project from the block face into the gap toward the
-    # lever (+Y for ratchet, -Y for brake).
-    y_face_pos = HOUSING_W / 2
-    # Ratchet rest + spring pins (+Y).
+    # Housing stop pins project into the gap toward the lever (+Y for ratchet,
+    # -Y for brake). The SPRING pin is a short stub from its near face into the
+    # gap (it's fully over the block in X, so well-rooted). The REST pin sits
+    # mostly -X of the block's inner face, so it would be only lightly rooted —
+    # instead it runs the FULL housing width (flush with the far face, across
+    # to the near face) and then STOP_PIN_H out, anchoring it along the whole
+    # block (its own "boss") and giving the lever-side stub to catch the lever
+    # pin.
+    y_face = HOUSING_W / 2
+    # Ratchet (+Y side).
     for alpha, is_spring in ((RATCHET_REST_PIN_ALPHA, False),
                              (RATCHET_SPRING_PIN_ALPHA, True)):
-        h = h.union(stop_pin_solid(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, alpha,
-                                   y_face_pos - 0.5, y_face_pos + STOP_PIN_H))
+        y_from, y_to = ((y_face - 0.5, y_face + STOP_PIN_H) if is_spring
+                        else (-y_face, y_face + STOP_PIN_H))
+        h = h.union(stop_pin_solid(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, alpha, y_from, y_to))
         if is_spring:
             leg_a = alpha + (-1) * SPRING_LEG_PIN_OFFSET_DEG
             h = h.cut(stop_pin_hole(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, alpha,
-                                    hole_y=y_face_pos + STOP_PIN_H - STOP_PIN_HOLE_D,
+                                    hole_y=y_face + STOP_PIN_H - STOP_PIN_HOLE_D,
                                     hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(leg_a)))
-    # Brake rest + spring pins (-Y).
+    # Brake (-Y side).
     for alpha, is_spring in ((BRAKE_REST_PIN_ALPHA, False),
                              (BRAKE_SPRING_PIN_ALPHA, True)):
-        h = h.union(stop_pin_solid(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, alpha,
-                                   -y_face_pos - STOP_PIN_H, -y_face_pos + 0.5))
+        y_from, y_to = ((-y_face - STOP_PIN_H, -y_face + 0.5) if is_spring
+                        else (-y_face - STOP_PIN_H, y_face))
+        h = h.union(stop_pin_solid(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, alpha, y_from, y_to))
         if is_spring:
             leg_a = alpha + (-1) * SPRING_LEG_PIN_OFFSET_DEG
             h = h.cut(stop_pin_hole(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, alpha,
-                                    hole_y=-y_face_pos - STOP_PIN_H + STOP_PIN_HOLE_D,
+                                    hole_y=-y_face - STOP_PIN_H + STOP_PIN_HOLE_D,
                                     hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(leg_a)))
     return h
 
