@@ -29,8 +29,8 @@ import sys
 
 import cadquery as cq
 
-from .helpers import heal
-from .dimensions import SPOOL_H
+from .helpers import heal, cyl
+from .dimensions import SPOOL_H, HUB_OD
 
 from . import spool
 from . import caps
@@ -54,6 +54,8 @@ cable_top_rim          = _cable_rim_mod.cable_top_rim
 cable_retainer         = _cable_retainer_mod.cable_retainer
 axle                   = _axle_mod.axle
 housing                = _housing_mod.housing
+brake_pin_chunk        = _housing_mod.brake_pin_chunk
+guide_wheel            = _housing_mod.guide_wheel
 mount_bracket            = _bracket_mod.mount_bracket
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
@@ -73,6 +75,8 @@ bearing_bottom         = _viz_mod.bearing_bottom
 main_body = heal(main_body)
 axle = heal(axle)
 housing = heal(housing)
+brake_pin_chunk = heal(brake_pin_chunk)
+guide_wheel = heal(guide_wheel)
 ratchet_lever = heal(ratchet_lever)
 brake_lever   = heal(brake_lever)
 # Springs accumulate near-tangent boolean fuses between rings/legs/spheres
@@ -86,6 +90,12 @@ brake_pad_rubber = heal(brake_pad_rubber)
 # z=PANCAKE_CAP_SEAT_Z0..SPOOL_H). Exported as-is.
 bearing_cap_top_export = bearing_cap_top
 
+# Test piece — just the inner spool (hub) with the spring-strip retainer, with
+# the outer cable rim and the connecting channel-spokes cut away (keep only
+# r ≤ HUB_OD/2). Lets you print the hub alone to verify the retention pocket,
+# bearings, and cap fit without printing the whole spool.
+inner_spool_test = heal(main_body.intersect(cyl(HUB_OD, SPOOL_H, z=0)))
+
 # Map of part name → (workplane, output filename, optional note).
 PARTS = {
     "main_body":              (main_body,                  "spool_main_body.step",        None),
@@ -94,12 +104,15 @@ PARTS = {
     "cable_retainer":         (cable_retainer,             "cable_retainer.step",         None),
     "axle":                   (axle,                       "axle.step",                   None),
     "housing":                (housing,                    "housing.step",                None),
+    "brake_pin_chunk":        (brake_pin_chunk,            "brake_pin_chunk.step",        "glue-on 45° corner carrying the brake pivot + stop pins"),
+    "guide_wheel":            (guide_wheel,                "guide_wheel.step",            "Ø14 Z-axle wheel; bears on the brake rim opposite the brake lever"),
     "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
     "brake_lever":            (brake_lever,                "brake_lever.step",            None),
     # Springs and the rubber pad are purchased/applied parts — they're
     # included in assembly.step for visualization only, no need to export
     # them as individual STEP files for printing.
     "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
+    "inner_spool_test":       (inner_spool_test,           "inner_spool_test.step",       "hub + spring retainer only (no rim/spokes) — for test printing"),
 }
 
 
@@ -204,12 +217,12 @@ def _export_assembly():
         cq.Assembly(name="retractable_cable_spool")
         .add(main_body,     name="main_body")
         .add(bearing_cap_top,    name="bearing_cap_top",    loc=cq.Location((0, 0, 0)))
-        # Cable top rim placed 6 mm above the TOP of the bottom rim
-        # (bottom rim top = RIM_H = 14, so its bottom face sits at z=20).
-        # Translation baked into the geometry (not via the assembly loc) so
-        # the STEP export unambiguously shows it at height. Slides freely on
-        # the hub for now — no height stop.
-        .add(cable_top_rim.translate((0, 0, spool.RIM_H + 6)),
+        # Cable top rim placed CABLE_RIM_AIR_GAP above the TOP of the bottom rim
+        # (= spool.CABLE_TOP_RIM_BASE_Z). This is its max realistic spacing for a
+        # thick cable; the spring-strip screw hole tracks the lid's top off this.
+        # Translation baked into the geometry (not via the assembly loc) so the
+        # STEP export unambiguously shows it at height. Slides freely on the hub.
+        .add(cable_top_rim.translate((0, 0, spool.CABLE_TOP_RIM_BASE_Z)),
              name="cable_top_rim", loc=cq.Location((0, 0, 0)))
         # Fixed (housing-attached) cable-retention cage — already modelled at
         # its working position (cable-channel Z-band), floating for now.
@@ -219,6 +232,8 @@ def _export_assembly():
         .add(mount_bracket,          name="mount_bracket",          loc=cq.Location((0, 0, 0)))
         .add(axle,          name="axle")
         .add(housing, name="housing")
+        .add(brake_pin_chunk, name="brake_pin_chunk")
+        .add(guide_wheel, name="guide_wheel")
         .add(_ratchet_lever_for_assembly(), name="ratchet_lever")
         .add(_brake_lever_for_assembly(),   name="brake_lever")
         .add(ratchet_spring, name="ratchet_spring")

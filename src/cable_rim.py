@@ -17,20 +17,21 @@ import math
 import cadquery as cq
 
 from .dimensions import (
-    HUB_OD, FIT_CLR, STRUCT_WALL,
+    HUB_OD, FIT_CLR, STRUCT_WALL, TOP_RIM_H,
     M2_SHAFT_CLR_D, M2_INSERT_PILOT_D, M2_INSERT_DEPTH,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
 )
-from .spool import RIM_ID, CABLE_D
+from .spool import RIM_ID, RIM_OD, CABLE_D
 from .helpers import cyl, make_keys
 
 
-TOP_RIM_H   = 7.0                                   # axial height of the lid
 COLLAR_WALL = 2.0                                   # radial wall of the hub-wrapping collar
 
 _COLLAR_ID  = HUB_OD + 2 * FIT_CLR                  # slip fit over the hub OD
 _COLLAR_OD  = _COLLAR_ID + 2 * COLLAR_WALL
-_OUTER_OD   = RIM_ID - 2 * FIT_CLR                  # slides just inside the bottom rim wall
+_OUTER_OD   = RIM_OD                                # flush with the bottom (brake) rim OD —
+                                                    # it stacks ABOVE the brake rim (cable air
+                                                    # gap between), not nested inside it
 _OUTER_ID   = _OUTER_OD - 2 * STRUCT_WALL
 
 # Same spoke count as the bottom rim (gap ≤ CABLE_D at the rim), offset by
