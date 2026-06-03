@@ -19,7 +19,7 @@ cuts teeth into the body — apply_to_main_body is a no-op pass-through.
 import math
 import cadquery as cq
 
-from .spool import RIM_OD, RIM_H, _cyl_ratchet_band
+from .spool import RIM_OD, RIM_H, RATCHET_BAND_H, _cyl_ratchet_band
 from .lever_kinematics import assert_kinematics, R_ROOT
 from .housing import (
     HOUSING_W, LEVER_RIM_H, LEVER_PIVOT_BOSS_OD,
@@ -148,11 +148,11 @@ def _lever_stop_pin_and_hole(part, pivot_x, pivot_z, lever_alpha, y_inner,
 
 
 # ── Ratchet lever ────────────────────────────────────────────────────────────
-# Pawl is an arc strip spanning the teeth band (now the BOTTOM 7 mm, z=0..7);
-# its inner face meshes with the rim teeth.
-PAWL_Z_LO, PAWL_Z_HI = 0.0, RIM_H / 2            # 0 .. 7
+# Pawl is an arc strip spanning the teeth band (the short BOTTOM band,
+# z=0..RATCHET_BAND_H); its inner face meshes with the rim teeth.
+PAWL_Z_LO, PAWL_Z_HI = 0.0, RATCHET_BAND_H       # 0 .. 3
 PAWL_Y_MID = (RATCHET_Y0 + RATCHET_Y1) / 2       # 17.5
-PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2         # 10.5
+PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2         # 1.5
 _PAWL_R_IN  = R_ROOT                             # 55.7 — seats in the valley
 _PAWL_R_OUT = R_RIM + 3.0                         # 60.2 — back of the pawl
 _RATCHET_CONTACT_X = (_PAWL_R_IN + _PAWL_R_OUT) / 2   # arm meets the pawl
@@ -178,7 +178,10 @@ def _build_ratchet_lever():
 
 
 # ── Brake lever ──────────────────────────────────────────────────────────────
-# Pad is an arc strip spanning the smooth band (z=0..7). The BRAKE_RUBBER_T
+# Pad is an arc strip on the upper part of the smooth brake band (the band now
+# spans z=RATCHET_BAND_H..RIM_H, but the pad stays high — z=RIM_H/2..RIM_H — so
+# its lever arm above the brake pivot stays long enough for A_BRAKE_OVERLAP).
+# The BRAKE_RUBBER_T
 # rubber slab (viz) bonds to the printed pad's rim-facing face; at the rest
 # (disengaged) pose that rubber face sits PAD_REST_GAP off the band (r=57.2),
 # so the PRINTED pad body starts BRAKE_RUBBER_T further out. Both faces are
@@ -187,7 +190,10 @@ PAD_REST_GAP   = 1.0                           # rubber-to-band gap at rest (A_B
 RUBBER_FACE_R  = R_RIM + PAD_REST_GAP          # 58.2 — rubber rim-facing arc at rest
 _PAD_R_IN      = RUBBER_FACE_R + BRAKE_RUBBER_T    # 61.5 — printed pad inner arc
 _PAD_R_OUT     = _PAD_R_IN + 3.0               # 64.5 — back of the printed pad
-PAD_Z_LO, PAD_Z_HI = RIM_H / 2, RIM_H          # 7 .. 14 (brake band now on top)
+BRAKE_PAD_H = 4.0                              # short contact (was 7) — rubber still grips;
+                                               # keeps the pad clear of the cable retainer
+PAD_Z_LO, PAD_Z_HI = RIM_H / 2, RIM_H / 2 + BRAKE_PAD_H   # 7 .. 11 — lower band, ≥1 mm
+                                               # below the retainer (its bottom ring is at z≈12.3)
 PAD_Y_MID = (BRAKE_Y0 + BRAKE_Y1) / 2          # -17.5
 PAD_Z_MID = (PAD_Z_LO + PAD_Z_HI) / 2          # 10.5
 _BRAKE_CONTACT_X = (_PAD_R_IN + _PAD_R_OUT) / 2

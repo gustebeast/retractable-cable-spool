@@ -26,8 +26,13 @@ import math
 from .spool import RIM_OD
 from .dimensions import RATCHET_DEPTH
 
-R_RIM  = RIM_OD / 2                 # 57.2 — tooth tip / brake-band radius
-R_ROOT = R_RIM - RATCHET_DEPTH      # 55.7 — tooth valley (pawl seats here)
+# The ratchet teeth now PROTRUDE past the brake band: the valley floor is flush
+# with the band (so it supports it), and the tips stick out RATCHET_DEPTH. So the
+# brake band and the pawl-tip radii are no longer the same value.
+R_BAND        = RIM_OD / 2                  # 57.2 — brake-band surface = ratchet valley floor
+R_RATCHET_TIP = R_BAND + RATCHET_DEPTH      # 58.7 — ratchet tooth tip (protrudes past the band)
+R_ROOT        = R_BAND                      # 57.2 — pawl seats on the valley floor (flush
+                                            #         with the band, fully supporting it)
 
 PAWL_CLEAR_MM    = 1.0
 BRAKE_REST_MM    = 1.0
@@ -68,10 +73,10 @@ def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_travel_deg,
     r_pawl = _contact_radius_after_pull(ratchet_pivot_x, ratchet_pivot_z,
                                         R_ROOT, pawl_y_mid, pawl_z_mid,
                                         ratchet_travel_deg)
-    need = R_RIM + PAWL_CLEAR_MM
+    need = R_RATCHET_TIP + PAWL_CLEAR_MM
     assert r_pawl >= need - _EPS, (
         f"A_PAWL_CLEAR: pawl reaches r={r_pawl:.2f} mm at full pull, "
-        f"need ≥ {need:.2f} (tip {R_RIM:.2f} + {PAWL_CLEAR_MM}). "
+        f"need ≥ {need:.2f} (tip {R_RATCHET_TIP:.2f} + {PAWL_CLEAR_MM}). "
         f"Raise RATCHET_PIVOT_Z or increase travel.")
 
     # A_BRAKE_REST ------------------------------------------------------------
@@ -82,17 +87,17 @@ def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_travel_deg,
     # Rubber face is at R_RIM + pad_rest_gap at rest; after the engage pull it
     # must reach ≤ R_RIM − BRAKE_OVERLAP_MM (compressed into the band).
     r_pad = _contact_radius_after_pull(brake_pivot_x, brake_pivot_z,
-                                       R_RIM + pad_rest_gap, pad_y_mid, pad_z_mid,
+                                       R_BAND + pad_rest_gap, pad_y_mid, pad_z_mid,
                                        brake_travel_deg)
-    limit = R_RIM - BRAKE_OVERLAP_MM
+    limit = R_BAND - BRAKE_OVERLAP_MM
     assert r_pad <= limit + _EPS, (
         f"A_BRAKE_OVERLAP: pad reaches r={r_pad:.2f} mm at full pull, "
-        f"need ≤ {limit:.2f} (band {R_RIM:.2f} − {BRAKE_OVERLAP_MM}). "
+        f"need ≤ {limit:.2f} (band {R_BAND:.2f} − {BRAKE_OVERLAP_MM}). "
         f"Lower BRAKE_PIVOT_Z or increase travel.")
 
     return {
         "pawl_full_pull_r": r_pawl,
-        "pawl_clearance_mm": r_pawl - R_RIM,
+        "pawl_clearance_mm": r_pawl - R_RATCHET_TIP,
         "pad_full_pull_r": r_pad,
-        "pad_overlap_mm": R_RIM - r_pad,
+        "pad_overlap_mm": R_BAND - r_pad,
     }

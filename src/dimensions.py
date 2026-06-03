@@ -37,11 +37,13 @@ FLANGE_LIP_T   =   3.2   # rim thickness: 1.7 mm of clean support material above
 # wall (3 mm) for hoop strength under the press-fit.
 STRUCT_WALL    =   1.7
 
-HUB_OD         =  70.4   # hub outer diameter = cavity ID 67 mm + 2×HUB_WALL.
-                         # Cavity still clears the 64 mm cassette flange OD by
-                         # 1.5 mm per side, with 0.5 mm clearance also at the
-                         # cap-stop lip's narrowest point — CAP_STOP_ID
-                         # = 65 mm. (Was 73.0 with a 3 mm wall.)
+HUB_OD         =  57.4   # hub outer diameter = cavity ID 54 mm + 2×HUB_WALL.
+                         # Sized for the TRIMMED clock spring (fits a 49 mm hole
+                         # tight / 50 mm comfortably); the 54 mm cavity leaves
+                         # ~2 mm/side for the strip-retention channel. Shrinking
+                         # the hub (vs the old 70.4) also widens the cable
+                         # channel (hub OD → RIM_ID). (Was 70.4 for the 64 mm
+                         # Stanley cassette.)
 HUB_WALL       = STRUCT_WALL   # hub wall thickness in the spring-cavity region.
                          # Pinned to STRUCT_WALL — see its comment above.
 
@@ -240,6 +242,15 @@ M2_INSERT_DEPTH    = 3.5     # 2.5 mm insert + 1 mm margin
 
 AXLE_CROSS_HOLE_D = M2_SHAFT_CLR_D    # M2 clearance through the axle.
 
+# ── Cable top-rim (sliding lid) placement ────────────────────────────────────
+# The lid slides on the hub and sits CABLE_RIM_AIR_GAP above the bottom rim's
+# top (= RIM_H). That gap sets the cable-channel height, so it's tuned to the
+# thickest cable we want to support. Shared here so the spring-strip screw boss
+# (spool.py) can sit its hole flush with the lid's top automatically — bumping
+# the gap moves both the lid and the screw together.
+TOP_RIM_H          = 7.0     # axial height of the cable top-rim lid body
+CABLE_RIM_AIR_GAP  = 8.0     # lid bottom sits this far above the bottom rim top
+
 # Standard "extend past a face" margin for boolean cut/union operations.
 # Applied to through-cuts (workplane offset by -BOOL_OVERSHOOT, extrude
 # by total_depth + 2*BOOL_OVERSHOOT) and to features that need a clean
@@ -268,7 +279,7 @@ DRUM_ID        = DRUM_OD - 2 * DRUM_WALL                   # 146 mm
 FLANGE_ID      = DRUM_ID                                   # 146 mm (bottom flange ID)
 FLANGE_INNER_ID = DRUM_OD - 2 * FLANGE_INNER_EXT           # 127 mm (lever rim ID; pancake top-rim ID derives from band width)
 FLANGE_RIM_MID_R = (FLANGE_INNER_ID + DRUM_OD) / 4         # 70.5 — boundary between ratchet (inner) and brake (outer) bands
-HUB_CAVITY_D   = HUB_OD - 2 * HUB_WALL                     # 34 mm  — spring cavity ID
+HUB_CAVITY_D   = HUB_OD - 2 * HUB_WALL                     # 54 mm  — spring cavity ID
 SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # overall spool height
 AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE  # 64 mm
 BEARING_BORE   = BEARING_OD + BEARING_CLR                  # 22.3 mm
@@ -283,8 +294,8 @@ DRUM_TOP_Z     = SPOOL_H - FLANGE_H                        # 31 mm
 
 # Cap geometry
 CAP_H          = BEARING_W + BEARING_LIP_H                 #  8 mm — lip (1) + pocket (7)
-CAP_OD         = HUB_CAVITY_D - 2 * FIT_CLR                # 33.8 mm (slip fit in 34 mm cavity)
-CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 32 mm — cavity ID at the stop lip
+CAP_OD         = HUB_CAVITY_D - 2 * FIT_CLR                # 53.7 mm (slip fit in 54 mm cavity)
+CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 52 mm — cavity ID at the stop lip
 
 # Main body cavity z-map (from top down):
 #   z = SPOOL_H             (38)   top face of main body

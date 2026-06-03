@@ -12,11 +12,12 @@ from .dimensions import (
     AXLE_D,
     BEARING_BORE, BEARING_LIP_H, BEARING_LIP_ID,
     BEARING_W, BOOL_OVERSHOOT,
+    CABLE_RIM_AIR_GAP, TOP_RIM_H,
     CAP_H, CAP_STOP_ID, CAP_STOP_LIP_H,
-    CAVITY_Z0, CAVITY_Z1,
     DRUM_BOTTOM_Z, DRUM_H, DRUM_ID, DRUM_OD, DRUM_TOP_Z, DRUM_WALL,
     FLANGE_H, FLANGE_INNER_ID, FLANGE_OD, FLANGE_LIP_T,
     HUB_CAVITY_D, HUB_OD,
+    M2_INSERT_PILOT_D, M2_INSERT_DEPTH, M2_SHAFT_CLR_D,
     RATCHET_TEETH, RATCHET_DEPTH,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
     LEVER_STOP_LIP_Z0, LEVER_STOP_LIP_Z1,
@@ -84,10 +85,13 @@ def _build_main_body():
         .cut(cyl(BEARING_BORE, BEARING_W, z=BEARING_LIP_H))
         # Spring cavity.
         .cut(cyl(HUB_CAVITY_D, _CAVITY_TOP - _BOT_POCKET_TOP, z=_BOT_POCKET_TOP))
-        # Top cap-stop lip — cone narrowing DOWN from HUB_CAVITY_D (at the cap
-        # seat) to CAP_STOP_ID, so the removable top cap can't slide down into
-        # the spring cavity.
-        .cut(cone_solid(CAP_STOP_ID, HUB_CAVITY_D, CAP_STOP_LIP_H, _CAVITY_TOP))
+        # Top cap-stop lip — the removable top cap can't slide down into the
+        # spring cavity. The bore narrows UPWARD (HUB_CAVITY_D at the cavity, to
+        # CAP_STOP_ID at the cap seat) so the lip's underside is a self-supporting
+        # 45° cone (−z) and its top is a flat ledge (+z) the cap rests on — prints
+        # support-free bottom-up. (Flipping these diameters would put the flat
+        # overhang on −z, which is what we're avoiding.)
+        .cut(cone_solid(HUB_CAVITY_D, CAP_STOP_ID, CAP_STOP_LIP_H, _CAVITY_TOP))
         # Top cap seat — HUB_CAVITY_D bore the removable cap drops into.
         .cut(cyl(HUB_CAVITY_D, SPOOL_H - PANCAKE_CAP_SEAT_Z0, z=PANCAKE_CAP_SEAT_Z0))
     )
@@ -96,7 +100,11 @@ def _build_main_body():
     # the same design the pancake bearing block used before the cap flip.
     main_body = main_body.cut(_bot_bearing_void())
     main_body = main_body.union(_bot_bearing_ribs())
-    main_body = main_body.cut(_spring_slot())
+    # Spring-strip attachment: an M2 screw + heat-set insert clamps the drilled
+    # tape against the hub. An elevated square boss hosts the insert (the 1.7 mm
+    # wall is too thin); the radial bore takes the insert pocket + screw clearance.
+    main_body = main_body.union(_spring_screw_boss())
+    main_body = main_body.cut(_spring_screw_bore())
     return main_body
 
 
@@ -109,25 +117,30 @@ def _build_main_body():
 # rim is a plain vertical wall (no 45° chamfer) so the whole body prints
 # bottom-to-top without supports.
 RIM_H      = 14.0      # rim height in Z (the lever-grip surface height)
-# Rim INNER Ø sets the cable-channel outer wall. Sized so the hub→rim
-# channel (RIM_H tall, ~82% packing) holds ~7 ft of 6 mm cable (6 ft + margin)
-# — see capacity sweep. Cable winds INSIDE the rim so its OUTER face stays
-# free for the ratchet/brake.
-RIM_ID     = 108.0
-RIM_WALL   = STRUCT_WALL + RATCHET_DEPTH   # 3.2 — sized so the wall behind the
-                       # deepest ratchet-tooth valley (RIM_WALL − RATCHET_DEPTH)
-                       # equals STRUCT_WALL (1.7 mm).
-RIM_OD     = RIM_ID + 2 * RIM_WALL   # 114.4
+# RIM_OD is the fixed anchor — the brake-band OD that the brake lever, the
+# cable top rim, and the cable retainer all key off, so it must NOT move. The
+# brake-band wall is just STRUCT_WALL now: the ratchet valley floor sits at
+# RIM_OD/2 and its teeth protrude past it, so a 1.7 mm wall is fully supported
+# (no overhang). RIM_ID is derived, which pushes the cable-channel outer wall
+# out (longer spokes than the old 108 — the wider channel only adds capacity).
+RIM_OD     = 114.4     # fixed brake-band / rim outer diameter
+RIM_WALL   = STRUCT_WALL              # 1.7 — brake-band / rim wall thickness
+RIM_ID     = RIM_OD - 2 * RIM_WALL   # 111.0 — cable-channel outer wall
+# The RIM_H-tall rim splits into a short RATCHET teeth band at the bottom and a
+# tall SMOOTH brake band filling the rest. The pawl only needs a little tooth
+# height, so the ratchet band is short and the brake band gets the rest.
+RATCHET_BAND_H = 3.0                  # ratchet teeth z-height (brake band = RIM_H − this)
 
 
 def _cyl_ratchet_band(z_lo, z_hi):
     """Cylindrical (radial-engagement) ratchet on the rim's OUTER face over
     [z_lo, z_hi]. A 90°-rotated version of the old axial ratchet: the
     sawtooth now runs around the circumference with its catch face RADIAL,
-    so the pawl engages from OUTSIDE in X/Y. Tooth tips sit at RIM_OD/2
-    (flush with the brake band), valleys RATCHET_DEPTH deep."""
-    r_tip  = RIM_OD / 2
-    r_root = r_tip - RATCHET_DEPTH
+    so the pawl engages from OUTSIDE in X/Y. The valley floor sits at RIM_OD/2,
+    flush with the brake band above so the ratchet's solid core FULLY SUPPORTS
+    the band (no overhang); the tips PROTRUDE RATCHET_DEPTH past it."""
+    r_root = RIM_OD / 2
+    r_tip  = r_root + RATCHET_DEPTH
     n      = RATCHET_TEETH
     pts = []
     for i in range(n):
@@ -183,15 +196,15 @@ def _hub_key_bumps():
 
 def _lever_rim():
     """Bottom cable rim — the RIM_H-tall outer wall only (NO floor disc; the
-    spokes carry the hub↔rim connection). Its 14 mm height splits into:
-      - bottom 7 mm: cylindrical RATCHET teeth on the outer face, and
-      - top 7 mm: SMOOTH brake band (RIM_ID..RIM_OD).
+    spokes carry the hub↔rim connection). Its height splits into:
+      - bottom RATCHET_BAND_H: cylindrical RATCHET teeth on the outer face, and
+      - the rest (top): SMOOTH brake band (RIM_ID..RIM_OD).
     Bands swapped (ratchet low, brake high) so the brake lever's pivot —
     which must sit BELOW its band — lands above the spool bottom instead of
     being dragged negative, keeping the levers/housing from hanging as far
     below the spool. Cable winds in the hub→RIM_ID channel on the spoke grid."""
-    z_mid = RIM_H / 2                                    # 7 — ratchet/brake split
-    ratchet = _cyl_ratchet_band(0.0, z_mid)             # teeth on the bottom 7 mm
+    z_mid = RATCHET_BAND_H                               # ratchet/brake split
+    ratchet = _cyl_ratchet_band(0.0, z_mid)             # teeth on the bottom RATCHET_BAND_H
     brake = (
         cyl(RIM_OD, RIM_H - z_mid, z=z_mid)
         .cut(cyl(RIM_ID, RIM_H - z_mid, z=z_mid))
@@ -453,74 +466,67 @@ pancake_bearing_z0 = PANCAKE_CAP_SEAT_Z0
 # and reaches the cone via a dedicated entry cut through the hub wall +
 # bearing_cap_top, defined in caps.py.)
 
-# Spring outer-end attachment slot — a blind radial notch in the hub
-# wall sized to receive the spring's bent-over outer tab (12.7 mm z x
-# 0.15 mm thick). Orientation: tall in z (matching the strip width),
-# narrow in y (fits the strip thickness with tolerance), shallow in x.
-# Blind outer face leaves ≥1.5 mm of hub-OD wall intact — no slits.
-#
-# Conical bottom: the slot's lower face is bounded by the LEVER cap-
-# stop lip's 45° cone surface, extended UPWARD into the spring cavity.
-# Using the cone itself to trim the slot guarantees flush alignment at
-# every y, not just y=0 (a flat-plane approximation would drift
-# ~0.03 mm off the cone at y=±SPRING_SLOT_W/2).
-SPRING_SLOT_H_RECT = 23.0   # rectangle height (z_bottom to outer-edge roof).
-                            # Sized for the 21.8 mm Stanley tape blade with
-                            # 1.2 mm of axial play.
-SPRING_SLOT_W      =  2.0   # y-extent (perpendicular to blade flat) — fits
-                            # 0.1 mm tape with bend clearance
-SPRING_SLOT_DEPTH  =  4.0   # x-extent (radial). Cuts all the way through
-                            # the 3 mm hub wall (with 0.5 mm overshoot
-                            # each side) — tape blade threads through
-                            # the slot from the cavity, gets bent on the
-                            # outer face to lock in place.
-SPRING_SLOT_ANGLE_DEG = 270.0  # angular position of the slot. 270° sits
-                            # halfway between the 240° and 300° spokes —
-                            # one spoke-section CCW from 210° to clear the
-                            # cable entry hole through the 180° spoke.
+# Spring-strip attachment: M2 screw + heat-set insert.
+# The clock-spring's outer tape is drilled (2 mm hole) and clamped against the
+# hub by an M2 x 8 low-profile socket-head screw (McMaster 92855A839); the screw
+# head sits on the INSIDE (cavity side) and threads into a McMaster 94459A110
+# M2 heat-set insert (2.5 mm long) pressed into the hub wall. The 1.7 mm
+# structural wall is too thin for the 3.5 mm insert pocket (2.5 mm + 1 mm
+# margin), so an elevated square boss (45 deg chamfer all round, for print support
+# + a clean blend) is added to the cavity wall to host it. The insert sits FLUSH
+# with the boss pad; the screw may protrude past the hub OD (acceptable - it's
+# clear of the cable channel, which is lower in z).
+SPRING_SCREW_ANGLE = 270.0
+# Cable top-rim sits CABLE_RIM_AIR_GAP above the bottom rim's top (= RIM_H); its
+# lid body is TOP_RIM_H tall. (build.py places it at CABLE_TOP_RIM_BASE_Z.)
+CABLE_TOP_RIM_BASE_Z = RIM_H + CABLE_RIM_AIR_GAP        # lid bottom face
+_CABLE_TOP_RIM_TOP_Z = CABLE_TOP_RIM_BASE_Z + TOP_RIM_H  # lid top face
+# Put the screw hole so its lower edge (the Ø M2_SHAFT_CLR_D shank hole that exits
+# the OD) is FLUSH with the lid's top — so the protruding screw clears the lid at
+# its maximum spacing. Tracks the air gap automatically: bump the gap → both the
+# lid and this hole move up together.
+SPRING_SCREW_Z     = _CABLE_TOP_RIM_TOP_Z + M2_SHAFT_CLR_D / 2
+SCREW_BOSS_H       = 2.0    # radial height the boss protrudes inward from wall A
+                            # (boss + 1.7 mm wall = 3.7 mm > the M2_INSERT_DEPTH pocket)
+SCREW_BOSS_SIDE    = 8.0    # square pad side at the boss face (the strip seats here)
+# Insert pilot / depth and screw clearance reuse the shared M2 heat-set-insert
+# constants (M2_INSERT_PILOT_D = 3.3, M2_INSERT_DEPTH = 3.5, M2_SHAFT_CLR_D = 2.4),
+# which are already sized for the McMaster 94459A110 insert — see dimensions.py.
 
-def _spring_slot():
-    slot_x_outer = -(HUB_CAVITY_D / 2 + SPRING_SLOT_DEPTH - 0.5)   # outer x face of slot
-    slot_x_inner = -(HUB_CAVITY_D / 2 - 0.5)                       # inner x face (cavity-side)
-    # At outer x (r=|slot_x_outer|), the lever-side cap-stop-lip cone surface
-    # extending UP into the cavity reaches r=|slot_x_outer| at this z; this
-    # is the slot's lower bound at that x.
-    slot_zb_at_outer = LEVER_STOP_LIP_Z1 + (SPRING_SLOT_DEPTH - 0.5)
-    slot_ztop = slot_zb_at_outer + SPRING_SLOT_H_RECT             # slot's upper face
-    lip_apex_z = LEVER_STOP_LIP_Z1 - HUB_CAVITY_D / 2              # cone apex (below spool body)
 
-    # Rectangular prism that overshoots BELOW the apex in z; the cone
-    # intersection below trims its bottom surface to the cone.
-    slot_prism = (
-        cq.Workplane("XY")
-        .workplane(offset=lip_apex_z - 1.0)
-        .center((slot_x_outer + slot_x_inner) / 2, 0)
-        .box(
-            abs(slot_x_inner - slot_x_outer),
-            SPRING_SLOT_W,
-            slot_ztop - (lip_apex_z - 1.0),
-            centered=(True, True, False),
-        )
-    )
+def _spring_screw_boss():
+    """Elevated square boss on the cavity wall (45 deg chamfer all round) that
+    hosts the heat-set insert - it adds the radial depth the 1.7 mm wall lacks.
+    Built with its pad facing the cavity, then spun to SPRING_SCREW_ANGLE."""
+    r_wall = HUB_CAVITY_D / 2                       # 27 - cavity inner face
+    r_pad  = r_wall - SCREW_BOSS_H                  # boss pad face (innermost)
+    base   = SCREW_BOSS_SIDE + 2 * SCREW_BOSS_H     # 45 deg: base grows by the height each side
+    boss = (cq.Workplane("YZ").workplane(offset=r_pad)
+            .rect(SCREW_BOSS_SIDE, SCREW_BOSS_SIDE)
+            .workplane(offset=SCREW_BOSS_H)
+            .rect(base, base)
+            .loft())
+    # Extend the base 0.3 mm INTO the wall so the union merges volumetrically with
+    # the curved hub rather than touching it on a tangent plane.
+    boss = boss.union(cq.Workplane("YZ").workplane(offset=r_wall)
+                      .rect(base, base).extrude(0.3))
+    return (boss.translate((0, 0, SPRING_SCREW_Z))
+            .rotate((0, 0, 0), (0, 0, 1), SPRING_SCREW_ANGLE))
 
-    # The lever-side cap-stop-lip cone, extended UPWARD from its apex —
-    # shifted 0.02 mm DOWNWARD from the true lip apex so the slot's roof
-    # surface is ever so slightly DEEPER than the actual lip cone (by
-    # 0.02 mm / 20 µm at each z). Without this offset, the cut operation
-    # produces two mathematically coincident cone surfaces (the lip's
-    # topside and the slot's floor), which OCCT's boolean fails to merge
-    # cleanly and marks the result invalid.
-    lip_cone_offset = 0.02
-    lip_cone_height = SPOOL_H - lip_apex_z + 1.0    # tall enough to cover the slot
-    lip_cone_ext = cq.Workplane("XY").add(cq.Solid.makeCone(
-        0.001, lip_cone_height + 0.001, lip_cone_height,
-        pnt=cq.Vector(0, 0, lip_apex_z - lip_cone_offset),
-        dir=cq.Vector(0, 0, 1),
-    ))
 
-    slot = slot_prism.intersect(lip_cone_ext)
-    # Rotate from constructed position at 180° (-x) to SPRING_SLOT_ANGLE_DEG.
-    return slot.rotate((0, 0, 0), (0, 0, 1), SPRING_SLOT_ANGLE_DEG - 180.0)
+def _spring_screw_bore():
+    """Radial bore through the boss + wall: an insert pocket (M2_INSERT_PILOT_D
+    dia x M2_INSERT_DEPTH) from the pad face, then an M2_SHAFT_CLR_D clearance
+    hole the rest of the way out past the OD (so the screw shank can protrude)."""
+    r_pad = HUB_CAVITY_D / 2 - SCREW_BOSS_H
+    x_clr = r_pad + M2_INSERT_DEPTH
+    clr_len = (HUB_OD / 2 + 5.0) - x_clr            # run out well past the OD
+    pocket = cq.Solid.makeCylinder(M2_INSERT_PILOT_D / 2, M2_INSERT_DEPTH,
+                                   cq.Vector(r_pad, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
+    clr = cq.Solid.makeCylinder(M2_SHAFT_CLR_D / 2, clr_len,
+                                cq.Vector(x_clr, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
+    bore = pocket.fuse(clr).rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), SPRING_SCREW_ANGLE)
+    return cq.Workplane(obj=bore)
 
 
 main_body = _build_main_body()
