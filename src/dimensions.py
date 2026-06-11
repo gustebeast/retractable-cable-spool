@@ -35,7 +35,7 @@ FLANGE_LIP_T   =   3.2   # rim thickness: 1.7 mm of clean support material above
 # features print as solid walls with no infill sliver. The bearing
 # press-fit collars are NOT pinned to this — they keep their own thicker
 # wall (3 mm) for hoop strength under the press-fit.
-STRUCT_WALL    =   1.7
+STRUCT_WALL    =   1.6
 
 HUB_OD         =  57.4   # hub outer diameter = cavity ID 54 mm + 2×HUB_WALL.
                          # Sized for the TRIMMED clock spring (fits a 49 mm hole
@@ -50,7 +50,7 @@ HUB_WALL       = STRUCT_WALL   # hub wall thickness in the spring-cavity region.
 # ── 608 bearing (purchased part) ─────────────────────────────────────────────
 BEARING_OD     =  22.0   # 608 bearing outer race diameter
 BEARING_W      =   7.0   # 608 bearing axial width
-BEARING_CLR    =   0.3   # pocket bore clearance above BEARING_OD (0.15 mm per side)
+BEARING_CLR    =   0.2   # pocket bore clearance above BEARING_OD (0.1 mm per side)
 BEARING_LIP_H  =   1.0   # retention lip axial height
 BEARING_LIP_ID =  20.0   # retention lip ID (< BEARING_OD → stops the bearing)
 
@@ -217,15 +217,26 @@ FLANGE_INNER_LIP_H = 2.0 # vertical inner lip height (analogous to the
 RATCHET_TEETH  = 30      # 12° pitch — smooth hand feel, reliable pawl drop
 RATCHET_DEPTH  = 1.5     # tooth depth (mm) into the flange top surface
 
-# Angular offset applied to the tooth pattern. Chosen so a tooth boundary
-# (the HIGH→LOW step) lands at the angular midpoint of the pawl footprint,
-# yielding a symmetric HIGH/LOW split across the pawl face. The offset is
-# computed dynamically from the lever's y-range and the pawl footprint's
-# r-range so that moving the ratchet lever automatically re-centers the
-# boundary. Assigned in build.py once all lever + pawl constants are
-# defined; see the `RATCHET_TOOTH_OFFSET_DEG = ...` block near
-# PAWL_BRAKE_GAP.
-RATCHET_TOOTH_OFFSET_DEG = 0.0    # placeholder — real value computed below
+# Angular offset applied to the tooth pattern. Chosen so a tooth's radial
+# CATCH FACE aligns with the ratchet lever's pawl-bump (see levers.py): the
+# bump's APEX sits at radius (R_TIP + FIT_CLR) on the lever's inner-Y face
+# (y = RATCHET_Y0). The catch face passing through that apex has radial
+# angle ts = asin(RATCHET_Y0 / (R_TIP + FIT_CLR)); the offset puts a tooth
+# at that angle so the bump's hypotenuse mates flat-on-flat with the
+# tooth wall instead of bumping its tip.
+#
+# Hard-coded copies of housing.HOUSING_W / housing.LEVER_RIM_H / spool.RIM_OD
+# (no circular import). Recompute if any of those change.
+_HOUSING_W_FOR_RATCHET   = 22.0       # housing.HOUSING_W
+_LEVER_RIM_H_FOR_RATCHET = 3.3        # housing.LEVER_RIM_H
+_RIM_OD_FOR_RATCHET      = 117.8      # spool.RIM_OD
+_RATCHET_LEVER_Y0        = _HOUSING_W_FOR_RATCHET / 2 + _LEVER_RIM_H_FOR_RATCHET  # 14.3
+_RATCHET_TIP_R           = _RIM_OD_FOR_RATCHET / 2                                # 58.9
+_RATCHET_BUMP_APEX_R     = _RATCHET_TIP_R + 0.15                                  # 59.05 — hardcoded FIT_CLR (defined later in this file)
+_RATCHET_PITCH_DEG       = 360.0 / RATCHET_TEETH                                  # 12.0
+RATCHET_TOOTH_OFFSET_DEG = math.degrees(
+    math.asin(_RATCHET_LEVER_Y0 / _RATCHET_BUMP_APEX_R)
+) % _RATCHET_PITCH_DEG
 
 # ── Shared M2 cap-screw / heat-set-insert constants ──────────────────────────
 # Used everywhere the spool consumes an M2 cap screw (lever pivots, axle
@@ -249,7 +260,7 @@ AXLE_CROSS_HOLE_D = M2_SHAFT_CLR_D    # M2 clearance through the axle.
 # (spool.py) can sit its hole flush with the lid's top automatically — bumping
 # the gap moves both the lid and the screw together.
 TOP_RIM_H          = 7.0     # axial height of the cable top-rim lid body
-CABLE_RIM_AIR_GAP  = 8.0     # lid bottom sits this far above the bottom rim top
+CABLE_RIM_AIR_GAP  = 10.0    # lid bottom sits this far above the bottom rim top
 
 # Standard "extend past a face" margin for boolean cut/union operations.
 # Applied to through-cuts (workplane offset by -BOOL_OVERSHOOT, extrude
@@ -266,6 +277,17 @@ BOOL_OVERSHOOT     =   0.5
 FIT_CLR        =   0.15  # shared per-side slip-fit clearance for hand-assembled
                          # cylindrical/rectangular fits (cap seat, anti-rotation
                          # keys, etc.). Single source of truth for fitted parts.
+CROSS_PRINT_CLR =  0.30  # per-side clearance for joints whose mortise and tenon
+                         # are printed in DIFFERENT orientations. The retainer↔
+                         # housing tongue-and-groove fits well at 0.3 in practice.
+                         # Joints printed face-to-face (e.g. the floating tenon
+                         # whose mating mortises share a chunk's print bed) keep
+                         # using FIT_CLR.
+CHUNK_RAIL_CLR  =  0.40  # per-side clearance for the brake-chunk↔housing and
+                         # ratchet-chunk↔housing rail joints specifically. These
+                         # have a wider/deeper octagonal cross-section than the
+                         # retainer T-and-G, and at 0.3 they still fit too tight
+                         # to slide on real prints — 0.4 frees them up.
 CAP_STOP_LIP_H =   1.0   # axial height of the cap-stop lip in main body.
                          # Must equal CAP_STOP_INSET so the lip's underside
                          # prints as a 45° self-supporting cone (rise = run).

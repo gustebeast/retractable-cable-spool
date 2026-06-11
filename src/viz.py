@@ -20,7 +20,7 @@ from .housing import (
     BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
     RATCHET_LEVER_PIN_ALPHA, RATCHET_SPRING_PIN_ALPHA,
     BRAKE_LEVER_PIN_ALPHA, BRAKE_SPRING_PIN_ALPHA,
-    SPRING_BODY_LEN, SPRING_COIL_MAJOR_R, SPRING_WIRE_R,
+    SPRING_BODY_LEN, SPRING_COIL_MAJOR_R, SPRING_WIRE_R, SPRING_SPACER_T,
     STOP_PIN_R,
 )
 from .spool import pancake_bearing_z0
@@ -64,10 +64,11 @@ def _torsion_spring(pivot_x, pivot_z, y_a, y_b, pin_alphas):
     return cq.Workplane("XY").add(fused)
 
 
-# Coil sits centered in the 4.5 mm lever gap, between the block face
-# (±HOUSING_W/2) and the lever inner face. Legs reach the lever pin and the
-# spring pin of each lever.
-_GAP_PAD = (4.5 - SPRING_BODY_LEN) / 2          # ~1 mm each side of the coil
+# Coil sits centered in the LEVER_RIM_H-wide gap between the block face
+# (±HOUSING_W/2) and the lever inner face, riding on the SPRING_SPACER_T
+# bosses on either side. Legs reach the lever pin and the spring pin of
+# each lever.
+_GAP_PAD = SPRING_SPACER_T                       # housing-side spacer thickness
 ratchet_spring = _torsion_spring(
     RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
     y_a=HOUSING_W / 2 + _GAP_PAD,
@@ -94,17 +95,49 @@ bearing_top    = _bearing_dummy(pancake_bearing_z0)
 
 
 # ── Brake pad rubber (viz only) ───────────────────────────────────────
-# Thin slab bonded to the printed brake pad's rim-facing face, occupying the
-# gap between that face and the band. Built at the lever's rest pose and
-# pre-rotated by the same warp pre-comp as the printed lever.
+# Simple slab — a parallelogram in XZ, extruded across the lever's Y range.
+# Matches the brake lever's tilted pad-mount surface so the pad sits flush
+# against it. At the midpoint of brake travel the slab rotates to vertical,
+# giving ideal flat contact with the band there. Built at the lever's rest
+# pose and pre-rotated by the same warp pre-comp as the printed lever.
 def _brake_pad_rubber():
+    import math
+    import cadquery as cq
     from .housing import LEVER_REST_PRECOMP_DEG
-    from .levers import (BRAKE_Y0, BRAKE_Y1, RUBBER_FACE_R, _PAD_R_IN,
-                         PAD_Z_LO, PAD_Z_HI, _arc_strip)
-    # Arc strip between the rubber's rim-facing arc and the printed pad's
-    # inner arc, conforming to the band (matches the pad's curvature).
-    slab = _arc_strip(RUBBER_FACE_R, _PAD_R_IN, BRAKE_Y0, BRAKE_Y1,
-                      PAD_Z_LO, PAD_Z_HI)
+    from .levers import (BRAKE_Y0, BRAKE_Y1, BRAKE_ARM_X_LO, BRAKE_RUBBER_T,
+                         RUBBER_PAD_Z_LO, PAD_Z_HI, PAD_Y_MID, R_RIM,
+                         BRAKE_PAD_MOUNT_TILT_DEG)
+    # X- and Y-tilts (mirroring the brake-lever horizontal arm).
+    half_h    = (PAD_Z_HI - RUBBER_PAD_Z_LO) / 2
+    tilt_dx_x = half_h * math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
+    x_band    = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)
+    dx_dy_at_rest = abs(PAD_Y_MID) / (
+        math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG)) * x_band)
+    y_len     = BRAKE_Y1 - BRAKE_Y0
+    tilt_dx_y = (y_len / 2) * dx_dy_at_rest
+
+    # XZ parallelograms at y=BRAKE_Y0 and y=BRAKE_Y1, lofted.
+    # Lever-side face follows the lever's tilted mount; band-side is offset
+    # BRAKE_RUBBER_T in -X.
+    def _poly(sign_y):
+        # sign_y: -1 for BRAKE_Y0, +1 for BRAKE_Y1
+        offy = sign_y * tilt_dx_y
+        x_lev_bot = BRAKE_ARM_X_LO - tilt_dx_x + offy
+        x_lev_top = BRAKE_ARM_X_LO + tilt_dx_x + offy
+        x_rim_bot = x_lev_bot - BRAKE_RUBBER_T
+        x_rim_top = x_lev_top - BRAKE_RUBBER_T
+        return [
+            (x_lev_bot, RUBBER_PAD_Z_LO),
+            (x_rim_bot, RUBBER_PAD_Z_LO),
+            (x_rim_top, PAD_Z_HI),
+            (x_lev_top, PAD_Z_HI),
+        ]
+
+    slab = (cq.Workplane("XZ").workplane(offset=-BRAKE_Y0)
+            .polyline(_poly(-1)).close()
+            .workplane(offset=BRAKE_Y0 - BRAKE_Y1)
+            .polyline(_poly(+1)).close()
+            .loft(ruled=True, combine=True))
     return slab.rotate((BRAKE_PIVOT_X, 0, BRAKE_PIVOT_Z),
                        (BRAKE_PIVOT_X, 1, BRAKE_PIVOT_Z),
                        LEVER_REST_PRECOMP_DEG)

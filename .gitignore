@@ -4,10 +4,6 @@ __pycache__/
 .venv/
 .vscode/
 
-# Onshape API credentials — NEVER commit. Copy onshape_credentials.example.json
-# to onshape_credentials.json and fill in your keys.
-tools/onshape_credentials.json
-
 # Per-machine build counter (drives the floating "build #N" model) — bumped
 # every build, so don't track it.
 tools/build_counter.txt

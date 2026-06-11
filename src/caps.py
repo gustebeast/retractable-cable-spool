@@ -45,8 +45,8 @@ from .helpers import cyl, make_keys
 # No solid web — the cap is open on both faces between the spokes (the
 # cassette's central bore is Ø13.4; its flange bears only on the rim top,
 # the lever housing plate sits 2 mm clear of the bottom face).
-CAP_BOSS_WALL = 3.0          # wall around the bearing press-fit pocket
-CAP_RIM_WALL  = 3.0          # outer-wall thickness (tongues + cassette-flange seat)
+CAP_BOSS_WALL = STRUCT_WALL  # wall around the bearing press-fit pocket
+CAP_RIM_WALL  = STRUCT_WALL  # outer-wall thickness (tongues + cassette-flange seat)
 CAP_RIB_W     = STRUCT_WALL  # radial-spoke width — pinned to STRUCT_WALL
 CAP_RIB_COUNT = 6            # built as CAP_RIB_COUNT // 2 full-diameter boxes
 

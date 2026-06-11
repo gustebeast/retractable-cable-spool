@@ -18,6 +18,7 @@ import cadquery as cq
 
 from .dimensions import (
     HUB_OD, FIT_CLR, STRUCT_WALL, TOP_RIM_H,
+    KEY_W, KEY_DEPTH, BOOL_OVERSHOOT,
     M2_SHAFT_CLR_D, M2_INSERT_PILOT_D, M2_INSERT_DEPTH,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
 )
@@ -36,7 +37,10 @@ _OUTER_ID   = _OUTER_OD - 2 * STRUCT_WALL
 
 # Same spoke count as the bottom rim (gap ≤ CABLE_D at the rim), offset by
 # half a pitch so the top grid's spokes sit over the bottom grid's gaps.
-_N_SPOKES     = math.ceil(2 * math.pi * (RIM_ID / 2) / (CABLE_D + STRUCT_WALL))
+# (Sized against the BRAKE-band inner — the widest part of the bottom rim's
+# cable channel — matching spool._channel_spokes.)
+_N_SPOKES     = math.ceil(2 * math.pi * ((RIM_OD - 2 * STRUCT_WALL) / 2)
+                          / (CABLE_D + STRUCT_WALL))
 _SPOKE_OFFSET = 180.0 / _N_SPOKES                   # half-pitch
 
 # ── Split-collar pinch clamp (height lock) ──────────────────────────────────
@@ -129,12 +133,41 @@ def _build_cable_top_rim():
         )
         part = part.union(sp)
 
-    # Key slots in the collar for the hub bumps (groove = oversized by FIT_CLR).
-    part = part.cut(make_keys(HUB_OD / 2, z0, z0 + TOP_RIM_H, groove=True))
-
-    # Split-collar clamp: add the boss, then cut the slit + screw holes.
+    # Split-collar clamp: union the boss FIRST so the key-groove cut below
+    # carves through it too. The boss sits at θ = CLAMP_SLIT_ANGLE (= 8°)
+    # and spans ~±10° tangentially at its inner face, so the hub key bump
+    # at θ=0° falls inside the boss's angular footprint — without a groove
+    # through the boss, that bump collides with the boss's -X face when
+    # the cable_top_rim slides down the hub.
     boss, cut = _clamp_features()
-    part = part.union(boss).cut(cut)
+    part = part.union(boss)
+
+    # Key slots in the collar AND the clamp boss for the hub bumps (groove
+    # = oversized by FIT_CLR). Cut height extended from TOP_RIM_H up to
+    # CLAMP_BOSS_H so the groove runs through the full boss height — the
+    # hub bumps extend the full spool height, so they enter the boss above
+    # the rim top too.
+    part = part.cut(make_keys(HUB_OD / 2, z0, z0 + CLAMP_BOSS_H, groove=True))
+
+    # Sliver kill: because the boss is rotated by CLAMP_SLIT_ANGLE = 8° but
+    # the θ=0° key groove is axis-aligned, the boss's -Y face at the inner
+    # radius (where the bump enters the boss) lands ~0.04 mm beyond the
+    # groove's -Y edge — leaving a hair-thin vertical sliver of boss
+    # material between the groove and the boss face. Carve an extra slot
+    # adjacent to the θ=0° groove, widened toward -Y, to absorb it.
+    _SLIVER_KILL_W = 0.5
+    sliver_kill = (
+        cq.Workplane("XY")
+        .workplane(offset=z0)
+        .center(HUB_OD / 2 + KEY_DEPTH / 2,
+                -(KEY_W / 2 + FIT_CLR + _SLIVER_KILL_W / 2))
+        .box(KEY_DEPTH + 2 * BOOL_OVERSHOOT, _SLIVER_KILL_W,
+             CLAMP_BOSS_H, centered=(True, True, False))
+    )
+    part = part.cut(sliver_kill)
+
+    # Slit + M2 screw holes for the pinch clamp.
+    part = part.cut(cut)
     return part
 
 
