@@ -36,7 +36,7 @@ import cadquery as cq
 from .dimensions import (
     AXLE_PRINT_D,
     BOOL_OVERSHOOT,
-    FIT_CLR,
+    FIT_CLR, CROSS_PRINT_CLR, CHUNK_RAIL_CLR,
     M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
     M2_INSERT_DEPTH, M2_INSERT_PILOT_D, M2_SHAFT_CLR_D,
     PANCAKE_CROSS_PIN_Z, PLATE_T,
@@ -44,12 +44,16 @@ from .dimensions import (
     SPOOL_H, STRUCT_WALL,
 )
 from .helpers import cyl, cone_solid
-from .spool import RIM_OD, RIM_H, RATCHET_BAND_H
+from .spool import (RIM_OD, RIM_H, RATCHET_BAND_H, BRAKE_RIM_Z_LO,
+                    SPOOL_HORIZONTAL_CLEARANCE,
+                    RATCHET_CHUNK_Z_MAX, RATCHET_CHUNK_CLEARANCE)
 from .cable_retainer import (
     RETAIN_Z_LO, RETAIN_Z_HI,
     RETAIN_R_IN, RETAIN_R_OUT, RETAIN_N_BARS,
     RETAIN_WINDOW_W, RETAIN_WINDOW_H,
     RETAIN_WINDOW_Z_LO, RETAIN_WINDOW_Z_HI,
+    RETAIN_TENON_Z_BOT, RETAIN_TENON_Z_TOP, RETAIN_TENON_DEPTH,
+    retainer_tenon_polygon,
 )
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -71,10 +75,22 @@ LEVER_TRAVEL_DEG = 20.0   # equal pull travel for both levers (A_ANGLES_MATCH).
                           # the teeth grew outward (valley/tip +RATCHET_DEPTH).
 _STOP_CONTACT_SEP_DEG = math.degrees(2 * math.asin(STOP_PIN_D / (2 * STOP_PIN_R)))
 
-# Lever pivot X is fixed by the contact arm to the rim (10 mm), DECOUPLED from
-# the block's mid-plane — so the block can slide outward to clear the stop
-# pins without dragging the pivot (and the pins) out with it.
-PIVOT_X         = RIM_OD / 2 + 10.0                     # 67.2
+# Print warp pre-compensation: pre-rotate the rest pose back by this so the
+# printed lever settles true (0 for the radial-lever generation; see the
+# longer note where it's used).
+LEVER_REST_PRECOMP_DEG = 0.0
+
+# Lever pivot X is derived so the FRONT_THICKEN feature's inner (spool-
+# facing) face — which sits at the REST stop pin's -X extent in order to
+# embed the pin in solid wall — lands SPOOL_HORIZONTAL_CLEARANCE beyond the
+# rim's OD. The rest pin sits at α = STOP_LEVER + _STOP_CONTACT_SEP (+ rest-
+# precomp). Its -X edge is at PIVOT_X + STOP_PIN_R·cos(α) − STOP_PIN_D/2.
+# Setting that = RIM_OD/2 + SPOOL_HORIZONTAL_CLEARANCE and solving:
+_REST_PIN_ALPHA_DEG = (STOP_LEVER_PIN_ALPHA_DEG + _STOP_CONTACT_SEP_DEG
+                      + LEVER_REST_PRECOMP_DEG)
+PIVOT_X = (RIM_OD / 2 + SPOOL_HORIZONTAL_CLEARANCE
+           - STOP_PIN_R * math.cos(math.radians(_REST_PIN_ALPHA_DEG))
+           + STOP_PIN_D / 2)                            # ≈ 67.17
 RATCHET_PIVOT_X = PIVOT_X
 BRAKE_PIVOT_X   = PIVOT_X
 
@@ -124,7 +140,15 @@ BACK_HOUSING_CLR   = FRONT_HOUSING_CLR   # same spool gap as the front (mirror i
 #   - brake pivot just below the brake band — which now lands ABOVE the spool
 #     bottom, so neither pivot is dragged negative.
 # Both at their floors to minimise how far the levers hang below the spool.
-RATCHET_PIVOT_Z = 10.0                                  # above teeth top (7)
+# Ratchet pivot Z is driven by the 6 mm guide wheel: the wheel spans
+# BRAKE_RIM_Z_LO (7.5) .. 13.5, the pocket ceiling sits GUIDE_WHEEL_FACE_CLR
+# above the wheel (14.5), and the pivot's M2 bore needs 0.4 mm of solid
+# housing below its -Z extent:
+#   RATCHET_PIVOT_Z = 7.5 + 6.0 + 1.0 + 0.4 + M2_SHAFT_CLR_D/2 = 16.1
+# (GUIDE_POCKET_Z_HI_PLUS below re-derives the wheel from this pivot, so
+# the two stay consistent. Mirror RATCHET_CHUNK_Z_MAX in spool.py if this
+# changes.)
+RATCHET_PIVOT_Z = 16.1
 BRAKE_PIVOT_Z   = 2.0                                   # lowered 3.5→2.0 so the brake pad,
                           # now on the LOWER band (clear of the cable retainer), keeps a long
                           # enough arm above the pivot to preserve brake overlap.
@@ -143,17 +167,13 @@ FRONT_Z_TOP = PANCAKE_PLATE_Z_OUT                       # 64
 # (parallel to the spool axis) so it ROLLS — not skids — as the rim's surface
 # sweeps tangentially (±Y) past the contact point while the spool spins.
 #
-# Width (its Z extent) is maxed out between the two spool features that bracket
-# the brake band: the ratchet teeth below (top at RATCHET_BAND_H) and the cable
-# retainer's bottom ring above (RETAIN_Z_LO), keeping GUIDE_WHEEL_Z_CLR clear of
-# each. The wheel sits in a +X-open pocket cut into the back block, with a
-# STRUCT_WALL-thick wall behind it (-X) and below it (-Z); the leftover space
-# between that back wall and the wheel is the air gap.
+# Width (its Z extent) spans the brake rim's straight section: the wheel's
+# bottom aligns with BRAKE_RIM_Z_LO (top of the rim's cone — wheel rolls
+# only on the cylindrical brake band, never on the cone or teeth) and its
+# top sits GUIDE_TO_RETAINER_CLR + GUIDE_WHEEL_FACE_CLR below the retainer
+# ring. The wheel sits in a +X-open pocket cut into the back block, with a
+# STRUCT_WALL-thick wall behind it (-X) and below it (-Z).
 GUIDE_WHEEL_OD     = 14.0
-GUIDE_WHEEL_Z_CLR  = 1.0                                  # gap to ratchet rim / cable retainer
-GUIDE_WHEEL_Z_LO   = RATCHET_BAND_H + GUIDE_WHEEL_Z_CLR   # 4.0 — 1 mm above the ratchet teeth
-GUIDE_WHEEL_Z_HI   = RETAIN_Z_LO - GUIDE_WHEEL_Z_CLR      # 11.3 — 1 mm below the retainer ring
-GUIDE_WHEEL_W      = GUIDE_WHEEL_Z_HI - GUIDE_WHEEL_Z_LO  # 7.3 — axial (Z) width
 GUIDE_WHEEL_CX     = -(RIM_OD / 2 + GUIDE_WHEEL_OD / 2)   # -64.2 — center; surface tangent to rim
 GUIDE_WHEEL_BORE_D = 2.6                                  # spinning clearance for a future M2 axle
 
@@ -161,11 +181,73 @@ GUIDE_WHEEL_BORE_D = 2.6                                  # spinning clearance f
 # thick on -X (behind) and -Z (below). The back leg's bottom is the underside
 # of that 1.7 mm floor; everything between the floor and the wheel is air.
 GUIDE_POCKET_WALL    = STRUCT_WALL                            # 1.7 — back + bottom walls
-GUIDE_POCKET_X_BACK  = BACK_SPINE_X_OUTER + GUIDE_POCKET_WALL # -73.03 — pocket back face
+# Target gap between the wheel's -X extent and the pocket back face.
+# Drives the pocket back position; the back-spine wall is then thickened
+# OUTWARD in -X (via _back_wall_thicken) so it keeps its STRUCT_WALL thickness
+# behind the new pocket back.
+GUIDE_WHEEL_BACK_CLR = 1.0
+GUIDE_POCKET_X_BACK  = (GUIDE_WHEEL_CX - GUIDE_WHEEL_OD / 2
+                        - GUIDE_WHEEL_BACK_CLR)               # -73.9 — pocket back face
+# Boss thickness — extends BACK_SPINE_X_OUTER outward in -X enough to keep
+# GUIDE_POCKET_WALL of wall between the new pocket back and the outer face.
+# (= how much the pocket back shifted from the natural BACK_SPINE_X_OUTER +
+# GUIDE_POCKET_WALL position.)
+GUIDE_BACK_WALL_EXTRA_T = max(0.0,
+    (BACK_SPINE_X_OUTER + GUIDE_POCKET_WALL) - GUIDE_POCKET_X_BACK)
 GUIDE_WHEEL_FACE_CLR = 1.0                                    # housing clearance off the wheel faces
-GUIDE_POCKET_Z_LO    = GUIDE_WHEEL_Z_LO - GUIDE_WHEEL_FACE_CLR # 3.0 — pocket floor (top of bottom wall)
-GUIDE_POCKET_Z_HI    = GUIDE_WHEEL_Z_HI + GUIDE_WHEEL_FACE_CLR # 12.3 — pocket ceiling
+GUIDE_WHEEL_AXIAL_CLR = 0.5                                   # extra Z slack per face on the wheel hub
+                                                              # (hub_h shrinks by 2× this so the wheel
+                                                              # doesn't bind axially against the pocket)
+# Wheel's Z range keyed off the brake rim's straight section:
+#   - TOP:  pocket top sits GUIDE_TO_RETAINER_CLR (= 0.8) below the retainer's
+#           bottom ring, leaving room for the mortise/tenon material above.
+#   - BOT:  wheel's bottom aligns with the brake rim's straight section bottom
+#           (BRAKE_RIM_Z_LO = 4.7) — the wheel rolls on the cylindrical brake
+#           band only, never on the cone or the ratchet teeth.
+# GUIDE_TO_RETAINER_CLR now = STRUCT_WALL so that pocket top + STRUCT_WALL
+# (the chunk top wall) lands EXACTLY on the retainer's -Z face. This makes
+# CHUNK_Z_TOP = RETAIN_Z_LO: the brake/ratchet chunks no longer overshoot
+# the retainer and stop being clipped by the retainer's slab → chunks are
+# now fully independent from the retainer.
+GUIDE_TO_RETAINER_CLR = STRUCT_WALL
+# Structural top: where the housing material above the wheel rises to —
+# tied to the retainer's -Z face. Used by features ABOVE the wheel cavity
+# (guide-axle boss, back chamfer extrusion, retainer thickener, chunk top).
+GUIDE_POCKET_Z_HI    = RETAIN_Z_LO - GUIDE_TO_RETAINER_CLR        # 13.266
+# Wheel-cavity ceiling: where the actual wheel pocket cut stops. Driven by
+# the +X side's ratchet-pivot M2 bore at RATCHET_PIVOT_Z=10 (Ø 2.4), which
+# sweeps z = 8.8..11.2 — the cavity ceiling has to sit at least 0.4 mm
+# BELOW the bore's -Z extent to leave that much solid housing material
+# between the bore and the cavity. The wheel is sized to fit this tighter
+# ceiling, and BOTH the -X and +X pocket cuts use it so the wheel rides
+# snug on both sides (no vertical rattle on -X).
+GUIDE_POCKET_Z_HI_PLUS = (RATCHET_PIVOT_Z - M2_SHAFT_CLR_D / 2) - 0.4  # 8.4
+GUIDE_WHEEL_Z_HI     = GUIDE_POCKET_Z_HI_PLUS - GUIDE_WHEEL_FACE_CLR   # 7.4
+GUIDE_WHEEL_Z_LO     = BRAKE_RIM_Z_LO                            # 4.7 — flush with brake-rim bottom
+GUIDE_WHEEL_W        = GUIDE_WHEEL_Z_HI - GUIDE_WHEEL_Z_LO       # 2.7 — axial (Z) width
+GUIDE_POCKET_Z_LO    = GUIDE_WHEEL_Z_LO - GUIDE_WHEEL_FACE_CLR   # 3.7 — pocket floor
 GUIDE_POCKET_Y_HALF  = HOUSING_W / 2 - GUIDE_POCKET_WALL    # 9.3 — leaves a 1.7 mm wall on each ±Y side
+# +X (lever-side) pocket Y-half: tighter — wheel OD + 2 mm total (1 mm of
+# wheel-to-wall clearance per side). Lets the wider ±Y walls absorb the
+# +X lever-pivot insert/screw without the pocket cutting into them.
+GUIDE_POCKET_Y_HALF_PLUS = GUIDE_WHEEL_OD / 2 + 1.0          # 8.0
+
+# 45° corner chamfer at the pocket's back / +Y corner: adds material to the
+# corner so the +Y "ceiling" transitions to the -X wall at 45° instead of a
+# sharp 90° interior corner. Sized so the chamfer face stays
+# GUIDE_CHAMFER_WHEEL_CLR clear of the wheel's outer surface.
+#   Chamfer line in XY: from (Xb, Yh − L) on the -X wall to (Xb + L, Yh) on
+#   the +Y wall. Slope +1, equation x − y = Xb − Yh + L. Solving for tangent
+#   to circle of radius (wheel_r + clr) centered at (Wx, 0):
+#       L = Wx − Xb + Yh − (wheel_r + clr)·√2
+GUIDE_CHAMFER_WHEEL_CLR = 1.0
+GUIDE_CHAMFER_LEG = (
+    GUIDE_WHEEL_CX - GUIDE_POCKET_X_BACK + GUIDE_POCKET_Y_HALF
+    - (GUIDE_WHEEL_OD / 2 + GUIDE_CHAMFER_WHEEL_CLR) * math.sqrt(2)
+)
+assert GUIDE_CHAMFER_LEG > 0, (
+    f"guide-pocket chamfer leg is non-positive ({GUIDE_CHAMFER_LEG:.2f} mm) — "
+    "wheel sits too close to the corner; shrink GUIDE_CHAMFER_WHEEL_CLR.")
 # Back leg bottoms at the underside of the 1.7 mm floor (the rest of its old
 # full-height leg below the wheel is dropped — it served no purpose).
 BACK_Z_BOT = GUIDE_POCKET_Z_LO - GUIDE_POCKET_WALL          # 1.3
@@ -210,21 +292,32 @@ _GAP = (GUIDE_WHEEL_CX - GUIDE_WHEEL_OD / 2) - GUIDE_POCKET_X_BACK  # wheel back
 assert _GAP > 0, f"guide-wheel air gap is negative ({_GAP:.2f} mm) — wheel hits the back wall"
 
 # Lever-side gap + spring sizing (shared with levers.py and viz.py).
-LEVER_RIM_H     = 4.5     # Y gap between each lever's inner face and the
-                          # block's outer Y face. The torsion-spring coil
-                          # lives in this gap around the pivot screw.
 SPRING_BODY_LEN = 2.5     # axial (Y) extent of the coil
+SPRING_SPACER_T = 0.4     # axial (Y) extent of each spring-positioning boss
+                          # (one on the housing's lever-facing face, one on
+                          # the lever's housing-facing face). Was 1.0; shaved
+                          # to 0.4 so the lever sits closer to the housing,
+                          # giving the M2 pivot screw more thread engagement
+                          # on each side of the gap.
+LEVER_RIM_H     = SPRING_BODY_LEN + 2 * SPRING_SPACER_T  # 3.3 — Y gap between
+                          # each lever's inner face and the block's outer Y
+                          # face. The torsion-spring coil lives in this gap
+                          # around the pivot screw.
 LEVER_PIVOT_BOSS_OD = 6.0 # reinforcement boss OD coaxial with each pivot
-# Spring positioning ring: a short boss around each pivot hole on the block's
-# lever-facing Y face. It bears on the coil's housing-side end, holding the
-# spring centred in the gap. Paired 1:1 with the lever's own pivot-boss
-# extension, the two split the (LEVER_RIM_H − SPRING_BODY_LEN) = 2 mm buffer.
-HOUSING_BOSS_EXT = (LEVER_RIM_H - SPRING_BODY_LEN) / 2   # 1.0
+# Spring positioning ring on the housing's lever-facing Y face. Paired 1:1
+# with the lever's own pivot-boss extension on the other side of the spring.
+HOUSING_BOSS_EXT = SPRING_SPACER_T   # 0.4
 
-LEVER_SCREW_CLR_D      = M2_SHAFT_CLR_D
-LEVER_INSERT_PILOT_D   = M2_INSERT_PILOT_D
+LEVER_SCREW_CLR_D      = GUIDE_AXLE_SHAFT_D   # 2.2 — same tight thread-fit as the guide-wheel axle holes (M2 self-taps the housing side; the lever's pivot_hole is the 2.4 mm clearance bore)
+# No heat-set insert anymore — the M2 cap-screw self-taps the housing's
+# 2.2 mm bore directly. LEVER_INSERT_PILOT_D matches LEVER_SCREW_CLR_D so
+# the "pilot" pocket is effectively a continuation of the bore (no step,
+# no cone). The constant + the LEVER_INSERT_DEPTH / CHAMFER_H values are
+# kept (rather than ripping out _pivot_insert_pilot) so the call sites
+# don't need to change.
+LEVER_INSERT_PILOT_D   = LEVER_SCREW_CLR_D
 LEVER_INSERT_DEPTH     = M2_INSERT_DEPTH
-LEVER_INSERT_CHAMFER_H = (LEVER_INSERT_PILOT_D - LEVER_SCREW_CLR_D) / 2
+LEVER_INSERT_CHAMFER_H = (LEVER_INSERT_PILOT_D - LEVER_SCREW_CLR_D) / 2  # 0
 SCREW_HEAD_RECESS_D    = M2_HEAD_RECESS_D
 SCREW_HEAD_RECESS_H    = M2_HEAD_RECESS_H
 
@@ -247,7 +340,13 @@ SCREW_HEAD_RECESS_H    = M2_HEAD_RECESS_H
 # the lever pin re-seats on the REST pin.
 # ────────────────────────────────────────────────────────────────────────────
 STOP_PIN_HOLE_D = 1.5     # spring-leg through-hole Ø
-STOP_PIN_H      = 3.5     # Y projection of each pin into the lever gap
+PIN_TIP_CLEARANCE = 1.0   # Y gap left between each pin's tip and the opposing
+                          # body face (lever or housing). Held constant when
+                          # the lever-housing gap changes — STOP_PIN_H is
+                          # derived to keep this clearance fixed.
+STOP_PIN_H      = LEVER_RIM_H - PIN_TIP_CLEARANCE   # 2.3 (was 3.5; pin's
+                          # tip-side stays put, body side shortens to track
+                          # the smaller LEVER_RIM_H).
 SPRING_WIRE_R   = 0.25
 # (STOP_PIN_D, STOP_PIN_R, STOP_LEVER_PIN_ALPHA_DEG, LEVER_TRAVEL_DEG, and
 # _STOP_CONTACT_SEP_DEG are defined early in the envelope section so the
@@ -257,13 +356,6 @@ SPRING_WIRE_R   = 0.25
 # so they start and end at the same angles (asserted: A_ANGLES_MATCH).
 RATCHET_OUTER_TRAVEL_DEG = LEVER_TRAVEL_DEG   # disengage travel
 BRAKE_INNER_TRAVEL_DEG   = LEVER_TRAVEL_DEG   # engage travel
-
-# Print warp pre-compensation: pre-rotate the rest pose back by this so the
-# printed lever settles true. Set to 0 for now — the old 5° was tuned for the
-# old (axial) levers' print orientation; the radial levers print flat on their
-# Y face, a different warp profile, so leave it at 0 until measured. (Also
-# keeps the rendered rest pose showing the pawl truly meshed.)
-LEVER_REST_PRECOMP_DEG = 0.0
 
 # Per-lever pin α positions. Lever pin at α=90; spring pin TRAVEL+SEP below
 # (lower α), rest pin SEP+precomp above (higher α).
@@ -341,13 +433,37 @@ def pivot_boss_sector(pivot_x, pivot_z, y0, y1, *, od=LEVER_PIVOT_BOSS_OD):
 # ────────────────────────────────────────────────────────────────────────────
 # M2 PIVOT-SCREW CUTS (lever pivots)
 # ────────────────────────────────────────────────────────────────────────────
-def _pivot_clearance(x, z):
-    """M2 shaft clearance through the full block width (axis Y)."""
+LEVER_SCREW_BORE_LEN = 21.0   # 20 mm M2 screw + 1 mm clearance past the tip
+
+
+def _pivot_clearance(x, z, head_sign=None):
+    """M2 shaft clearance bore — LEVER_SCREW_BORE_LEN mm along Y, starting
+    at the screw head position (outer face of the lever-pivot spacer) and
+    extending toward the housing's interior. head_sign = +1 for ratchet
+    (head on +Y, bore extends -Y); −1 for brake (head on -Y, bore extends
+    +Y). The head end sits OUTSIDE the housing at world Y ≈ ±28 (past the
+    lever + spacer); only the ~4 mm of bore that lands inside the housing
+    actually removes material. Previous version cut the full 24 mm housing
+    width — punching a useless exit hole through the far +Y/-Y face."""
+    from .levers import LEVER_INNER_Y, LEVER_T
+    if head_sign is None:
+        # Legacy callers: cut both sides like the original full-width bore.
+        return (
+            cq.Workplane("XY").circle(LEVER_SCREW_CLR_D / 2)
+            .extrude(HOUSING_W + 2)
+            .rotate((0, 0, 0), (1, 0, 0), -90)
+            .translate((x, -HOUSING_W / 2 - 1, z))
+        )
+    # Head's underside (= shaft start) sits LEVER_HEAD_RECESS_H below the
+    # lever's outer face — the head is recessed INTO the lever, not riding
+    # on top of a spacer washer.
+    from .levers import LEVER_HEAD_RECESS_H
+    y_head = head_sign * (LEVER_INNER_Y + LEVER_T - LEVER_HEAD_RECESS_H)
     return (
         cq.Workplane("XY").circle(LEVER_SCREW_CLR_D / 2)
-        .extrude(HOUSING_W + 2)
-        .rotate((0, 0, 0), (1, 0, 0), -90)
-        .translate((x, -HOUSING_W / 2 - 1, z))
+        .extrude(LEVER_SCREW_BORE_LEN)
+        .rotate((0, 0, 0), (1, 0, 0), head_sign * 90)
+        .translate((x, y_head, z))
     )
 
 
@@ -360,7 +476,10 @@ def _pivot_insert_pilot(x, z, insert_face_sign, boss_ext=0.0):
     carries through a spring-positioning ring protruding from the face)."""
     pilot = (cq.Workplane("XY").circle(LEVER_INSERT_PILOT_D / 2)
              .extrude(LEVER_INSERT_DEPTH))
-    if insert_face_sign < 0:
+    # Pilot→clearance step cone is only needed when the pilot is wider
+    # than the clearance bore (heat-set insert design). With pilot D ==
+    # clearance D the cone is degenerate (zero radial step), so skip it.
+    if insert_face_sign < 0 and LEVER_INSERT_CHAMFER_H > 0:
         pilot = pilot.union(cone_solid(LEVER_INSERT_PILOT_D, LEVER_SCREW_CLR_D,
                                        LEVER_INSERT_CHAMFER_H, LEVER_INSERT_DEPTH))
     if insert_face_sign > 0:
@@ -385,7 +504,10 @@ def _axle_pin_insert_pilot(z_center, insert_face_sign, recess_depth=0.0,
                            x_center=0.0):
     pilot = (cq.Workplane("XY").circle(LEVER_INSERT_PILOT_D / 2)
              .extrude(LEVER_INSERT_DEPTH))
-    if insert_face_sign < 0:   # cone only for -Y (build-plate) inserts
+    # Cone lead-in only when the pilot is wider than the clearance bore.
+    # With pilot D == clearance D (current setup, no heat-set insert) the
+    # cone is degenerate, so skip it.
+    if insert_face_sign < 0 and LEVER_INSERT_CHAMFER_H > 0:
         pilot = pilot.union(cone_solid(LEVER_INSERT_PILOT_D, LEVER_SCREW_CLR_D,
                                        LEVER_INSERT_CHAMFER_H, LEVER_INSERT_DEPTH))
     if insert_face_sign > 0:
@@ -430,7 +552,34 @@ def _front_block():
 # they'd be thin features cantilevered off the wall (poor print support).
 # Instead, thicken the inner face inward to the stop pins' -X extent over the
 # lowest FRONT_THICKEN_H of the block, embedding the pins in solid wall.
-FRONT_THICKEN_H = 16.0
+# Height is sized so the thickening's TOP z reaches the ratchet_pin_chunk's
+# top PLUS the chunk clearance — so the chunk's full Z range is backed by the
+# thickened wall (embedding both brake and ratchet stop pins in solid wall)
+# with the same breathing room above the chunk that BRAKE_BAND_H uses.
+FRONT_THICKEN_H = (RATCHET_CHUNK_Z_MAX + RATCHET_CHUNK_CLEARANCE
+                   - FRONT_Z_BOT)                       # ≈ 19.87
+
+
+def _retainer_thicken():
+    """Thicken both ±X inner faces of the housing across the retainer's Z range,
+    bumping inward to x = ±RETAIN_R_OUT (= 63.1, the retainer's flat OD where
+    the tenon would emerge). Z extends from RETAIN_Z_LO up through
+    RETAIN_Z_HI + STRUCT_WALL — the extra 1.7 mm cap above the retainer
+    gives material for the (future) mortise's top wall."""
+    z_lo = RETAIN_Z_LO
+    z_hi = RETAIN_Z_HI + STRUCT_WALL
+    h    = z_hi - z_lo
+
+    def _side(housing_inner_x):
+        sign    = 1 if housing_inner_x > 0 else -1
+        x_inner = sign * RETAIN_R_OUT
+        x_outer = housing_inner_x + sign * BOOL_OVERSHOOT
+        return (cq.Workplane("XY").workplane(offset=z_lo)
+                .center((x_inner + x_outer) / 2, 0)
+                .box(abs(x_outer - x_inner), HOUSING_W, h,
+                     centered=(True, True, False)))
+
+    return _side(SPINE_X_INNER).union(_side(BACK_SPINE_X_INNER))
 
 
 def _front_thicken():
@@ -470,6 +619,46 @@ def _back_block():
     )
 
 
+def _guide_pocket_back_y_chamfer(y_half=GUIDE_POCKET_Y_HALF):
+    """45° corner chamfer in XY at the guide-wheel pocket's back-/+Y corner.
+    A triangular prism added back AFTER the pocket cut, extruded across the
+    pocket's Z range. The chamfer face is tangent to a circle of radius
+    (wheel_r + GUIDE_CHAMFER_WHEEL_CLR) at the wheel axis, so the wheel
+    keeps GUIDE_CHAMFER_WHEEL_CLR clearance from the chamfer surface."""
+    # Chamfer leg recomputed from y_half so the chamfer fits a tighter
+    # pocket (+X side uses GUIDE_POCKET_Y_HALF_PLUS = 8.0).
+    L = (GUIDE_WHEEL_CX - GUIDE_POCKET_X_BACK + y_half
+         - (GUIDE_WHEEL_OD / 2 + GUIDE_CHAMFER_WHEEL_CLR) * math.sqrt(2))
+    z_lo = GUIDE_POCKET_Z_LO
+    z_hi = GUIDE_POCKET_Z_HI
+    return (
+        cq.Workplane("XY").workplane(offset=z_lo)
+        .moveTo(GUIDE_POCKET_X_BACK,        y_half)
+        .lineTo(GUIDE_POCKET_X_BACK,        y_half - L)
+        .lineTo(GUIDE_POCKET_X_BACK + L,    y_half)
+        .close()
+        .extrude(z_hi - z_lo)
+    )
+
+
+def _back_wall_thicken():
+    """Adds GUIDE_BACK_WALL_EXTRA_T mm of material in -X to the back-spine
+    wall, only across the guide-wheel pocket's Z range. The wall behind the
+    wheel grows from STRUCT_WALL (1.7) to STRUCT_WALL + extra (= 2.7),
+    extending OUTWARD into -X — the wheel and pocket-back-face stay put."""
+    z_lo = BACK_Z_BOT                                                 # 2.0
+    # Stop at the wheel cavity's top + a STRUCT_WALL roof above it (rather
+    # than running all the way up to the retainer). The thickening exists
+    # only to back up the wheel cavity, so it has nothing to do above that.
+    z_hi = GUIDE_POCKET_Z_HI_PLUS + GUIDE_POCKET_WALL                  # 10.0
+    return (
+        cq.Workplane("XY").workplane(offset=z_lo)
+        .center(BACK_SPINE_X_OUTER - GUIDE_BACK_WALL_EXTRA_T / 2, 0)
+        .box(GUIDE_BACK_WALL_EXTRA_T, HOUSING_W, z_hi - z_lo,
+             centered=(True, True, False))
+    )
+
+
 def _guide_box_frame():
     """New material bumped out in +X from the back leg's inner face — the box
     that wraps the wheel's axle hole. Built as a solid prism (inner face →
@@ -487,34 +676,86 @@ def _guide_box_frame():
     )
 
 
-def _guide_wheel_pocket_cut():
+def _guide_wheel_pocket_cut(y_half=GUIDE_POCKET_Y_HALF, z_hi=GUIDE_POCKET_Z_HI_PLUS):
     """The wheel cavity carved into the back block: a box open toward +X,
     leaving GUIDE_POCKET_WALL behind (-X) and below (-Z) and the ±Y walls.
     Spans +X clear past the box's front face (into the spool gap) so the wheel
     protrudes to the rim; the cut beyond the box is just air. Bounded in Y/Z to
     the wheel envelope, so the floor, ceiling, and ±Y walls keep their +X
-    extension (the band that wraps the axle hole)."""
+    extension (the band that wraps the axle hole). y_half lets the +X side
+    use a tighter pocket (GUIDE_POCKET_Y_HALF_PLUS = 8.0) than the -X side.
+    z_hi defaults to GUIDE_POCKET_Z_HI_PLUS so the cavity is snug to the
+    wheel on both sides (no vertical rattle); structural features ABOVE the
+    cavity (boss, chamfer, etc.) still use GUIDE_POCKET_Z_HI."""
     x_lo = GUIDE_POCKET_X_BACK
     x_hi = GUIDE_WHEEL_CX + GUIDE_WHEEL_OD / 2 + BOOL_OVERSHOOT   # open past the wheel's +X extent
     return (
         cq.Workplane("XY").workplane(offset=GUIDE_POCKET_Z_LO)
         .center((x_lo + x_hi) / 2, 0)
-        .box(x_hi - x_lo, 2 * GUIDE_POCKET_Y_HALF, GUIDE_POCKET_Z_HI - GUIDE_POCKET_Z_LO,
+        .box(x_hi - x_lo, 2 * y_half, z_hi - GUIDE_POCKET_Z_LO,
              centered=(True, True, False))
     )
 
 
+GUIDE_WHEEL_SPOKE_COUNT = 3
+
+
 def _guide_wheel():
-    """The printed guide wheel — Ø GUIDE_WHEEL_OD × GUIDE_WHEEL_W disc, axis Z,
-    centred at (GUIDE_WHEEL_CX, 0), with a center bore for a future M2 axle.
-    Built at its assembled position (tangent to the rim at the -X point)."""
-    body = cyl(GUIDE_WHEEL_OD, GUIDE_WHEEL_W, z=GUIDE_WHEEL_Z_LO)
-    bore = cyl(GUIDE_WHEEL_BORE_D, GUIDE_WHEEL_W + 2 * BOOL_OVERSHOOT,
-               z=GUIDE_WHEEL_Z_LO - BOOL_OVERSHOOT)
-    return body.cut(bore).translate((GUIDE_WHEEL_CX, 0, 0))
+    """Lightweight spoked wheel: outer contact ring + inner hub ring joined
+    by GUIDE_WHEEL_SPOKE_COUNT radial spokes.
+
+    The hub extends past the +Z face only (replacing the housing-side ring
+    on that side). The -Z hub extension was REMOVED — the housing now
+    carries a matching puck on the pocket floor instead. Reason: the -Z
+    hub extension was the wheel's print-bed face, and the outer ring's
+    -Z face sitting above it forced an FDM overhang that needed supports.
+    With the wheel's -Z face now flat (outer ring + hub bottom both at
+    GUIDE_WHEEL_Z_LO), the wheel prints support-free on its -Z face."""
+    # Outer contact ring: full GUIDE_WHEEL_W axial extent.
+    outer_id = GUIDE_WHEEL_OD - 2 * STRUCT_WALL
+    outer = (cyl(GUIDE_WHEEL_OD, GUIDE_WHEEL_W, z=GUIDE_WHEEL_Z_LO)
+             .cut(cyl(outer_id, GUIDE_WHEEL_W + 2 * BOOL_OVERSHOOT,
+                      z=GUIDE_WHEEL_Z_LO - BOOL_OVERSHOOT)))
+
+    # Hub ring: -Z face flush with the outer ring's -Z face (flat print
+    # base, no overhang); +Z face extends (GUIDE_WHEEL_FACE_CLR −
+    # GUIDE_WHEEL_AXIAL_CLR) past the outer ring's +Z face so it nominally
+    # rides face-to-face against the pocket ceiling (with AXIAL_CLR of
+    # slack). The matching -Z bearing is the housing-side spacer puck.
+    hub_od = GUIDE_WHEEL_BORE_D + 2 * STRUCT_WALL
+    hub_z_lo = GUIDE_WHEEL_Z_LO
+    hub_h    = GUIDE_WHEEL_W + (GUIDE_WHEEL_FACE_CLR - GUIDE_WHEEL_AXIAL_CLR)
+    hub = (cyl(hub_od, hub_h, z=hub_z_lo)
+           .cut(cyl(GUIDE_WHEEL_BORE_D, hub_h + 2 * BOOL_OVERSHOOT,
+                    z=hub_z_lo - BOOL_OVERSHOOT)))
+
+    # Spokes — full GUIDE_WHEEL_W axial extent, STRUCT_WALL thick (tangential),
+    # span from inside the outer ring's ID to inside the hub's OD (small
+    # overlap on each end for a clean boolean union).
+    r_in  = hub_od / 2 - BOOL_OVERSHOOT
+    r_out = outer_id / 2 + BOOL_OVERSHOOT
+    wheel = outer.union(hub)
+    for i in range(GUIDE_WHEEL_SPOKE_COUNT):
+        ang = i * 360.0 / GUIDE_WHEEL_SPOKE_COUNT
+        spoke = (cq.Workplane("XY").workplane(offset=GUIDE_WHEEL_Z_LO)
+                 .center((r_in + r_out) / 2, 0)
+                 .box(r_out - r_in, STRUCT_WALL, GUIDE_WHEEL_W,
+                      centered=(True, True, False))
+                 .rotate((0, 0, 0), (0, 0, 1), ang))
+        wheel = wheel.union(spoke)
+    return wheel.translate((GUIDE_WHEEL_CX, 0, 0))
 
 
 guide_wheel = _guide_wheel()
+# Mirrored copy of the same wheel for the new +X (lever-leg) guide pocket.
+guide_wheel_plus = _guide_wheel().mirror("YZ")
+
+
+# ── Lever pivot ─────────────────────────────────────────────────────────────
+# No external spacer/riser — the M2 cap-screw head seats in a Ø4.1 ×
+# LEVER_HEAD_RECESS_H counterbore drilled into the lever's outer Y face
+# (see levers.py). The shaft after the recess is sized so the screw is
+# split evenly between the lever and the housing.
 
 
 def _guide_axle_boss():
@@ -540,13 +781,55 @@ def _guide_axle_boss():
     )
 
 
-def _guide_axle_screw_hole():
-    """Ø GUIDE_AXLE_SHAFT_D tight-fit bore along Z for the M2 axle screw: from
-    the floor's outer face (head seat) up through the floor and the +Z boss,
-    ending 1 mm past the screw tip. Where it crosses the open wheel cavity it
-    cuts nothing; the wheel (a separate part) carries its own Ø2.6 shank bore."""
-    return cyl(GUIDE_AXLE_SHAFT_D, GUIDE_AXLE_HOLE_TOP_Z - GUIDE_AXLE_HEAD_Z,
-               z=GUIDE_AXLE_HEAD_Z).translate((GUIDE_WHEEL_CX, 0, 0))
+GUIDE_AXLE_HOLE_LEN = GUIDE_AXLE_SCREW_LEN + 1.0   # 21 mm: screw shank + 1 mm tip clr
+
+
+def _guide_axle_spacer():
+    """Thin puck on the pocket floor under the wheel's hub. Replaces the
+    -Z hub extension that used to live on the wheel (which forced an
+    overhang on the wheel's print-bed face). Same OD as the wheel's hub;
+    its center bore is cut later by the existing _guide_axle_screw_hole
+    pass. Height = GUIDE_WHEEL_FACE_CLR − GUIDE_WHEEL_AXIAL_CLR so the
+    wheel still rides with AXIAL_CLR of slack against the puck top.
+
+    On the +X side this puck sits inside the brake/ratchet chunks'
+    footprint — the chunk-split cutters slice it along the diagonal so
+    each chunk carries its share."""
+    h  = GUIDE_WHEEL_FACE_CLR - GUIDE_WHEEL_AXIAL_CLR
+    od = GUIDE_WHEEL_BORE_D + 2 * STRUCT_WALL
+    # Pre-drilled axle bore (same Ø as the housing's screw bore) — the
+    # spacer is unioned AFTER the housing's screw-hole cut, so it has to
+    # carry its own bore.
+    puck = (cyl(od, h, z=GUIDE_POCKET_Z_LO)
+            .cut(cyl(GUIDE_AXLE_SHAFT_D, h + 2 * BOOL_OVERSHOOT,
+                     z=GUIDE_POCKET_Z_LO - BOOL_OVERSHOOT)))
+    return puck.translate((GUIDE_WHEEL_CX, 0, 0))
+
+
+def _guide_axle_screw_hole(z_head=GUIDE_AXLE_HEAD_Z):
+    """Ø GUIDE_AXLE_SHAFT_D tight-fit bore along Z for the M2 axle screw:
+    GUIDE_AXLE_HOLE_LEN (= screw length + 1 mm tip clearance) starting at
+    z_head (head seat / -Z entry). Where it crosses the open wheel cavity
+    it cuts nothing; the wheel (a separate part) carries its own Ø2.6 bore.
+
+    z_head defaults to the -X side's value (= BACK_Z_BOT, on the back-leg
+    floor). The +X (lever-side) mirror passes z_head = CHUNK_Z_BOT so the
+    head seats at the brake chunk's -Z extent — same 21 mm bore, just
+    starting from a lower z."""
+    return cyl(GUIDE_AXLE_SHAFT_D, GUIDE_AXLE_HOLE_LEN,
+               z=z_head).translate((GUIDE_WHEEL_CX, 0, 0))
+
+
+def _guide_axle_head_recess():
+    """Ø M2_HEAD_RECESS_D head-access bore for the +X (lever-side) guide
+    axle: tunnels from the chunk's -Z face (CHUNK_Z_BOT) up to the head
+    seat at GUIDE_AXLE_HEAD_Z, so the screw head sits at the same Z as
+    the -X side's head (which seats directly on the back-leg floor) and
+    the 21 mm shaft bore reaches correspondingly deeper. Mirror with _mx
+    when cutting."""
+    h = GUIDE_AXLE_HEAD_Z - CHUNK_Z_BOT + BOOL_OVERSHOOT
+    return (cyl(M2_HEAD_RECESS_D, h, z=CHUNK_Z_BOT - BOOL_OVERSHOOT)
+            .translate((GUIDE_WHEEL_CX, 0, 0)))
 
 
 def _guide_ring(z_base, z_contact):
@@ -662,45 +945,52 @@ def _offset_polygon_ccw(pts, distance):
     return out
 
 
-def _retainer_mortise_plus():
+def _retainer_mortise_plus(z_bot):
     """+X-side dovetail mortise cutter — matches the tenon (cable_retainer.py:
     _retainer_tenon): wider tip on the housing side (+X), narrower neck on
     the retainer side, with the 45° / 30° flares chamfering the neck corners.
+    z_bot sets the cavity's -Z extent — both ±X mortises now use the same
+    z_bot = RETAIN_TENON_Z_BOT (= RETAIN_Z_LO), since the brake-band height
+    now lifts the retainer's bottom above the ratchet chunk.
     Slot is the tenon polygon offset outward by FIT_CLR perpendicular to each
     edge. Extruded in Y from y = -HOUSING_W/2 + STRUCT_WALL (1.7 mm stop wall
-    at -Y) to y = +HOUSING_W/2 + BOOL_OVERSHOOT (open at +Y for slide entry)."""
+    at -Y) to y = +HOUSING_W/2 + BOOL_OVERSHOOT (open at +Y for slide entry).
+
+    x_tip uses x_neck + RETAIN_TENON_DEPTH (NOT SPINE_X_INNER) so the slot
+    matches the tenon's actual depth — otherwise, if SPINE_X_INNER is closer
+    to the spool than the tenon's flare endpoint, the polygon becomes
+    self-intersecting and the boolean cut emits invalid geometry (faces with
+    bad topology) that OCCT accepts but stricter importers reject on import. The
+    1-2 mm of mortise extending past SPINE_X_INNER eats into the spine
+    block, but the spine is HOUSING_SPINE_T (= 10) thick so there's still
+    plenty of wall material left after the cut."""
     x_neck = RETAIN_R_OUT
-    x_tip = SPINE_X_INNER
-    top_flare_x = STRUCT_WALL                                    # 1.7 (45°)
-    bot_flare_x = STRUCT_WALL / math.tan(math.radians(30))       # 2.945 (30° from horizontal — shallow)
-    z_top = RETAIN_Z_HI
-    z_bot = GUIDE_POCKET_Z_HI
-    z_top_flare = z_top - STRUCT_WALL
-    z_bot_flare = z_bot + STRUCT_WALL
-    # Tenon hexagon, CCW from neck-bottom-flare-top:
-    tenon = [
-        (x_neck,               z_bot_flare),
-        (x_neck + bot_flare_x, z_bot),
-        (x_tip,                z_bot),
-        (x_tip,                z_top),
-        (x_tip - top_flare_x,  z_top),
-        (x_neck,               z_top_flare),
-    ]
-    slot = _offset_polygon_ccw(tenon, FIT_CLR)
+    x_tip = x_neck + RETAIN_TENON_DEPTH
+    # Shared polygon — guarantees mortise tracks tenon shape (straight top,
+    # 45° bottom flare). Offset outward by FIT_CLR for slide fit.
+    tenon = retainer_tenon_polygon(x_neck, x_tip, z_bot=z_bot,
+                                    z_top=RETAIN_TENON_Z_TOP)
+    # Cross-print joint (retainer prints +Z-down, housing prints -Y-down) —
+    # use the wider CROSS_PRINT_CLR for slide fit, not the tight FIT_CLR.
+    slot = _offset_polygon_ccw(tenon, CROSS_PRINT_CLR)
     OS = BOOL_OVERSHOOT
-    y_lo = -HOUSING_W / 2 + STRUCT_WALL                # -9.3 (face of stop wall)
+    y_lo = -HOUSING_W / 2 + STRUCT_WALL                # -9.3 (+Y face of stop wall)
     y_hi = +HOUSING_W / 2 + OS                          # +11+OS (open at +Y)
-    return (cq.Workplane("XZ").workplane(offset=y_lo)
+    # See cable_retainer.py: "XZ" workplane normal is -Y, so negate offset and
+    # extrude length to actually span y ∈ [y_lo, y_hi]. This leaves the stop
+    # wall on the -Y side of the chunk (at the print bed, no overhang).
+    return (cq.Workplane("XZ").workplane(offset=-y_lo)
             .polyline(slot).close()
-            .extrude(y_hi - y_lo))
+            .extrude(-(y_hi - y_lo)))
 
 
 def _retainer_mortises():
-    plus = _retainer_mortise_plus()
-    # Mirror in X (across YZ plane) so the -X mortise keeps the same Y range
-    # as +X (stop wall at -Y on both sides). A Z-rotation would also flip Y,
-    # putting the -X stop wall on +Y — asymmetric assembly direction.
-    return plus.union(plus.mirror("YZ"))
+    # Both sides use the same z_bot = RETAIN_TENON_Z_BOT (= RETAIN_Z_LO). The
+    # -X side is mirrored across YZ so its stop wall (-Y) lines up with +X's;
+    # a Z-rotation would flip Y too.
+    plus  = _retainer_mortise_plus(RETAIN_TENON_Z_BOT)
+    minus = _retainer_mortise_plus(RETAIN_TENON_Z_BOT).mirror("YZ")
+    return plus.union(minus)
 
 
 def _retainer_warts():
@@ -758,62 +1048,96 @@ def _build_lever_mounts(h):
                                   yf - 0.5, yf + HOUSING_BOSS_EXT))
     h = h.union(pivot_boss_sector(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
                                   -yf - HOUSING_BOSS_EXT, -yf + 0.5))
-    # ── Ratchet (+Y side): screw enters from -Y, insert in +Y face ──
-    h = (h.cut(_pivot_clearance(RATCHET_PIVOT_X, RATCHET_PIVOT_Z))
+    # ── Ratchet (+Y side): head on +Y outer (lever side), insert in +Y face ──
+    h = (h.cut(_pivot_clearance(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, head_sign=+1))
           .cut(_pivot_insert_pilot(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
                                    insert_face_sign=+1, boss_ext=HOUSING_BOSS_EXT)))
-    # ── Brake (-Y side): screw enters from +Y, insert in -Y face ──
-    h = (h.cut(_pivot_clearance(BRAKE_PIVOT_X, BRAKE_PIVOT_Z))
+    # ── Brake (-Y side): head on -Y outer (lever side), insert in -Y face ──
+    h = (h.cut(_pivot_clearance(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, head_sign=-1))
           .cut(_pivot_insert_pilot(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
                                    insert_face_sign=-1, boss_ext=HOUSING_BOSS_EXT)))
 
     # Housing stop pins project into the gap toward the lever (+Y for ratchet,
-    # -Y for brake). The SPRING pin is a short stub from its near face into the
-    # gap (it's fully over the block in X, so well-rooted). The REST pin sits
-    # mostly -X of the block's inner face, so it would be only lightly rooted —
-    # instead it runs the FULL housing width (flush with the far face, across
-    # to the near face) and then STOP_PIN_H out, anchoring it along the whole
-    # block (its own "boss") and giving the lever-side stub to catch the lever
-    # pin.
+    # -Y for brake). Both SPRING and REST pins now use the same shallow
+    # STRUCT_WALL-deep anchor in the housing wall — the old REST-pin design
+    # ran the pin through the FULL housing width to gain anchorage when the
+    # pin sat mostly -X of the block's inner face, but that through-pin now
+    # collides with the new +X guide-wheel pocket. STRUCT_WALL (1.7 mm) of
+    # overlap is enough boolean-fuse depth for a printed pin to merge into
+    # its housing wall without breaking strength — same overlap depth the
+    # spring pin already used (was 0.5 mm; bumped here for consistency).
     y_face = HOUSING_W / 2
-    # Ratchet (+Y side).
-    for alpha, is_spring in ((RATCHET_REST_PIN_ALPHA, False),
-                             (RATCHET_SPRING_PIN_ALPHA, True)):
-        y_from, y_to = ((y_face - 0.5, y_face + STOP_PIN_H) if is_spring
-                        else (-y_face, y_face + STOP_PIN_H))
+    pin_anchor = STRUCT_WALL                                   # overlap depth into housing
+    # Ratchet (+Y side): pin runs from inside the +Y wall outward into the
+    # +Y lever gap. NO REST PIN on this side — the ratchet rim's teeth catch
+    # the pawl at rest, and the rest pin was kicking the pawl just clear of
+    # a clean tooth engagement.
+    for alpha, is_spring in ((RATCHET_SPRING_PIN_ALPHA, True),):
+        y_from, y_to = (y_face - pin_anchor, y_face + STOP_PIN_H)
         h = h.union(stop_pin_solid(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, alpha, y_from, y_to))
         if is_spring:
             leg_a = alpha + (-1) * SPRING_LEG_PIN_OFFSET_DEG
+            # Spring-leg hole at the halfway point of the EXPOSED pin (y_face
+            # to y_face + STOP_PIN_H), so re-tuning STOP_PIN_H keeps the hole
+            # automatically centred without re-deriving the hole position.
             h = h.cut(stop_pin_hole(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, alpha,
-                                    hole_y=y_face + STOP_PIN_H - STOP_PIN_HOLE_D,
+                                    hole_y=y_face + STOP_PIN_H / 2,
                                     hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(leg_a)))
-    # Brake (-Y side).
+    # Brake (-Y side): mirrored.
     for alpha, is_spring in ((BRAKE_REST_PIN_ALPHA, False),
                              (BRAKE_SPRING_PIN_ALPHA, True)):
-        y_from, y_to = ((-y_face - STOP_PIN_H, -y_face + 0.5) if is_spring
-                        else (-y_face - STOP_PIN_H, y_face))
+        y_from, y_to = (-y_face - STOP_PIN_H, -y_face + pin_anchor)
         h = h.union(stop_pin_solid(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, alpha, y_from, y_to))
         if is_spring:
             leg_a = alpha + (-1) * SPRING_LEG_PIN_OFFSET_DEG
             h = h.cut(stop_pin_hole(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, alpha,
-                                    hole_y=-y_face - STOP_PIN_H + STOP_PIN_HOLE_D,
+                                    hole_y=-y_face - STOP_PIN_H / 2,
                                     hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(leg_a)))
     return h
 
 
 def _build_housing_skeleton():
+    # Mirror every guide-wheel feature across YZ so a second wheel sits in
+    # the +X (lever) leg. The X-direction asymmetry of the originals (cut
+    # toward +X to reach the rim) flips correctly to "cut toward -X" on the
+    # mirror, putting both wheels tangent to the rim on opposite sides.
+    def _mx(wp): return wp.mirror("YZ")
     h = (_front_block()
          .union(_back_block())
+         .union(_back_wall_thicken())
          .union(_guide_box_frame())
+         .union(_mx(_guide_box_frame()))
          .union(_guide_axle_boss())
+         .union(_mx(_guide_axle_boss()))
          .union(_pancake_plate())
          .union(_front_thicken())
-         .union(_retainer_chunks())
+         .union(_retainer_thicken())
          .cut(_retainer_mortises())
          .cut(_axle_round_hole())
+         # Screw-hole cut applied BEFORE the pocket cut — OCCT chokes on the
+         # cylinder when the pocket cut has already exposed the cylinder's
+         # +X edge, which sits within OCCT-tolerance of BACK_SPINE_X_INNER.
+         .cut(_guide_axle_screw_hole())
+         # +X (lever-side) mirror: shaft bore starts at the same z_head as
+         # the -X side (GUIDE_AXLE_HEAD_Z = 1.9), so the head Z matches on
+         # both sides and the 21 mm bore reaches deeper (through the chunk
+         # roof and into the retainer's tenon — the retainer gets a matching
+         # clearance hole in build.py). A Ø M2_HEAD_RECESS_D access bore
+         # tunnels from the chunk's -Z face up to the head seat.
+         .cut(_mx(_guide_axle_screw_hole()))
+         .cut(_mx(_guide_axle_head_recess()))
          .cut(_guide_wheel_pocket_cut())
-         .union(_guide_retainer_rings())
-         .cut(_guide_axle_screw_hole()))
+         .cut(_mx(_guide_wheel_pocket_cut(y_half=GUIDE_POCKET_Y_HALF_PLUS,
+                                          z_hi=GUIDE_POCKET_Z_HI_PLUS)))
+         # -Z bearing puck under each wheel hub. Unioned AFTER the pocket
+         # cut so it survives. The +X puck sits inside the brake/ratchet
+         # chunks' footprint and gets sliced by the chunk-split diagonal —
+         # each chunk ends up carrying its share of the puck.
+         .union(_guide_axle_spacer())
+         .union(_mx(_guide_axle_spacer()))
+         .union(_guide_pocket_back_y_chamfer())
+         .union(_mx(_guide_pocket_back_y_chamfer(y_half=GUIDE_POCKET_Y_HALF_PLUS)))
+         )
     h = _build_lever_mounts(h)
     # Axle cross-pin (pancake side): insert on +Y, head counterbore on -Y.
     h = (h.cut(_axle_pin_clearance(PANCAKE_CROSS_PIN_Z))
@@ -839,81 +1163,553 @@ def _build_housing():
 # and the chunk glues on afterward. (The full-width rest pins are split by the
 # cut: each keeps its functional stub + anchoring on the correct side and
 # rejoins at the glue line; the brake pivot screw also clamps the joint.)
-BRAKE_CHUNK_CUT_C = -3.0          # cut plane z + y = C; chunk is the z+y <= C side
-                                  # (raised +1 mm to put more material in the chunk)
+# SHARED 45° diagonal split for both chunks. Both the brake (green, -Y/-Z
+# half) and ratchet (red, +Y/+Z half) glue-on chunks now sit on the +X (lever)
+# leg of the housing covering the full pivot + guide-wheel volume, and split
+# that volume along ONE diagonal plane z + y = CHUNK_DIAGONAL_C:
+#   • brake:  z + y ≤ C  → -Y/-Z half (lower-left when viewed from +X)
+#   • ratchet: z + y > C → +Y/+Z half (upper-right)
+# Both chunks are bounded above at CHUNK_Z_TOP = guide-wheel-pocket top +
+# STRUCT_WALL, so the material above belongs to housing-main (which carries
+# the retainer mortise STRUCT_WALL above the chunk top — see cable_retainer.
+# RETAIN_TENON_Z_BOT).
+CHUNK_Z_BOT        = -5.0                                   # current chunk bottom
+CHUNK_Z_TOP        = GUIDE_POCKET_Z_HI + STRUCT_WALL        # 15.77 — +STRUCT_WALL above wheel cut
+# Diagonal shifted off centroid so the brake (green) chunk gets STRUCT_WALL
+# of flat top where it meets the housing-main at Z = CHUNK_Z_TOP. This gives
+# the brake chunk a small horizontal landing onto the housing's -Z face so
+# the brake can engage the housing's rail tenon and pick up support from it
+# (without that overlap, brake's +Z face was only 0.6 mm wide). At Z_TOP the
+# brake covers Y ∈ [-HOUSING_W/2, -HOUSING_W/2 + STRUCT_WALL]; at lower Z it
+# fans out and covers most of the chunk Y/Z volume.
+CHUNK_DIAGONAL_C   = CHUNK_Z_TOP - HOUSING_W / 2 + STRUCT_WALL   # ≈ 6.47
+BRAKE_CHUNK_RING_CLR = 0.4                                  # (kept for downstream rail-math compat)
+BRAKE_CHUNK_CUT_C    = CHUNK_DIAGONAL_C                     # legacy alias; brake = z+y ≤ C
 _BRAKE_CHUNK_X_LO = 60.0          # cutter X span (covers the front block + -X rest pin)
 _BRAKE_CHUNK_X_HI = 80.0
 
 
 def _brake_chunk_cutter():
-    """Half-space z + y <= BRAKE_CHUNK_CUT_C (45° plane in Y-Z), bounded in X
-    to the brake-mount region. housing ∩ it = the chunk; housing − it = main."""
-    C = BRAKE_CHUNK_CUT_C
+    """Half-space z + y ≤ CHUNK_DIAGONAL_C AND z ≤ CHUNK_Z_TOP, bounded in X
+    to the brake-mount region. housing ∩ it = the brake chunk."""
+    C  = CHUNK_DIAGONAL_C
+    Zt = CHUNK_Z_TOP
     big = 80.0
+    # CCW in (y, z): the diagonal hits z=Zt at y = C-Zt and y=+big at z=C-big.
+    pts = [
+        (-big, -big),
+        (+big, -big),
+        (+big, C - big),        # diagonal at +y edge (far below Zt)
+        (C - Zt, Zt),           # diagonal at top edge
+        (-big, Zt),
+    ]
     return (cq.Workplane("YZ").workplane(offset=_BRAKE_CHUNK_X_LO)
-            .polyline([(-big, C + big), (-big, -big), (C + big, -big)]).close()
+            .polyline(pts).close()
             .extrude(_BRAKE_CHUNK_X_HI - _BRAKE_CHUNK_X_LO))
 
 
+# ── Ratchet glue-on chunk (+Y/+Z half of the shared chunk region) ───────────
+# Mirror of the brake chunk across the shared z+y=C diagonal. Together with
+# brake_pin_chunk, covers the full +X-leg chunk region below CHUNK_Z_TOP.
+RATCHET_CHUNK_RING_CLR = 0.4
+RATCHET_CHUNK_CUT_C    = CHUNK_DIAGONAL_C        # SAME plane as brake now
+
+_RATCHET_CHUNK_X_LO = _BRAKE_CHUNK_X_LO          # 60 — same X span as brake
+_RATCHET_CHUNK_X_HI = _BRAKE_CHUNK_X_HI          # 80
+
+
+def _ratchet_chunk_cutter():
+    """Half-space z + y > CHUNK_DIAGONAL_C AND z ≤ CHUNK_Z_TOP, bounded in X.
+    The +Y/+Z half opposite the brake chunk along the shared diagonal."""
+    C  = CHUNK_DIAGONAL_C
+    Zt = CHUNK_Z_TOP
+    big = 80.0
+    # CCW in (y, z) — the +Y/+Z triangle above the diagonal and below Zt.
+    pts = [
+        (+big, C - big),        # bottom-right (on diagonal, very low)
+        (+big, Zt),             # top-right
+        (C - Zt, Zt),           # top, on diagonal
+    ]
+    return (cq.Workplane("YZ").workplane(offset=_RATCHET_CHUNK_X_LO)
+            .polyline(pts).close()
+            .extrude(_RATCHET_CHUNK_X_HI - _RATCHET_CHUNK_X_LO))
+
+
 # ── Registration V-rails on the glue joint ──────────────────────────────────
-# Two thin 45° V-rails run across the joint face (along its +Y..-Y direction)
-# to lock the X position when gluing the chunk on. The HOUSING gets the V
-# ridge, the chunk gets a matching (oversized) groove. They flank the central
-# pivot-screw hole — one on the -X side (over the embedded rest pin), one on
-# the +X side (in the gap past the pivot screw) — so neither hits the bore.
-REG_RAIL_SIDE         = 2.0        # V flank length (mm)
-REG_RAIL_GROOVE_EXTRA = 0.3        # groove V is this much larger (glue clearance)
+# Two arrowhead rails run across the joint face (along its +Y..-Y direction)
+# to lock the X position when gluing the chunk on. The HOUSING gets the
+# arrowhead ridge, the chunk gets a matching (oversized) groove. They flank
+# the central pivot-screw hole — one on the -X side (over the embedded rest
+# pin), one on the +X side (in the gap past the pivot screw) — so neither
+# hits the bore.
+#
+# Cross-section (in the rail's local XZ, before rotation):
+#   • Flat bottom of width REG_ARROW_W_BOT at z=0 (the joint plane).
+#   • "Hips" of width REG_ARROW_W_HIP at z=-REG_ARROW_H_HIP, wider than the
+#     bottom so the rail locks the chunk against pulling perpendicular to the
+#     joint plane (dovetail-like).
+#   • Pointed apex at z=-REG_ARROW_H_APEX (chunk side).
+# h_apex > h_hips so the apex-to-hips face is self-supporting after the rail's
+# 45° rotation into the housing print frame.
+REG_ARROW_W_BOT   = STRUCT_WALL              # 1.7 mm — flat bottom width
+REG_ARROW_W_HIP   = REG_ARROW_W_BOT + 0.8    # 2.5 mm — hips 0.8 mm wider than bottom
+REG_ARROW_H_HIP   = 1.0                       # depth of hips below the flat bottom
+REG_ARROW_H_APEX  = 2.0                       # depth of apex below the flat bottom
 # Rails centred in the two solid spans of the joint face, flanking the pivot
 # bore void at x∈[66.0, 68.4]: -X span [61.43, 66.0], +X span [68.4, 74.73].
-# A 2 mm V's groove (~3.25 mm wide) fits each with margin.
 REG_RAIL_X            = (63.7, 71.5)   # -X / +X rail positions
 _REG_RAIL_L           = 40.0       # raw length; trimmed to the joint by ∩ housing
-_REG_RAIL_OVERLAP     = 0.3        # base slab buried in the main side for a clean union
 REG_RAIL_END_GAP      = 0.4        # material left between the cut and the close
-                                   # (-Y) face at the rail's +Z end
+                                   # (-Z) face at the rail's -Z end
 _REG_RAIL_YC          = -5.0
 _REG_RAIL_ZC          = BRAKE_CHUNK_CUT_C - _REG_RAIL_YC   # (yc, zc) lies on z+y=C
-_REG_GROOVE_H         = (REG_RAIL_SIDE + REG_RAIL_GROOVE_EXTRA) / math.sqrt(2)
-# Clip the +Z (high-z, -Y) end so the cut bevel faces UP when the chunk prints
-# on its -Z face (support-free), and so the DEEPEST cut — the groove V apex,
-# h_g·cos45 toward -Y — clears the -Y close face by REG_RAIL_END_GAP. The -Z
-# (low-z, +Y) end is left unclipped: the rail runs fully down to the block
-# bottom, its cut opening on the -Z face (the build plate). Local Y maps to
-# world y via y = yc + localY·cos45, so the world apex-Y target maps to:
-_REG_RAIL_LY_LO       = ((-HOUSING_W / 2 + REG_RAIL_END_GAP - _REG_RAIL_YC) * math.sqrt(2)
-                         + _REG_GROOVE_H)
 
 
-def _reg_rail(x_rail, side):
-    """One V-rail prism centred on the joint plane (z + y = C) at X=x_rail,
-    running along the joint's in-plane Y direction. House-shaped section: a V
-    of `side`-long 45° flanks (apex toward the chunk) on a thin base slab that
-    buries into the main side for a clean boolean. The +Z (high-z) end is
-    clipped (in the rail's local frame, so the cut is a clean 45° perpendicular
-    to the main cut face, facing up for a support-free print) leaving
-    REG_RAIL_END_GAP to the -Y close face; the -Z end runs full to the plate."""
-    h = side / math.sqrt(2)                     # half-base = V depth (45° flanks)
+def _arrowhead_polygon_ccw(w_bot, w_hip, h_hip, h_apex):
+    """Arrowhead cross-section polygon in CCW order (in local XZ plane).
+    Flat bottom at z=0, hips at z=-h_hip, apex at z=-h_apex (chunk side)."""
+    return [
+        (-w_bot / 2, 0),
+        (-w_hip / 2, -h_hip),
+        (0, -h_apex),
+        (w_hip / 2, -h_hip),
+        (w_bot / 2, 0),
+    ]
+
+
+_ARROW_RAIL_POLY   = _arrowhead_polygon_ccw(
+    REG_ARROW_W_BOT, REG_ARROW_W_HIP, REG_ARROW_H_HIP, REG_ARROW_H_APEX,
+)
+# Groove = rail polygon expanded outward by FIT_CLR perpendicular to each edge.
+# Gives a uniform running clearance everywhere around the rail's cross-section.
+_ARROW_GROOVE_POLY = _offset_polygon_ccw(_ARROW_RAIL_POLY, FIT_CLR)
+# Clip the brake rail at the brake-ratchet boundary so it doesn't extend
+# into the ratchet chunk's region. The portion at y > boundary_y would be
+# floating in air during the housing's print: that region is removed from
+# main (it becomes the ratchet chunk) and the pure-V rail doesn't connect
+# to anything above the brake joint plane at those Y. The clip face is
+# perpendicular to the rail's local Y, which puts it 45° in world — facing
+# UP on the +Y/+Z side, supported from below — printable. The boundary is
+# where the two cut planes intersect: y = (C_brake − C_ratchet)/2. Local
+# LY at that world y: LY = (y − yc)/c = (y − yc)·√2.
+# (This is a tighter trim than the old "apex END_GAP above FRONT_Z_BOT"
+# constraint — the resulting stop wall is ~3.6 mm instead of 2.2 mm.)
+# With brake/ratchet sharing one diagonal, the brake rail runs along the
+# full length of the joint (no longer clipped at a brake-ratchet boundary).
+# Big value → effectively unbounded; the .intersect(_housing_full) trim
+# later confines it to actual housing material.
+_REG_RAIL_LY_HI       = 1000.0
+
+
+def _reg_rail(x_rail, polygon):
+    """One arrowhead rail prism centred on the joint plane (z + y = C) at
+    X=x_rail, running along the joint's in-plane Y direction. The cross-
+    section `polygon` (in local XZ; apex toward chunk side, flat bottom on
+    the joint plane) is extruded along local Y and rotated to align with the
+    brake joint plane. Pass _ARROW_RAIL_POLY for the rail solid or
+    _ARROW_GROOVE_POLY for the chunk-side groove cutter.
+    The rail material is entirely on the chunk side (the flat bottom sits
+    exactly on the joint plane) so the rail doesn't intrude into adjacent
+    regions; the kissing surface at the joint plane is handled by OCCT's
+    union as an internal face.
+    The -Z (low-z) end is clipped at the brake-ratchet boundary so the rail
+    doesn't extend into the ratchet chunk's region (where it would print
+    floating in air). The cut face is 45° in world, facing UP when the
+    housing prints -Y down — support-free. The +Z end runs full to the
+    housing's -Y face (entry for the chunk's groove)."""
     yc = _REG_RAIL_YC
     zc = _REG_RAIL_ZC
     clip = (cq.Workplane("XY").box(1000, 1000, 1000, centered=True)
-            .translate((0, _REG_RAIL_LY_LO - 500, 0)))   # local -Y before the clip
+            .translate((0, _REG_RAIL_LY_HI + 500, 0)))   # local +Y past the clip
     return (cq.Workplane("XZ")
-            .polyline([(-h, _REG_RAIL_OVERLAP), (h, _REG_RAIL_OVERLAP),
-                       (h, 0.0), (0.0, -h), (-h, 0.0)]).close()
+            .polyline(polygon).close()
             .extrude(_REG_RAIL_L / 2, both=True)
             .cut(clip)
             .rotate((0, 0, 0), (1, 0, 0), -45)
             .translate((x_rail, yc, zc)))
 
 
-def _reg_rails(side):
-    return _reg_rail(REG_RAIL_X[0], side).union(_reg_rail(REG_RAIL_X[1], side))
+def _reg_rails(polygon):
+    return (_reg_rail(REG_RAIL_X[0], polygon)
+            .union(_reg_rail(REG_RAIL_X[1], polygon)))
 
 
-_housing_full = _build_housing()
-_brake_cutter = _brake_chunk_cutter()
-_main  = _housing_full.cut(_brake_cutter)
-_chunk = _housing_full.intersect(_brake_cutter)
-# Ridge on the housing (bounded to the solid), groove in the chunk (oversized).
-housing = _main.union(_reg_rails(REG_RAIL_SIDE).intersect(_housing_full))
-brake_pin_chunk = _chunk.cut(_reg_rails(REG_RAIL_SIDE + REG_RAIL_GROOVE_EXTRA))
+# ── Registration V-rails on the RATCHET joint plane ─────────────────────────
+# Mirror of the brake rails but on the ratchet joint plane (z − y = C_ratchet).
+# Open end at world +Y/+Z (housing's +Y face); stop at world −Y/−Z (toward the
+# brake-ratchet boundary). The chunk slides on in −Y/−Z direction along the
+# joint plane, so it enters from +Y and stops at −Y per the requested
+# orientation.
+#
+# Printability note: the stop face's outward normal is in world −Y/−Z, which
+# has a downward (−Y) component in the housing's −Y-down print orientation.
+# That's a 45° overhang at the stop end — borderline self-supporting; supports
+# may be needed here. The brake's stop avoids this because it sits at +Y/−Z
+# (up-facing in print).
+_RATCHET_REG_RAIL_YC = 3.5                                              # mid-ish along chunk y-range
+_RATCHET_REG_RAIL_ZC = _RATCHET_REG_RAIL_YC + RATCHET_CHUNK_CUT_C       # on z = y + C_ratchet
+# LY_LO is set so the cut axis sits a target STOP_T perpendicular distance
+# from the brake cut line — that distance IS the stop wall thickness in local
+# Y (because the ratchet rail's local Y direction is perpendicular to the
+# brake cut line, since the two cut planes are at 90° to each other).
+#
+# We match the brake side's stop wall (set by clipping the brake rail at the
+# brake-ratchet boundary — its stop wall is the local-Y distance from the
+# boundary to the brake chunk's apex point at (C_brake − FRONT_Z_BOT, FRONT_Z_BOT)).
+# Both joints end up with the same ~3.6 mm stop wall thickness.
+#
+# Apex y + z = (yc + zc) + 2·LY·c (c = cos45 = √2/2). Setting cut-axis
+# perpendicular distance to brake line = STOP_T:
+#   (yc + zc) + LY_LO·√2 = C_brake + STOP_T·√2
+#   LY_LO = (C_brake + STOP_T·√2 − (yc + zc)) / √2
+_BRAKE_STOP_WALL = ((BRAKE_CHUNK_CUT_C + RATCHET_CHUNK_CUT_C - 2 * FRONT_Z_BOT)
+                    / math.sqrt(2))                                     # ≈ 3.628 mm
+_RATCHET_REG_RAIL_STOP_T = _BRAKE_STOP_WALL
+_RATCHET_REG_RAIL_LY_LO = (
+    (BRAKE_CHUNK_CUT_C + _RATCHET_REG_RAIL_STOP_T * math.sqrt(2)
+     - _RATCHET_REG_RAIL_YC - _RATCHET_REG_RAIL_ZC) / math.sqrt(2)
+)
+
+
+def _ratchet_reg_rail(x_rail, polygon):
+    """One arrowhead rail on the ratchet joint plane (z − y = C). Same cross-
+    section as the brake rail (apex toward chunk, flat bottom on the joint
+    plane), but rotated +45° about X so the rail length runs along world
+    +Y/+Z, and clipped at the local −Y end so the cut/stop face is at world
+    −Y/−Z (toward the brake chunk). Open end at world +Y/+Z (the housing's
+    +Y face). Pass _ARROW_RAIL_POLY for the rail solid or _ARROW_GROOVE_POLY
+    for the chunk-side groove cutter."""
+    yc = _RATCHET_REG_RAIL_YC
+    zc = _RATCHET_REG_RAIL_ZC
+    clip = (cq.Workplane("XY").box(1000, 1000, 1000, centered=True)
+            .translate((0, _RATCHET_REG_RAIL_LY_LO - 500, 0)))   # local Y ≤ LY_LO
+    return (cq.Workplane("XZ")
+            .polyline(polygon).close()
+            .extrude(_REG_RAIL_L / 2, both=True)
+            .cut(clip)
+            .rotate((0, 0, 0), (1, 0, 0), +45)
+            .translate((x_rail, yc, zc)))
+
+
+def _ratchet_reg_rails(polygon):
+    return (_ratchet_reg_rail(REG_RAIL_X[0], polygon)
+            .union(_ratchet_reg_rail(REG_RAIL_X[1], polygon)))
+
+
+_housing_full   = _build_housing()
+_brake_cutter   = _brake_chunk_cutter()
+_ratchet_cutter = _ratchet_chunk_cutter()
+_main           = _housing_full.cut(_brake_cutter).cut(_ratchet_cutter)
+_brake_chunk    = _housing_full.intersect(_brake_cutter)
+# Brake takes precedence in the overlap region: subtract brake_cutter so the
+# two chunks share a clean 45° boundary along the brake cut line instead of
+# competing for material.
+_ratchet_chunk  = _housing_full.intersect(_ratchet_cutter).cut(_brake_cutter)
+
+# Both joint planes get V-rail ridges on the housing + oversized V-grooves in
+# the chunks. The brake rail extends a hair past the joint plane into
+# housing-main material — in the brake-ratchet overlap region (y ∈ [-4, -1.434])
+# housing-main IS the ratchet chunk's region, so the brake rail also clips into
+# the ratchet chunk; cut the brake groove in both chunks for clearance. The
+# ratchet rail stays on its own side (cut face is well inside the ratchet
+# chunk region with END_GAP clearance from the brake-ratchet boundary), so it
+# only needs to be cut from the ratchet chunk.
+# ── Ratchet-to-housing joint: Y-aligned dovetail on the housing's -Z face ──
+# The ratchet chunk meets housing-main at Z = CHUNK_Z_TOP. The housing
+# carries a Y-aligned dovetail tenon hanging DOWN from its -Z face into the
+# chunk's territory; the chunk has a matching FIT_CLR-oversized groove on
+# its +Z face. Slide-in is along Y from the housing's +Y face. Cross-section
+# in (X, Z) is a 45° dovetail trapezoid: narrow at the base (Z = 0, at the
+# housing's -Z face) and wider at the tip (Z = -H_TENON, deep in chunk) so
+# the chunk locks against -Z pull-off.
+RAIL_TENON_W_BASE  = STRUCT_WALL                          # narrow base at the joint plane (ratchet side)
+RAIL_TENON_W_MAX   = RAIL_TENON_W_BASE + 2 * STRUCT_WALL  # widest point (the captive "diamond" middle)
+RAIL_TENON_W_TIP   = STRUCT_WALL                          # narrow flat tip
+# Brake side uses doubled widths (neck/tip = 2 * STRUCT_WALL, max scaled to
+# preserve 45° flares and overall depth). The wider stem gives more contact
+# area on the chunk's diagonal face; ratchet keeps the narrow widths because
+# the retainer's mortise/tenon already occupies the X real-estate it would
+# need to grow into.
+_BRAKE_RAIL_W_BASE = 2 * STRUCT_WALL                          # 3.2
+_BRAKE_RAIL_W_MAX  = _BRAKE_RAIL_W_BASE + 2 * STRUCT_WALL     # 6.4
+_BRAKE_RAIL_W_TIP  = 2 * STRUCT_WALL                          # 3.2
+# Octagonal cross-section: vertical neck → 45° flare-out to the wide middle
+# → 45° flare-in to the flat tip. The wide middle is what locks the joint
+# perpendicular to the joint plane; the neck makes the joint-plane corner a
+# clean 90° (prints accurately on both pieces) and the flat tip avoids a
+# fragile single-point apex at the joint's deepest end.
+RAIL_TENON_NECK_H      = STRUCT_WALL                                       # 1.6 — vertical neck
+RAIL_TENON_FLARE_OUT_H = (RAIL_TENON_W_MAX - RAIL_TENON_W_BASE) / 2        # 1.6 — flare out (45°)
+RAIL_TENON_FLARE_IN_H  = (RAIL_TENON_W_MAX - RAIL_TENON_W_TIP) / 2         # 1.6 — flare in (45°)
+RAIL_TENON_H = RAIL_TENON_NECK_H + RAIL_TENON_FLARE_OUT_H + RAIL_TENON_FLARE_IN_H   # 4.8 — total depth
+_RAIL_X_CENTER    = (_BRAKE_CHUNK_X_LO + _BRAKE_CHUNK_X_HI) / 2
+
+# Brake (green) side: housing-side tenon hanging DOWN into the brake chunk
+# at z ≤ CHUNK_Z_TOP. Y extent spans the FULL brake-chunk wall thickness
+# (= 3 mm from y = -HOUSING_W/2 to y = -HOUSING_W/2 + 3), so the mortise
+# carves all the way through the wall instead of using only the lower half
+# of it. At z = CHUNK_Z_TOP, the chunk only covers y ∈ [-11, -9.4] — the
+# 1.4 mm of rail at y > -9.4 protrudes into the ratchet chunk's territory
+# instead; the ratchet chunk takes a matching cut of the brake-rail groove
+# (see ratchet_pin_chunk below). The brake doesn't need its own slide stop —
+# the ratchet provides the depth reference: the brake slides in until its
+# diagonal face seats against the ratchet's.
+_BRAKE_RAIL_Y_LO = -HOUSING_W / 2 - BOOL_OVERSHOOT                # flush with housing's -Y face
+_BRAKE_RAIL_Y_HI = -HOUSING_W / 2 + 3.2                           # spans the full chunk wall + 0.2 mm to absorb the leftover sliver where the chunk's diagonal meets the mortise edge
+
+# Ratchet (red) side: chunk-side tenon sticking UP from the chunk's top face
+# at z = CHUNK_Z_TOP into a housing-side groove going UP into housing material
+# at z > CHUNK_Z_TOP.
+#
+# Chunk slides -Y to insert (enters the housing from the +Y face). Groove's
+# CLOSED end at -Y is the hard stop — the tenon's -Y leading edge seats
+# against it. Groove's +Y end extends past the housing's +Y face (open) so
+# the chunk can slide in from outside.
+#
+# Tenon and groove have DIFFERENT Y ranges:
+#   - Tenon stays inside the ratchet chunk's top territory (y > C − CHUNK_Z_TOP)
+#     and ends inside the chunk on +Y (no need to reach the +Y face).
+#   - Groove extends past the +Y face on its open side; both close at the
+#     same -Y stop so the tenon's -Y face seats cleanly against the groove wall.
+# Tenon's -Y end (and groove's closed-end / hard stop) sits STRUCT_WALL past
+# the brake rail's +Y end so the ratchet chunk keeps 1.6 mm of solid material
+# between its brake-rail groove cut and the base of its own tenon.
+_RATCHET_TENON_Y_LO  = _BRAKE_RAIL_Y_HI + STRUCT_WALL         # tenon/groove -Y stop (= -6.4)
+_RATCHET_TENON_Y_HI  = +HOUSING_W / 2                         # tenon's +Y end flush with the chunk's +Y face
+_RATCHET_GROOVE_Y_HI = +HOUSING_W / 2 + BOOL_OVERSHOOT        # groove +Y open end (past the +Y face)
+
+
+def _rail_tenon_polygon(w_base, w_max, w_tip,
+                        neck_h=RAIL_TENON_NECK_H,
+                        flare_out_h=RAIL_TENON_FLARE_OUT_H,
+                        flare_in_h=RAIL_TENON_FLARE_IN_H,
+                        z_clearance=0.0,
+                        points_up=False):
+    """8-vertex (or 10-vertex when z_clearance>0) polygon (X, Z) for the
+    chunk-joint rail/mortise. Vertical neck of length neck_h at width
+    w_base, 45° flare-out to width w_max, 45° flare-in to a flat tip of
+    width w_tip.
+
+    z_clearance > 0 adds a vertical extension of length z_clearance at the
+    flat tip (width unchanged), giving Z slack so the groove can be deeper
+    than its tenon — the tenon's tip doesn't bottom out. Pass z_clearance
+    only to the GROOVE polygon (the tenon stays at its nominal depth, and
+    the locking widest-point geometry stays identical on both sides).
+
+    points_up=False (default): base at z=0, tip at the most negative z.
+    Used for the BRAKE rail (housing tenon hanging down into the chunk).
+    points_up=True: base at z=0, tip at the most positive z. Used for the
+    RATCHET rail (chunk tenon sticking up into the housing's mortise)."""
+    s = +1 if points_up else -1
+    z_neck   = neck_h
+    z_widest = neck_h + flare_out_h
+    z_tip    = z_widest + flare_in_h
+    pts = [
+        (+w_base / 2, 0),                       # base-right
+        (-w_base / 2, 0),                       # base-left
+        (-w_base / 2, s * z_neck),              # neck-bot-left
+        (-w_max  / 2, s * z_widest),            # widest-left
+        (-w_tip  / 2, s * z_tip),               # tip-left (top corner of any tip extension)
+    ]
+    if z_clearance > 0:
+        pts.append((-w_tip / 2, s * (z_tip + z_clearance)))  # extended tip, -X corner
+        pts.append((+w_tip / 2, s * (z_tip + z_clearance)))  # extended tip, +X corner
+    pts.extend([
+        (+w_tip  / 2, s * z_tip),               # tip-right (top corner of any tip extension)
+        (+w_max  / 2, s * z_widest),            # widest-right
+        (+w_base / 2, s * z_neck),              # neck-bot-right
+    ])
+    return pts
+
+
+def _rail_prism(poly, y_lo, y_hi, z_base):
+    """Extrude `poly` (defined in XZ) along +Y from y_lo to y_hi, with its
+    z=0 line landing on z=z_base."""
+    return (cq.Workplane("XZ")
+            .polyline(poly).close()
+            .extrude(y_hi - y_lo)
+            .translate((_RAIL_X_CENTER, y_hi, z_base)))
+
+
+def _brake_rail_solid_and_groove():
+    """Brake side: housing-side tenon (the SOLID) + matching chunk-side
+    groove (the GROOVE = solid + CROSS_PRINT_CLR all around — wider than
+    FIT_CLR because the rail prints on the housing's -Y face while the
+    chunk's groove prints on a different face)."""
+    solid_poly = _rail_tenon_polygon(_BRAKE_RAIL_W_BASE, _BRAKE_RAIL_W_MAX, _BRAKE_RAIL_W_TIP)
+    groove_poly = _rail_tenon_polygon(_BRAKE_RAIL_W_BASE + 2 * CHUNK_RAIL_CLR,
+                                       _BRAKE_RAIL_W_MAX  + 2 * CHUNK_RAIL_CLR,
+                                       _BRAKE_RAIL_W_TIP  + 2 * CHUNK_RAIL_CLR,
+                                       z_clearance=CHUNK_RAIL_CLR)
+    solid  = _rail_prism(solid_poly,  _BRAKE_RAIL_Y_LO, _BRAKE_RAIL_Y_HI, CHUNK_Z_TOP)
+    groove = _rail_prism(groove_poly, _BRAKE_RAIL_Y_LO, _BRAKE_RAIL_Y_HI, CHUNK_Z_TOP)
+    return solid, groove
+
+
+def _ratchet_rail_solid_and_groove():
+    """Ratchet side: chunk-side tenon (the SOLID, attached to the chunk) +
+    matching housing-side groove going UP from the joint plane. Tenon and
+    groove share the +Y stop but the groove extends further -Y, past the
+    housing's -Y face, so the chunk can slide in from outside."""
+    solid_poly = _rail_tenon_polygon(RAIL_TENON_W_BASE, RAIL_TENON_W_MAX, RAIL_TENON_W_TIP,
+                                      points_up=True)
+    # Cross-print joint (chunk prints +Y-down, housing prints -Y-down).
+    groove_poly = _rail_tenon_polygon(RAIL_TENON_W_BASE + 2 * CHUNK_RAIL_CLR,
+                                       RAIL_TENON_W_MAX  + 2 * CHUNK_RAIL_CLR,
+                                       RAIL_TENON_W_TIP  + 2 * CHUNK_RAIL_CLR,
+                                       z_clearance=CHUNK_RAIL_CLR,
+                                       points_up=True)
+    solid  = _rail_prism(solid_poly,  _RATCHET_TENON_Y_LO, _RATCHET_TENON_Y_HI,  CHUNK_Z_TOP)
+    groove = _rail_prism(groove_poly, _RATCHET_TENON_Y_LO, _RATCHET_GROOVE_Y_HI, CHUNK_Z_TOP)
+    return solid, groove
+
+
+_brake_rail_solid,   _brake_rail_groove   = _brake_rail_solid_and_groove()
+_ratchet_rail_solid, _ratchet_rail_groove = _ratchet_rail_solid_and_groove()
+
+
+# ── Floating tenon: hexagonal hourglass spanning the brake/ratchet diagonal ─
+# Both chunks print face-down on their diagonal joint face, so neither can
+# carry a printed tenon. Instead each chunk has a half-mortise on its
+# diagonal face, and a separately-printed "floating tenon" (this part) sits
+# in both mortises to lock the chunks together perpendicular to the joint.
+#
+# Slide direction: along the in-plane diagonal direction ξ = (-Y + Z)/√2 —
+# the tenon enters from the chunks' (+Y, -Z) corner where the diagonal joint
+# first meets the chunk volume, and slides "up the joint" toward (-Y, +Z).
+# Cross-section perpendicular to ξ is in (local-X, η) where η = (Y + Z)/√2
+# is the diagonal-joint normal. The hourglass varies along η: wide at
+# η = ±end_h/2 (deep into each chunk), narrow at η = 0 (on the diagonal
+# joint line itself). 45° transitions (end_x − waist_x = end_h).
+#
+# Length is set so the far end of the tenon stops STRUCT_WALL clear of the
+# +X guide-wheel pocket along Z (the pocket starts at GUIDE_POCKET_Z_LO).
+FLOAT_TENON_BULGE_X       = 6.0          # X-extent at the wide bulge (max width)
+FLOAT_TENON_WAIST_X       = 2.0          # X-extent through the straight waist
+FLOAT_TENON_WAIST_H       = STRUCT_WALL  # η-thickness of the STRAIGHT waist section
+FLOAT_TENON_APEX_X        = STRUCT_WALL  # X-extent of the apex flat at top/bottom
+# Both tapers (waist→bulge and bulge→apex) at exactly 45°. Each derives
+# its η-extent from the X-extent change (Δη = ΔX). Every interior angle in
+# the polygon is now a multiple of 45° — easier to print accurately, and
+# 135° at the apex flat corners / 45° at the bulge vertex.
+FLOAT_TENON_BULGE_H = FLOAT_TENON_WAIST_H + (FLOAT_TENON_BULGE_X - FLOAT_TENON_WAIST_X)
+FLOAT_TENON_APEX_H  = FLOAT_TENON_BULGE_H + (FLOAT_TENON_BULGE_X - FLOAT_TENON_APEX_X)
+FLOAT_TENON_X_CENTER = (_BRAKE_CHUNK_X_LO + _BRAKE_CHUNK_X_HI) / 2  # 70 — chunk X midpoint
+
+# Entry face placed at the chunks' +Y/-Z exterior corner — the most "+y, -z"
+# point the diagonal joint reaches inside the chunk region. With the new C,
+# the diagonal crosses the +Y face (Y = HOUSING_W/2) at Z = C − HOUSING_W/2,
+# so the entry sits right at that face. The +η corner of the tenon at this
+# entry face sticks slightly past the housing's +Y face — accepted, since
+# the floating tenon is a separate part and the overshoot is just exposed
+# material when assembled.
+# Entry placed at the chunk's +Y -Z exterior corner — off-diagonal by
+# (C - entry_y - entry_z)/√2, sitting just below the diagonal in brake
+# territory. This lets the tenon's -Z tip reach all the way down to the
+# chunk floor (Z = CHUNK_Z_BOT) instead of stopping at the diagonal's
+# entry-on-+Y-face point.
+_FLOAT_ENTRY_Y = HOUSING_W / 2
+_FLOAT_ENTRY_Z = CHUNK_Z_BOT
+
+# Length: stop ≈ 1 mm short of the +X guide-wheel pocket at the +η corner
+# (the corner deepest into ratchet — its world Z is the largest along the
+# tenon and so binds first against the pocket floor). Larger clearance
+# values would shorten the tenon further; STRUCT_WALL clearance pulls the
+# length down significantly so we use 1 mm here.
+_FLOAT_POCKET_CLEARANCE = 1.0
+FLOAT_TENON_LENGTH = (
+    (GUIDE_POCKET_Z_LO - _FLOAT_POCKET_CLEARANCE - _FLOAT_ENTRY_Z
+     - FLOAT_TENON_APEX_H / (2 * math.sqrt(2)))
+    * math.sqrt(2)
+)
+
+
+def _float_tenon_polygon(bulge_x, waist_x, bulge_h, waist_h, apex_x, apex_h):
+    """CCW 12-vertex polygon in (local-X, η). Cross-section perpendicular
+    to ξ. Each side (top and bottom) tapers: apex flat at η = ±apex_h/2
+    (X = apex_x) → wide bulge at η = ±bulge_h/2 (X = bulge_x) → straight
+    waist of η-thickness waist_h centred on η=0 (X = waist_x). 45° taper
+    from bulge to apex if apex_h − bulge_h == bulge_x − apex_x; the
+    waist↔bulge taper has its own (steeper) slope set by the
+    waist_h / bulge_h ratio."""
+    return [
+        (+bulge_x / 2, -bulge_h / 2),    # V1: bottom-right bulge
+        (+waist_x / 2, -waist_h / 2),    # V2: right of waist bottom
+        (+waist_x / 2, +waist_h / 2),    # V3: right of waist top
+        (+bulge_x / 2, +bulge_h / 2),    # V4: top-right bulge
+        (+apex_x  / 2, +apex_h  / 2),    # V5: top-right of apex flat
+        (-apex_x  / 2, +apex_h  / 2),    # V6: top-left of apex flat
+        (-bulge_x / 2, +bulge_h / 2),    # V7: top-left bulge
+        (-waist_x / 2, +waist_h / 2),    # V8: left of waist top
+        (-waist_x / 2, -waist_h / 2),    # V9: left of waist bottom
+        (-bulge_x / 2, -bulge_h / 2),    # V10: bottom-left bulge
+        (-apex_x  / 2, -apex_h  / 2),    # V11: bottom-left of apex flat
+        (+apex_x  / 2, -apex_h  / 2),    # V12: bottom-right of apex flat
+    ]
+
+
+def _float_tenon_solid_from_poly(poly_pts, length, pre_translate_z=0.0):
+    """Build hourglass in local frame (XY-plane = cross-section, +Z = ξ
+    slide direction), translate to set X centre, rotate +45° about world X
+    so local +Z maps to world ξ = (-Y+Z)/√2, then translate so the entry
+    plane (local Z = 0) intersects the diagonal at the chosen entry point.
+    pre_translate_z extends the prism backward along local ξ — used to
+    extend the mortise past the tenon's entry face."""
+    return (cq.Workplane("XY")
+            .polyline(poly_pts).close()
+            .extrude(length)
+            .translate((FLOAT_TENON_X_CENTER, 0, pre_translate_z))
+            .rotate((0, 0, 0), (1, 0, 0), 45)
+            .translate((0, _FLOAT_ENTRY_Y, _FLOAT_ENTRY_Z)))
+
+
+_float_tenon_pts     = _float_tenon_polygon(FLOAT_TENON_BULGE_X,
+                                             FLOAT_TENON_WAIST_X,
+                                             FLOAT_TENON_BULGE_H,
+                                             FLOAT_TENON_WAIST_H,
+                                             FLOAT_TENON_APEX_X,
+                                             FLOAT_TENON_APEX_H)
+_float_mortise_pts   = _offset_polygon_ccw(_float_tenon_pts, FIT_CLR)
+floating_tenon       = _float_tenon_solid_from_poly(_float_tenon_pts,
+                                                    FLOAT_TENON_LENGTH)
+# Trim the +Y overshoot so the tenon's +Y face sits flush with the chunk's
+# +Y wall (Y = HOUSING_W/2 = 11). The polygon's +η corner naturally pokes a
+# bit past +Y when rotated 45° around X, and with LEVER_RIM_H shrunk to
+# 3.3 mm that overshoot now collides with the ratchet lever.
+_FLOAT_TENON_PY_TRIM = (cq.Workplane("XY")
+                       .box(2000, 1000, 2000, centered=(True, False, True))
+                       .translate((0, HOUSING_W / 2, 0)))
+floating_tenon       = floating_tenon.cut(_FLOAT_TENON_PY_TRIM)
+_float_tenon_mortise = _float_tenon_solid_from_poly(_float_mortise_pts,
+                                                    FLOAT_TENON_LENGTH + 2 * FIT_CLR,
+                                                    pre_translate_z=-FIT_CLR)
+
+
+# ── Assemble main housing + chunks ─────────────────────────────────────────
+# The old 45°-diagonal brake reg-rails are gone: with the shared z+y=C
+# diagonal, that joint is now between the brake and ratchet chunks (not
+# between brake and housing-main), so the chunk-chunk interlock is the
+# floating tenon. Brake-to-housing-main is implicit (brake's tiny +Z
+# slice y ∈ [-11, -10.38] is too narrow for a useful rail; the chunk
+# stays in place via the floating tenon + glue).
+# Brake side: housing carries the tenon (UNION the brake rail solid back
+# into the main, trimmed to housing boundary), brake chunk gets a matching
+# groove. Ratchet side (swapped): the chunk carries the tenon (UNION the
+# ratchet rail solid into the ratchet chunk), housing gets the matching
+# groove (CUT from the main).
+housing           = (_main
+                     .union(_brake_rail_solid.intersect(_housing_full))
+                     .cut(_ratchet_rail_groove))
+brake_pin_chunk   = (_brake_chunk
+                     .cut(_brake_rail_groove)
+                     .cut(_float_tenon_mortise))
+# Ratchet's tenon protrudes ABOVE CHUNK_Z_TOP into housing-territory; just
+# union the full solid into the chunk's STEP (it's already X-bounded to
+# the chunk's footprint by the rail polygon's centering). Also cut the
+# brake-rail groove from this chunk: the brake rail spans more Y than
+# the brake chunk reaches at z=CHUNK_Z_TOP, so its +Y end pokes 1.4 mm
+# into the ratchet chunk's territory and needs a matching cavity here.
+ratchet_pin_chunk = (_ratchet_chunk
+                     .union(_ratchet_rail_solid)
+                     .cut(_brake_rail_groove)
+                     .cut(_float_tenon_mortise))

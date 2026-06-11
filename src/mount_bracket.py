@@ -29,7 +29,7 @@ from .dimensions import (
     BOOL_OVERSHOOT,
     FIT_CLR,
     M2_SHAFT_CLR_D,
-    PLATE_T, STRUCT_WALL,
+    STRUCT_WALL,
 )
 from .housing import (
     HOUSING_W,
@@ -46,6 +46,11 @@ WOOD_SCREW_HEAD_D    = 9.3   # countersunk-head pocket Ø *at the bracket's
                              # face by BOOL_OVERSHOOT for a clean boolean
                              # break — see _wood_screw_cut_at.
 WOOD_SCREW_HEAD_H    = 4.0   # cone-recessed head depth at chunk's housing-side face
+WOOD_SCREW_SHAFT_H   = STRUCT_WALL  # straight-cylinder length of the shaft hole past
+                                    # the cone, before the chunk ends. Kept short
+                                    # (= one structural wall) so the chunk's overlap
+                                    # with the housing pocket stays shallow — less
+                                    # overhang to support when printing the housing.
 
 CHUNK_LENGTH         = 22.0                                  # along the two-wood-screw axis
 
@@ -57,7 +62,13 @@ SIDE_POCKET_EXTRA_Z  = 8.0                                   # 22 → 30 mm pock
 CHUNK_WIDTH          = 13.0                                  # Y dimension (M2 axis) — matches
                                                              # the guide-wheel pocket Y width
                                                              # (WHEEL_PAINTED_OD + 2·WHEEL_POCKET_Y_CLR)
-CHUNK_DEPTH          = PLATE_T - STRUCT_WALL                 # 8.3 — into housing surface, leaving 1.7 mm of housing wall behind
+CHUNK_DEPTH          = WOOD_SCREW_HEAD_H + WOOD_SCREW_SHAFT_H  # 5.7 — cone + short shaft only
+# Thin chunk wall between the wood-screw cone's wide-end edge and the chunk's
+# ±Y face at the housing-side face — replaced with a 45° chamfer to make the
+# housing pocket's roof more printable (the +Y / -Y wall transitions from the
+# floor at 45° instead of a flat horizontal overhang). Length = the chunk's
+# long-axis extent (21.85 mm after FIT_CLR shrink).
+POCKET_CHAMFER_H     = 0.85
 
 STRIP_W              = CHUNK_WIDTH    # 13.0, in Y (full bracket width)
 STRIP_T              = STRUCT_WALL    # 1.7 mm depth into housing outer surface
@@ -395,6 +406,17 @@ def _build_bracket():
     top_chunk = _box(TOP_CHUNK_X_LO + s, TOP_CHUNK_X_HI,
                      strip_y_lo_b, chunk_y_hi_b,
                      TOP_CHUNK_Z_LO, TOP_CHUNK_Z_HI)
+    top_chunk = top_chunk.edges("|X and <Z").chamfer(POCKET_CHAMFER_H)
+    # Inset the +Y vertical face of the wood-screw block from y=4.75 to
+    # y=4.55 (0.2 mm). XZ-plane cut over the +Y face's z range PLUS the
+    # bottom chamfer (down to TOP_CHUNK_Z_LO) so the chamfer's upper part
+    # is consumed too — the chamfer ends cleanly at z=58.55 / y=4.55 with
+    # no leftover horizontal step at z=58.75. Strip above is untouched.
+    py_face_inset_cut = _box(
+        TOP_CHUNK_X_LO + s - BOOL_OVERSHOOT, TOP_CHUNK_X_HI + BOOL_OVERSHOOT,
+        chunk_y_hi_b - 0.2, chunk_y_hi_b + BOOL_OVERSHOOT,
+        TOP_CHUNK_Z_LO, TOP_STRIP_Z_LO)
+    top_chunk = top_chunk.cut(py_face_inset_cut)
     # 3. TOP strip — chamfered prism with shrunk -X and ±Y bounds.
     top_strip = _chamfered_top_strip_prism(
         x_lo=TOP_STRIP_X_LO + s,
@@ -407,12 +429,22 @@ def _build_bracket():
         ws = _wood_screw_cut_at(x, CHUNK_Y_CENTER, TOP_CHUNK_Z_LO, (0, 0, 1))
         top_chunk = top_chunk.cut(ws)
         top_strip = top_strip.cut(ws)
-    top_chunk = top_chunk.cut(_m2_chunk_cut(TOP_M2_X_CENTER, TOP_M2_Z_CENTER))
 
-    # 2. SIDE chunk + its cuts (wood screws into +X beam, M2 along Y).
+    # 2. SIDE chunk + its cuts (wood screws into +X beam).
     side_chunk = _box(SIDE_CHUNK_X_LO, SIDE_CHUNK_X_HI,
                       strip_y_lo_b, chunk_y_hi_b,
                       SIDE_CHUNK_Z_LO + s, SIDE_CHUNK_Z_HI)
+    side_chunk = side_chunk.edges("|Z and <X").chamfer(POCKET_CHAMFER_H)
+    # Inset the +Y vertical face of the side wood-screw block from y=4.75
+    # to y=4.55 (0.2 mm). Same treatment as the top chunk, rotated 90°:
+    # cut over the chunk's z range and the -X chamfer (x from SIDE_CHUNK_X_LO
+    # up through the chamfer), ending at SIDE_STRIP_X_LO so the side strip
+    # is untouched.
+    side_py_face_inset_cut = _box(
+        SIDE_CHUNK_X_LO, SIDE_STRIP_X_LO,
+        chunk_y_hi_b - 0.2, chunk_y_hi_b + BOOL_OVERSHOOT,
+        SIDE_CHUNK_Z_LO + s - BOOL_OVERSHOOT, SIDE_CHUNK_Z_HI + BOOL_OVERSHOOT)
+    side_chunk = side_chunk.cut(side_py_face_inset_cut)
     # 4. SIDE strip — chamfered prism with shrunk -Z and ±Y bounds.
     side_strip = _chamfered_side_strip_prism(
         z_lo=SIDE_STRIP_Z_LO + s,
@@ -425,12 +457,17 @@ def _build_bracket():
         ws = _wood_screw_cut_at(SIDE_CHUNK_X_LO, CHUNK_Y_CENTER, z, (1, 0, 0))
         side_chunk = side_chunk.cut(ws)
         side_strip = side_strip.cut(ws)
-    side_chunk = side_chunk.cut(_m2_chunk_cut(SIDE_M2_X_CENTER, SIDE_M2_Z_CENTER))
 
-    return (top_chunk
-            .union(side_chunk)
-            .union(top_strip)
-            .union(side_strip))
+    # Union everything FIRST, then cut the M2 holes — otherwise the strip
+    # solids fill back in part of each M2 cylinder when they're union'd, and
+    # the hole gets a flat spot where the strip overlaps the chunk's M2 axis.
+    bracket = (top_chunk
+               .union(side_chunk)
+               .union(top_strip)
+               .union(side_strip))
+    bracket = bracket.cut(_m2_chunk_cut(TOP_M2_X_CENTER, TOP_M2_Z_CENTER))
+    bracket = bracket.cut(_m2_chunk_cut(SIDE_M2_X_CENTER, SIDE_M2_Z_CENTER))
+    return bracket
 
 
 def _bracket_envelope():
@@ -456,9 +493,11 @@ def _bracket_envelope():
     top_chunk  = _box(TOP_CHUNK_X_LO, TOP_CHUNK_X_HI + TOP_POCKET_EXTRA_X,
                       STRIP_Y_LO, CHUNK_Y_HI,
                       TOP_CHUNK_Z_LO, TOP_CHUNK_Z_HI)
+    top_chunk  = top_chunk.edges("|X and <Z").chamfer(POCKET_CHAMFER_H)
     side_chunk = _box(SIDE_CHUNK_X_LO, SIDE_CHUNK_X_HI,
                       STRIP_Y_LO, CHUNK_Y_HI,
                       SIDE_CHUNK_Z_LO, SIDE_CHUNK_Z_HI + SIDE_POCKET_EXTRA_Z)
+    side_chunk = side_chunk.edges("|Z and <X").chamfer(POCKET_CHAMFER_H)
     top_strip  = _box(TOP_STRIP_X_LO, TOP_STRIP_X_HI,
                       STRIP_Y_LO, CHUNK_Y_HI,
                       TOP_STRIP_Z_LO, TOP_STRIP_Z_HI)

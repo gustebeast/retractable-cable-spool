@@ -18,7 +18,7 @@ from .dimensions import (
     FLANGE_H, FLANGE_INNER_ID, FLANGE_OD, FLANGE_LIP_T,
     HUB_CAVITY_D, HUB_OD,
     M2_INSERT_PILOT_D, M2_INSERT_DEPTH, M2_SHAFT_CLR_D,
-    RATCHET_TEETH, RATCHET_DEPTH,
+    RATCHET_TEETH, RATCHET_DEPTH, RATCHET_TOOTH_OFFSET_DEG,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
     LEVER_STOP_LIP_Z0, LEVER_STOP_LIP_Z1,
     PANCAKE_CAP_SEAT_Z0,
@@ -63,7 +63,9 @@ def _build_main_body():
         cyl(HUB_OD, SPOOL_H, z=0)                       # hub cylinder (full height)
         .union(_lever_rim())                             # bottom 14 mm-tall cable rim
         .union(_channel_spokes())                        # radial spokes: sole hub↔rim tie
-        .union(_hub_key_bumps())                         # key ridges for the sliding top rim
+        # _hub_key_bumps() (top-rim tenons) is unioned LATER — after the
+        # cable-entry tunnel cut — otherwise the diagonal tunnel clips one
+        # of the tenons at the bottom of the hub.
     )
 
     # Interior z-map cuts — BEARING CAP FLIPPED: the LEVER-side (bottom)
@@ -105,6 +107,17 @@ def _build_main_body():
     # wall is too thin); the radial bore takes the insert pocket + screw clearance.
     main_body = main_body.union(_spring_screw_boss())
     main_body = main_body.cut(_spring_screw_bore())
+    # Driver access: Ø7.2 hole through the hub wall diametrally OPPOSITE
+    # the spring screw, so a hex driver can reach the screw head (which
+    # faces the cavity) from outside the spool.
+    main_body = main_body.cut(_spring_screw_access_hole())
+    # Build a walled channel through the spokes first, then bore the cable
+    # tunnel through it. Without the shell the tunnel just chops the spokes
+    # and leaves dangling stubs around the cable's path.
+    main_body = main_body.union(_cable_entry_channel_shell())
+    main_body = main_body.cut(_cable_entry_cut())
+    # Top-rim tenons added AFTER the tunnel cut so they aren't clipped by it.
+    main_body = main_body.union(_hub_key_bumps())
     return main_body
 
 
@@ -116,39 +129,97 @@ def _build_main_body():
 # the cable air-gap) — that's the upcoming lever rework, not done here. The
 # rim is a plain vertical wall (no 45° chamfer) so the whole body prints
 # bottom-to-top without supports.
-RIM_H      = 14.0      # rim height in Z (the lever-grip surface height)
-# RIM_OD is the fixed anchor — the brake-band OD that the brake lever, the
-# cable top rim, and the cable retainer all key off, so it must NOT move. The
-# brake-band wall is just STRUCT_WALL now: the ratchet valley floor sits at
-# RIM_OD/2 and its teeth protrude past it, so a 1.7 mm wall is fully supported
-# (no overhang). RIM_ID is derived, which pushes the cable-channel outer wall
-# out (longer spokes than the old 108 — the wider channel only adds capacity).
-RIM_OD     = 114.4     # fixed brake-band / rim outer diameter
-RIM_WALL   = STRUCT_WALL              # 1.7 — brake-band / rim wall thickness
-RIM_ID     = RIM_OD - 2 * RIM_WALL   # 111.0 — cable-channel outer wall
-# The RIM_H-tall rim splits into a short RATCHET teeth band at the bottom and a
-# tall SMOOTH brake band filling the rest. The pawl only needs a little tooth
-# height, so the ratchet band is short and the brake band gets the rest.
-RATCHET_BAND_H = 3.0                  # ratchet teeth z-height (brake band = RIM_H − this)
+# The rim splits into a short RATCHET teeth band at the bottom and a tall
+# SMOOTH brake band filling the rest. RIM_H is derived from the two band
+# heights so bumping either one walks the entire stack above the rim
+# (cable groove, retainer, cable top rim, hub spring-mount hole) up in Z.
+RATCHET_BAND_H = 6.0                  # ratchet teeth z-height (3→6: doubled
+                                      # pawl contact area — teeth were skipping)
+# 45° conical transition between the ratchet rim and the (wider) brake rim.
+# At 45°, the cone's axial height equals its radial step = RATCHET_DEPTH.
+CONE_H         = RATCHET_DEPTH        # 1.7
+# The +Z extent of the ratchet_pin_chunk (housing.py). The chunk's cut
+# plane is z − y ≤ RATCHET_CHUNK_CUT_C, so its top point is at y = +HOUSING_W/2
+# where z reaches RATCHET_CHUNK_CUT_C + HOUSING_W/2. Mirrored here as a
+# literal (with the same derivation) so the brake-rim height can be sized
+# off it without spool.py needing to import from housing.py (which would
+# be circular). Update both together if any of the inputs change.
+#   = (RATCHET_PIVOT_Z + LEVER_PIVOT_BOSS_OD/2)        # boss top z       = 19.1
+#   + 0.5                                              # boss inside-y offset
+#   + RATCHET_CHUNK_RING_CLR · √2                      # 0.4·√2 = 0.566
+#   = 20.166
+# (RATCHET_PIVOT_Z = 16.1 — derived in housing.py from the 6 mm guide
+# wheel: BRAKE_RIM_Z_LO 7.5 + wheel 6.0 + face clr 1.0 + 0.4 solid +
+# M2 bore half 1.2.)
+RATCHET_CHUNK_Z_MAX = 20.166
+# Manual clearance above the ratchet_pin_chunk's top — added to anything
+# that needs to sit ABOVE the chunk (the cable retainer's bottom ring, the
+# housing's front-thicken top) so the chunk has a small breathing margin.
+RATCHET_CHUNK_CLEARANCE = 0.8
+# Brake-rim STRAIGHT section z-height — just the cylindrical portion above
+# the cone, NOT including the cone itself. Sized directly from what must
+# fit on the band:
+#   BRAKE_PAD_TARGET_H  — brake-pad contact height
+#   + 1.0               — clearance between the pad's top and the retainer
+#   + STRUCT_WALL       — the retainer's bottom ring (RETAIN_RING_T) wraps
+#                         the band's top
+# (Previously sized so the retainer's ring cleared the ratchet chunk's top
+# — that tied the band height to the whole lever-pivot stack and made the
+# band ~3.5 mm taller than the brake needs. The chunk split / retainer /
+# ratchet-axle interactions are being redesigned separately, so the chunk
+# clearance constraint is dropped here.)
+BRAKE_PAD_TARGET_H = 9.0
+BRAKE_BAND_H   = BRAKE_PAD_TARGET_H + 1.0 + STRUCT_WALL          # 11.6
+# Z of the brake rim's STRAIGHT section bottom — top of the cone, also where
+# the brake rim's cylindrical wall meets the cone's expanding face. Stationary
+# things on the spool's side that need to align with the brake rim's bottom
+# (e.g. the guide wheel) key off this.
+BRAKE_RIM_Z_LO = RATCHET_BAND_H + CONE_H              # 4.7
+RIM_H      = RATCHET_BAND_H + CONE_H + BRAKE_BAND_H   # rim total height (15.766)
+# RIM_OD is the brake-band OD that the brake lever, the cable top rim, and
+# the cable retainer all key off. Bumped 114.4→117.8 so the brake band's
+# OUTER matches the ratchet TOOTH TIP extent (RIM_OD/2 = 58.9 = old
+# r_tip) — no more overhang of the teeth past the brake band's wall.
+# A 45° cone (RATCHET_DEPTH tall) below the brake band transitions the
+# wall outward from the ratchet valley radius up to this new brake outer.
+# Wall thickness stays at STRUCT_WALL (1.7) throughout.
+RIM_OD     = 117.8                    # new brake-band outer (= old r_tip)
+RIM_WALL   = STRUCT_WALL              # 1.7 — brake-band wall thickness
+# RIM_ID is the cable-channel inner edge at the NARROWEST point of the rim
+# (the ratchet level — kept at the old value so the ratchet bore, the cable
+# channel spokes, and the cable_rim spoke count are unchanged). The BRAKE
+# band's inner is (RIM_OD - 2*RIM_WALL) = 114.4 — larger, because the brake
+# band grew outward but the wall stayed 1.7 mm. The cone smoothly steps
+# the bore from RIM_ID up to that larger inner over RATCHET_DEPTH in z.
+RIM_ID     = 111.0                    # cable-channel inner at ratchet level
+
+# Minimum radial gap between the spool's OD and any STATIONARY feature
+# (housing walls/thicken, cable retainer's bottom ring, etc.) — covers spool
+# wobble under load. Used by cable_retainer.RETAIN_RADIAL_GAP and by
+# housing.PIVOT_X (the front-thicken's inner face is held at this gap).
+SPOOL_HORIZONTAL_CLEARANCE = 2.5
 
 
 def _cyl_ratchet_band(z_lo, z_hi):
     """Cylindrical (radial-engagement) ratchet on the rim's OUTER face over
     [z_lo, z_hi]. A 90°-rotated version of the old axial ratchet: the
-    sawtooth now runs around the circumference with its catch face RADIAL,
-    so the pawl engages from OUTSIDE in X/Y. The valley floor sits at RIM_OD/2,
-    flush with the brake band above so the ratchet's solid core FULLY SUPPORTS
-    the band (no overhang); the tips PROTRUDE RATCHET_DEPTH past it."""
-    r_root = RIM_OD / 2
-    r_tip  = r_root + RATCHET_DEPTH
+    sawtooth runs around the circumference with its catch face RADIAL, so
+    the pawl engages from OUTSIDE in X/Y. Tip radius = RIM_OD/2 (flush
+    with the brake-band outer above the cone); teeth grow INWARD from
+    there by RATCHET_DEPTH to the valleys at r = RIM_OD/2 − RATCHET_DEPTH."""
+    r_tip  = RIM_OD / 2
+    r_root = r_tip - RATCHET_DEPTH
     n      = RATCHET_TEETH
+    offset = math.radians(RATCHET_TOOTH_OFFSET_DEG)
     pts = []
     for i in range(n):
-        ts = 2 * math.pi * i / n
-        # radial catch face (valley → tip at the same angle), then the
-        # ramp is the straight chord from this tip to the next valley.
-        pts.append((r_root * math.cos(ts), r_root * math.sin(ts)))
+        ts = offset + 2 * math.pi * i / n
+        # radial catch face (tip → valley at the same angle), then the
+        # ramp is the straight chord from this valley out to the next tip.
+        # (Swapped from valley-first to tip-first to flip the engagement
+        # direction — catch now blocks the opposite rotation.)
         pts.append((r_tip  * math.cos(ts), r_tip  * math.sin(ts)))
+        pts.append((r_root * math.cos(ts), r_root * math.sin(ts)))
     star = (
         cq.Workplane("XY").workplane(offset=z_lo)
         .polyline(pts).close()
@@ -160,29 +231,216 @@ def _cyl_ratchet_band(z_lo, z_hi):
 
 CABLE_D = 6.0   # nominal cable diameter — also the max allowed inter-spoke gap
 
+CABLE_ENTRY_CUT_W         = 13.0   # square cross-section of the cable-entry cut
+CABLE_ENTRY_CUT_ANGLE_DEG = 45.0   # tilt from horizontal: cable enters at this angle
+                                   # so it exits the cut near the angle it sits at
+                                   # in the (flat) channel.
+
+
+# Cut's axis position — the box's INNER X face (at axis − CABLE_ENTRY_CUT_W/2)
+# is at constant X = HUB_OD/2, so at the EXIT (top of cut, Y=0) the tunnel is
+# tangent to the hub OD: the cable comes out right at the inner spool wall.
+# The shell shares this axis so STRUCT_WALL extends symmetrically on every
+# side of the cut (no lopsidedness in either X direction).
+_CABLE_ENTRY_AXIS_X = HUB_OD / 2 + CABLE_ENTRY_CUT_W / 2
+
+
+def _cable_entry_prism(w):
+    """The diagonal cable-entry tunnel as a rectangular prism, centred on
+    the cut's axis (_CABLE_ENTRY_AXIS_X), parameterised by cross-section
+    side `w`. Used twice — once at CABLE_ENTRY_CUT_W to carve the tunnel
+    itself, and once at CABLE_ENTRY_CUT_W + 2·STRUCT_WALL as a
+    STRUCT_WALL-thick channel shell that caps the spokes the tunnel cuts
+    through (so the cable runs in a clean walled channel instead of past
+    a row of dangling spoke stubs)."""
+    angle_rad = math.radians(CABLE_ENTRY_CUT_ANGLE_DEG)
+    sin_a = math.sin(angle_rad)
+    # z_start needs to drop just past the z=0 cap so the tilted box's
+    # cross-section at z=0 is limited by its LOCAL width (perpendicular to
+    # axis), not by the diagonal edge running through the slice. ~1 mm of
+    # extra extension below the original -5 is enough.
+    z_start = -6.0
+    z_end = RIM_H + 5.0
+    L = (z_end - z_start) / sin_a
+    y_exit  = 0.0
+    y_entry = y_exit + (z_end - z_start)            # Δy = -Δz at 45° (axis along -Y +Z)
+    center_y = (y_entry + y_exit) / 2
+    center_z = (z_start + z_end) / 2
+    return (
+        cq.Workplane("XY")
+        .box(w, w, L, centered=True)
+        # Rotate +45° around X so local +Z (length) → world -Y +Z (CW-winding tangent).
+        .rotate((0, 0, 0), (1, 0, 0), CABLE_ENTRY_CUT_ANGLE_DEG)
+        .translate((_CABLE_ENTRY_AXIS_X, center_y, center_z))
+    )
+
+
+# Spoke region: tunnel + shell are capped to this z range so they don't run
+# above/below the spokes they need to cross. The prism itself extends past
+# both ends (entry/exit clearance); the cap clips that to z = 0..16.47.
+_SPOKE_REGION_Z_HI = 16.47
+
+
+def _spoke_region_cap():
+    """Z-bounded box (z = 0..16.47, full XY span) intersected with the
+    cable-entry tunnel/shell to clip them to the spoke region."""
+    big = 1000.0
+    return (cq.Workplane("XY")
+            .box(big, big, _SPOKE_REGION_Z_HI, centered=(True, True, False)))
+
+
+def _cable_entry_cut():
+    """Inner cable-entry tunnel — the actual cable clearance hole, clipped
+    to the spoke region."""
+    return _cable_entry_prism(CABLE_ENTRY_CUT_W).intersect(_spoke_region_cap())
+
+
+def _cable_entry_channel_shell():
+    """STRUCT_WALL-thick rectangular shell around the cable-entry tunnel.
+    Unioned into the spool BEFORE the tunnel is cut so the spokes the
+    tunnel crosses get rejoined by a solid border — no dangling stubs.
+    Clipped to the spoke region so the shell doesn't extend above/below."""
+    return (_cable_entry_prism(CABLE_ENTRY_CUT_W + 2 * STRUCT_WALL)
+            .intersect(_spoke_region_cap()))
+
 
 def _channel_spokes():
-    """Radial spokes that are the SOLE connection between the inner spool
-    (hub) and the outer cable rim — there's no floor disc. They also keep
-    the wound cable from dropping out the open bottom: the count is set so
-    the circumferential gap between adjacent spokes where they meet the rim
-    (RIM_ID, the widest point) stays ≤ CABLE_D, so a cable strand bridges
-    the gap instead of falling through. Full rim height (z=0..RIM_H)."""
-    r_in   = HUB_OD / 2 - 0.5        # 0.5 mm overlap into the hub
-    r_out  = RIM_ID / 2 + 0.5        # 0.5 mm overlap into the rim wall
-    w      = STRUCT_WALL
-    r_rim  = RIM_ID / 2
-    n = math.ceil(2 * math.pi * r_rim / (CABLE_D + w))
+    """Two-level (48→24→12) branching radial spokes (sole hub↔rim
+    connection — no floor disc). Each spoke is built as a TRUE radial
+    bar at its own angular position (not a Cartesian-offset chord), so
+    the top profile at z=RIM_H matches the original 48-spoke pattern
+    exactly. Tilted segments use twist-extrude to rotate the cross-
+    section angularly with Z.
+
+    Spoke OUTER follows the rim's INNER wall profile (stays 0.5 mm INTO
+    the wall) wherever the rim profile applies — for the prongs and
+    mid-trunks (entirely in the brake band) that's r_out_hi; for the
+    ground trunk (spans the cone and ratchet band) it's a polygon
+    following the cone.
+
+    Topology, per branch (12 branches × 4 prongs = 48 cable contacts):
+      prongs A,B,C,D at original spoke angles (4j..4j+3) × spoke_pitch
+      pair-merge: A+B → mid-trunk L at (4j+0.5)×spoke_pitch
+                  C+D → mid-trunk R at (4j+2.5)×spoke_pitch
+      final merge: L+R → ground trunk G at (4j+1.5)×spoke_pitch
+
+    Tilt geometry: each merge is 45° at the OUTER radius (r_out_hi),
+    which is the steepest point of each tilted spoke. At inner radii
+    the tilt is shallower (~26° at the hub), well under the 45°
+    print-overhang limit. Merge heights:
+       merge_h1 = r_out_hi · spoke_pitch / 2 ≈ 3.78 mm  (48→24)
+       merge_h2 = r_out_hi · spoke_pitch     ≈ 7.57 mm  (24→12)
+    Ground trunks span z ∈ [0, RIM_H − merge_h1 − merge_h2]."""
+    r_in          = HUB_OD / 2 - 0.5
+    brake_inner   = (RIM_OD - 2 * RIM_WALL) / 2
+    z_ratchet_top = RATCHET_BAND_H
+    z_brake_lo    = z_ratchet_top + CONE_H
+    r_out_lo      = RIM_ID / 2 + 0.5
+    r_out_hi      = brake_inner + 0.5
+    w             = STRUCT_WALL
+
+    n_top = math.ceil(2 * math.pi * brake_inner / (CABLE_D + w))
+    n_top = 4 * ((n_top + 3) // 4)                    # multiple of 4
+    n_branches = n_top // 4
+    spoke_pitch = 2 * math.pi / n_top
+
+    # 45° at the outer radius (where tilt is steepest).
+    merge_h1 = r_out_hi * spoke_pitch / 2             # 48→24
+    merge_h2 = r_out_hi * spoke_pitch                 # 24→12
+    z_split1_bot = RIM_H - merge_h1                   # ~12.0
+    z_split2_bot = z_split1_bot - merge_h2            # ~4.4
+
+    def twisted_segment(theta_top_rad, theta_bot_rad, z_top, z_bot, r_out):
+        """A radial bar (r_in → r_out, width w tangential) whose cross
+        section is at angle theta_bot at z_bot and angle theta_top at
+        z_top. Implemented as a twistExtrude of a flat rectangle along
+        +Z, then translated to z_bot and rotated to theta_bot in world."""
+        delta_z = z_top - z_bot
+        delta_theta_deg = math.degrees(theta_top_rad - theta_bot_rad)
+        profile = (cq.Workplane("XY")
+                   .moveTo(r_in, -w / 2)
+                   .rect(r_out - r_in, w, centered=False))
+        seg = profile.twistExtrude(delta_z, delta_theta_deg)
+        return (seg.translate((0, 0, z_bot))
+                   .rotate((0, 0, 0), (0, 0, 1), math.degrees(theta_bot_rad)))
+
+    def ground_trunk(theta_rad):
+        """Vertical radial spoke at angle theta following the rim
+        profile (cone + ratchet band) from z=0 to z_split2_bot."""
+        pts = [(r_in, 0.0), (r_out_lo, 0.0)]
+        if z_split2_bot >= z_ratchet_top:
+            pts.append((r_out_lo, z_ratchet_top))
+            if z_split2_bot >= z_brake_lo:
+                pts.append((r_out_hi, z_brake_lo))
+                pts.append((r_out_hi, z_split2_bot))
+            else:
+                t = (z_split2_bot - z_ratchet_top) / (z_brake_lo - z_ratchet_top)
+                r_at_top = r_out_lo + t * (r_out_hi - r_out_lo)
+                pts.append((r_at_top, z_split2_bot))
+        else:
+            pts.append((r_out_lo, z_split2_bot))
+        pts.append((r_in, z_split2_bot))
+        return (cq.Workplane("XZ").polyline(pts).close()
+                .extrude(w / 2, both=True)
+                .rotate((0, 0, 0), (0, 0, 1), math.degrees(theta_rad)))
+
     out = None
-    for i in range(n):
-        sp = (
-            cq.Workplane("XY")
-            .center((r_in + r_out) / 2, 0)
-            .box(r_out - r_in, w, RIM_H, centered=(True, True, False))
-            .rotate((0, 0, 0), (0, 0, 1), i * 360.0 / n)
-        )
-        out = sp if out is None else out.union(sp)
+    for j in range(n_branches):
+        theta_ground = (4 * j + 1.5) * spoke_pitch
+        theta_mid_L  = (4 * j + 0.5) * spoke_pitch
+        theta_mid_R  = (4 * j + 2.5) * spoke_pitch
+
+        # 4 prongs: each tilts from its own spoke angle to its mid-trunk angle.
+        for k in range(4):
+            theta_prong = (4 * j + k) * spoke_pitch
+            theta_mid = theta_mid_L if k < 2 else theta_mid_R
+            prong = twisted_segment(theta_prong, theta_mid,
+                                    RIM_H, z_split1_bot, r_out_hi)
+            out = prong if out is None else out.union(prong)
+
+        # 2 mid-trunks: each tilts from its mid-trunk angle to ground trunk.
+        for theta_mid in (theta_mid_L, theta_mid_R):
+            mid = twisted_segment(theta_mid, theta_ground,
+                                  z_split1_bot, z_split2_bot, r_out_hi)
+            out = out.union(mid)
+
+        # 1 ground trunk: vertical, rim-following.
+        out = out.union(ground_trunk(theta_ground))
+
     return out
+
+
+def compare_spoke_top_profile():
+    """Verify the spoke top profile matches the original 48-spoke design.
+    Prints angular position of each prong's inner and outer endpoints
+    compared to a pure-radial 48-spoke reference. With the twist-extrude
+    implementation in _channel_spokes() each prong is a TRUE radial bar,
+    so the angles should match exactly (within float precision)."""
+    brake_inner = (RIM_OD - 2 * RIM_WALL) / 2
+    r_out_hi    = brake_inner + 0.5
+    r_in_local  = HUB_OD / 2 - 0.5
+    n_top = math.ceil(2 * math.pi * brake_inner / (CABLE_D + STRUCT_WALL))
+    n_top = 4 * ((n_top + 3) // 4)
+    spoke_pitch = 2 * math.pi / n_top
+
+    print(f"\n  n_top = {n_top} prongs, spoke_pitch = {math.degrees(spoke_pitch):.3f}°")
+    print(f"  r_in = {r_in_local:.2f}, r_out_hi = {r_out_hi:.2f}")
+    print(f"  {'k':>3} {'orig (°)':>10} {'new outer (°)':>14} {'Δouter (°)':>11} "
+          f"{'new inner (°)':>14} {'Δinner (°)':>11}")
+    print(f"  {'-'*3} {'-'*10} {'-'*14} {'-'*11} {'-'*14} {'-'*11}")
+
+    # All 4 prongs in branch j=0 (other branches are rotated copies — same Δ).
+    for k in range(4):
+        theta_prong = k * spoke_pitch
+        orig_deg = math.degrees(theta_prong)
+        # New: true radial bar at theta_prong (both endpoints at same angle).
+        new_outer_deg = math.degrees(math.atan2(
+            r_out_hi * math.sin(theta_prong), r_out_hi * math.cos(theta_prong)))
+        new_inner_deg = math.degrees(math.atan2(
+            r_in_local * math.sin(theta_prong), r_in_local * math.cos(theta_prong)))
+        print(f"  {k:>3} {orig_deg:>10.3f} {new_outer_deg:>14.3f} "
+              f"{new_outer_deg - orig_deg:>+11.3e} "
+              f"{new_inner_deg:>14.3f} {new_inner_deg - orig_deg:>+11.3e}")
 
 
 def _hub_key_bumps():
@@ -196,20 +454,41 @@ def _hub_key_bumps():
 
 def _lever_rim():
     """Bottom cable rim — the RIM_H-tall outer wall only (NO floor disc; the
-    spokes carry the hub↔rim connection). Its height splits into:
-      - bottom RATCHET_BAND_H: cylindrical RATCHET teeth on the outer face, and
-      - the rest (top): SMOOTH brake band (RIM_ID..RIM_OD).
+    spokes carry the hub↔rim connection). Three concentric stacked sections:
+      - z=[0, RATCHET_BAND_H=3]: ratchet teeth (tip at RIM_OD/2, valley at
+        RIM_OD/2 − RATCHET_DEPTH, bore at RIM_ID).
+      - z=[RATCHET_BAND_H, RATCHET_BAND_H + CONE_H=4.7]: 45° cone
+        transition. Both inner and outer surfaces slope outward by
+        RATCHET_DEPTH (=1.7) over the same axial distance, so the wall
+        thickness stays at STRUCT_WALL throughout.
+      - z=[RATCHET_BAND_H + CONE_H, RIM_H]: BRAKE rim — smooth cylinder of
+        height BRAKE_BAND_H, outer at RIM_OD/2, inner at RIM_OD/2 −
+        STRUCT_WALL (= 57.2). This is "the brake rim".
     Bands swapped (ratchet low, brake high) so the brake lever's pivot —
     which must sit BELOW its band — lands above the spool bottom instead of
     being dragged negative, keeping the levers/housing from hanging as far
-    below the spool. Cable winds in the hub→RIM_ID channel on the spoke grid."""
-    z_mid = RATCHET_BAND_H                               # ratchet/brake split
-    ratchet = _cyl_ratchet_band(0.0, z_mid)             # teeth on the bottom RATCHET_BAND_H
+    below the spool. Cable winds in the hub→rim channel on the spoke grid."""
+    z_ratchet_top = RATCHET_BAND_H                              # 3
+    z_brake_lo    = BRAKE_RIM_Z_LO                              # 4.7
+    brake_id      = RIM_OD - 2 * RIM_WALL                       # 114.4
+
+    ratchet = _cyl_ratchet_band(0.0, z_ratchet_top)
+
+    # 45° transition cone: outer goes from (RIM_OD − 2·RATCHET_DEPTH) at the
+    # ratchet's top up to RIM_OD at the brake-rim bottom; inner does the
+    # same shift (RIM_ID → brake_id), maintaining a STRUCT_WALL wall.
+    cone_outer = cone_solid(RIM_OD - 2 * RATCHET_DEPTH, RIM_OD,
+                            CONE_H, z_ratchet_top)
+    cone_inner = cone_solid(RIM_ID, brake_id,
+                            CONE_H, z_ratchet_top)
+    cone = cone_outer.cut(cone_inner)
+
+    # Brake rim — straight cylinder above the cone (BRAKE_BAND_H tall).
     brake = (
-        cyl(RIM_OD, RIM_H - z_mid, z=z_mid)
-        .cut(cyl(RIM_ID, RIM_H - z_mid, z=z_mid))
+        cyl(RIM_OD, BRAKE_BAND_H, z=z_brake_lo)
+        .cut(cyl(brake_id, BRAKE_BAND_H, z=z_brake_lo))
     )
-    return ratchet.union(brake)
+    return ratchet.union(cone).union(brake)
 
 
 # Top rim cap — re-added AFTER the helix cut so the helix's topmost turn
@@ -230,7 +509,7 @@ def _top_rim_cap():
 # Same collar + 6-rib design the pancake (top) bearing block used before
 # the cap flip.
 BOT_POCKET_TOP        = BEARING_LIP_H + BEARING_W   # 8 — top of the fused bottom pocket
-BOT_BEARING_BOSS_WALL = 3.0          # collar wall kept around the Ø(BEARING_BORE) pocket
+BOT_BEARING_BOSS_WALL = STRUCT_WALL  # collar wall kept around the Ø(BEARING_BORE) pocket
 BOT_BEARING_RIB_W     = STRUCT_WALL  # radial-rib tangential width — pinned to STRUCT_WALL
 
 
@@ -527,6 +806,23 @@ def _spring_screw_bore():
                                 cq.Vector(x_clr, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
     bore = pocket.fuse(clr).rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), SPRING_SCREW_ANGLE)
     return cq.Workplane(obj=bore)
+
+
+SPRING_SCREW_ACCESS_D = 6.0   # driver-access hole Ø through the opposite hub wall
+
+
+def _spring_screw_access_hole():
+    """Ø SPRING_SCREW_ACCESS_D radial hole through the hub wall diametrally
+    OPPOSITE the spring screw (same Z, SPRING_SCREW_ANGLE + 180°), coaxial
+    with the screw, so a hex driver can pass through the spool wall and
+    across the cavity to reach the screw head on the far side."""
+    r0 = HUB_CAVITY_D / 2 - 1.0                     # start just inside the cavity wall
+    length = (HUB_OD / 2 + 5.0) - r0                # run out well past the OD (and key ridges)
+    hole = cq.Solid.makeCylinder(SPRING_SCREW_ACCESS_D / 2, length,
+                                 cq.Vector(r0, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
+    hole = hole.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1),
+                       SPRING_SCREW_ANGLE + 180.0)
+    return cq.Workplane(obj=hole)
 
 
 main_body = _build_main_body()

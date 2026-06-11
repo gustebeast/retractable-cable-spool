@@ -29,8 +29,54 @@ import sys
 
 import cadquery as cq
 
+# Shared cq.Color helper from the Archive/3D freecad/ folder (accepts hex
+# strings, 0..255 tuples, and SVG/X11 names — see freecad/README.md).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "freecad"))
+from cq_colors import color
+
 from .helpers import heal, cyl
-from .dimensions import SPOOL_H, HUB_OD
+from .dimensions import SPOOL_H
+
+
+# ── Dark-mode-friendly assembly palette ────────────────────────────────────
+# Picked to sit on a dark FreeCAD background (~#1e1e1e) without disappearing
+# and to keep functionally-related parts colour-coordinated:
+#   • spool body family (the rotating drum that wraps the cable) — warm tans
+#   • housing family (stationary L-bracket) — slate blues
+#   • brake parts (lever + its pin chunk) — muted teal-green
+#   • ratchet parts (lever + its pin chunk) — warm coral
+#   • bearings — silvery
+#   • axle halves — bronze
+#   • viz-only (springs, rubber pad) — muted utility colours
+COLOR = {
+    "main_body":         "#C4A56B",  # warm tan — spool body
+    "cable_top_rim":     "#D6BC8C",  # lighter tan — top of spool
+    "cable_retainer":    "#C7A55C",  # gold — retention cage
+
+    "housing":           "#6B8AAB",  # slate blue — main structural
+    "mount_bracket":     "#4F6478",  # deep slate — wood-mount L
+
+    "axle_top":          "#B97D43",  # bronze — pancake half
+    "axle_bottom":       "#B97D43",  # bronze — lever half (matches)
+    "bearing_cap_top":   "#8FA8C0",  # lighter slate — removable cap
+
+    "bearing_bottom":    "#B4BAC1",  # silver — 608
+    "bearing_top":       "#B4BAC1",  # silver — 608
+
+    "ratchet_pin_chunk": "#DC7A6E",  # coral — ratchet group
+    "ratchet_lever":     "#DC7A6E",
+    "brake_pin_chunk":   "#6DAB94",  # teal-green — brake group
+    "brake_lever":       "#6DAB94",
+
+    "guide_wheel":       "#E1C75D",  # yellow accent — small/visible
+    "floating_tenon":    "#9F8E5A",  # the hexagonal hourglass key between chunks
+
+    "ratchet_spring":    "#95A4B4",  # steel — wire viz
+    "brake_spring":      "#95A4B4",
+    "brake_pad_rubber":  "#3A3A3A",  # charcoal — rubber
+
+    "build_counter":     "#F0A878",  # salmon — accent
+}
 
 from . import spool
 from . import caps
@@ -53,9 +99,14 @@ bearing_cap_top        = caps.bearing_cap_top
 cable_top_rim          = _cable_rim_mod.cable_top_rim
 cable_retainer         = _cable_retainer_mod.cable_retainer
 axle                   = _axle_mod.axle
+axle_top               = _axle_mod.axle_top
+axle_bottom            = _axle_mod.axle_bottom
 housing                = _housing_mod.housing
 brake_pin_chunk        = _housing_mod.brake_pin_chunk
+ratchet_pin_chunk      = _housing_mod.ratchet_pin_chunk
 guide_wheel            = _housing_mod.guide_wheel
+guide_wheel_plus       = _housing_mod.guide_wheel_plus
+floating_tenon         = _housing_mod.floating_tenon
 mount_bracket            = _bracket_mod.mount_bracket
 ratchet_lever          = _lev_mod.ratchet_lever
 brake_lever            = _lev_mod.brake_lever
@@ -64,6 +115,28 @@ brake_spring           = _viz_mod.brake_spring
 brake_pad_rubber       = _viz_mod.brake_pad_rubber
 bearing_top            = _viz_mod.bearing_top
 bearing_bottom         = _viz_mod.bearing_bottom
+
+# Drill the M2 guide-wheel-axle clearance hole through the cable retainer's
+# tenon — on BOTH the -X and +X sides (one hole per guide wheel). The axle
+# screws pass through the housing along the line that the retainer's tenons
+# occupy once it's glued in place, so each tenon needs an unobstructed M2
+# pass-through hole at that XY position. Done here (not in cable_retainer.py)
+# to avoid a housing → retainer circular import.
+from .dimensions import M2_SHAFT_CLR_D
+def _guide_axle_clr_hole(x_center, z_head):
+    """21 mm Ø M2 clearance bore starting at z_head, at the given X. Both
+    sides now share z_head = GUIDE_AXLE_HEAD_Z (1.9): the -X head seats on
+    the back-leg floor and the +X head seats at the bottom of its
+    Ø4.1 access bore through the brake chunk — same Z either way."""
+    return (
+        cyl(M2_SHAFT_CLR_D, _housing_mod.GUIDE_AXLE_HOLE_LEN, z=z_head)
+        .translate((x_center, 0, 0))
+    )
+cable_retainer = (cable_retainer
+                  .cut(_guide_axle_clr_hole(_housing_mod.GUIDE_WHEEL_CX,
+                                             _housing_mod.GUIDE_AXLE_HEAD_Z))
+                  .cut(_guide_axle_clr_hole(-_housing_mod.GUIDE_WHEEL_CX,
+                                             _housing_mod.GUIDE_AXLE_HEAD_Z)))
 
 # ────────────────────────────────────────────────────────────────────────────
 # Export — individual parts for printing, + a combined assembly STEP for
@@ -76,7 +149,10 @@ main_body = heal(main_body)
 axle = heal(axle)
 housing = heal(housing)
 brake_pin_chunk = heal(brake_pin_chunk)
+ratchet_pin_chunk = heal(ratchet_pin_chunk)
 guide_wheel = heal(guide_wheel)
+guide_wheel_plus = heal(guide_wheel_plus)
+floating_tenon = heal(floating_tenon)
 ratchet_lever = heal(ratchet_lever)
 brake_lever   = heal(brake_lever)
 # Springs accumulate near-tangent boolean fuses between rings/legs/spheres
@@ -90,11 +166,16 @@ brake_pad_rubber = heal(brake_pad_rubber)
 # z=PANCAKE_CAP_SEAT_Z0..SPOOL_H). Exported as-is.
 bearing_cap_top_export = bearing_cap_top
 
-# Test piece — just the inner spool (hub) with the spring-strip retainer, with
-# the outer cable rim and the connecting channel-spokes cut away (keep only
-# r ≤ HUB_OD/2). Lets you print the hub alone to verify the retention pocket,
-# bearings, and cap fit without printing the whole spool.
-inner_spool_test = heal(main_body.intersect(cyl(HUB_OD, SPOOL_H, z=0)))
+# Fit-test piece: just the +X (lever-side) portion of the housing below
+# z = 27.67 — small slice for verifying chunk and retainer joinery fit
+# without printing the full housing.
+_HOUSING_LEVER_TEST_Z_HI = 27.67
+_lever_test_box = (
+    cq.Workplane("XY")
+    .box(1000, 1000, 1000, centered=True)
+    .translate((500, 0, _HOUSING_LEVER_TEST_Z_HI - 500))
+)
+housing_lever_test = heal(housing.intersect(_lever_test_box))
 
 # Map of part name → (workplane, output filename, optional note).
 PARTS = {
@@ -102,17 +183,23 @@ PARTS = {
     "bearing_cap_top":        (bearing_cap_top_export,     "bearing_cap_top.step",        None),
     "cable_top_rim":          (cable_top_rim,              "cable_top_rim.step",          None),
     "cable_retainer":         (cable_retainer,             "cable_retainer.step",         None),
-    "axle":                   (axle,                       "axle.step",                   None),
+    "axle_top":               (axle_top,                   "axle_top.step",               "pancake-side half — mortise"),
+    "axle_bottom":            (axle_bottom,                "axle_bottom.step",            "lever-side half — tenon"),
     "housing":                (housing,                    "housing.step",                None),
-    "brake_pin_chunk":        (brake_pin_chunk,            "brake_pin_chunk.step",        "glue-on 45° corner carrying the brake pivot + stop pins"),
-    "guide_wheel":            (guide_wheel,                "guide_wheel.step",            "Ø14 Z-axle wheel; bears on the brake rim opposite the brake lever"),
+    "brake_pin_chunk":        (brake_pin_chunk,            "brake_pin_chunk.step",        "glue-on -Y corner carrying the brake pivot + stop pins"),
+    "ratchet_pin_chunk":      (ratchet_pin_chunk,          "ratchet_pin_chunk.step",      "glue-on +Y corner carrying the ratchet pivot + stop pins"),
+    # Single STEP for the guide wheel — print TWO of these. guide_wheel_plus
+    # is the +X mirror used in the assembly view only (an XZ flip of the same
+    # part), so it doesn't need its own STEP file.
+    "guide_wheel":            (guide_wheel,                "guide_wheel.step",            "Ø14 Z-axle wheel — print TWO; one bears on the brake rim opposite the brake lever, the other rides in the +X (lever-side) guide pocket"),
+    "floating_tenon":         (floating_tenon,             "floating_tenon.step",         "hexagonal hourglass key — fits into both chunks' diagonal-face mortises"),
     "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
     "brake_lever":            (brake_lever,                "brake_lever.step",            None),
     # Springs and the rubber pad are purchased/applied parts — they're
     # included in assembly.step for visualization only, no need to export
     # them as individual STEP files for printing.
     "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
-    "inner_spool_test":       (inner_spool_test,           "inner_spool_test.step",       "hub + spring retainer only (no rim/spokes) — for test printing"),
+    "housing_lever_test":     (housing_lever_test,         "housing_lever_test.step",     "FIT TEST: +X (lever-side) slice of housing, z <= 27.67 -- pair with brake_pin_chunk, ratchet_pin_chunk, and cable_retainer to verify joinery before printing the full housing"),
 }
 
 
@@ -124,16 +211,22 @@ def _export(name):
 
 
 # Visualization aid — selects which lever pose to render in assembly.step:
-#   "rest"    : both levers at their printed/rest pose (ratchet pawl seated
-#               in the teeth = engaged; brake pad lifted off the band).
-#   "engaged" : both levers fully pulled (handles toward +X) — ratchet pawl
-#               swung clear of the teeth (disengaged), brake pad pressed
-#               onto the band (engaged). θ_pull = each lever's travel.
+#   "rest"        : both levers at their printed/rest pose (ratchet pawl
+#                   seated in the teeth = engaged; brake pad lifted off
+#                   the band).
+#   "engaged"     : both levers fully pulled (handles toward +X) — ratchet
+#                   pawl swung clear of the teeth (disengaged), brake pad
+#                   pressed onto the band (engaged). θ_pull = full travel.
+#   "brake_midway": brake at the midpoint between first-contact and full
+#                   engagement (= BRAKE_PAD_MOUNT_TILT_DEG of pull), so
+#                   the pad's mount face sweeps to vertical → parallel to
+#                   the band. For visual validation of the tilt geometry.
+#                   Ratchet stays at rest.
 LEVERS_POSE = "rest"
 
 
 def _ratchet_theta_pull_deg():
-    if LEVERS_POSE == "rest":
+    if LEVERS_POSE in ("rest", "brake_midway"):
         return 0.0
     if LEVERS_POSE == "engaged":
         from .housing import RATCHET_OUTER_TRAVEL_DEG
@@ -147,6 +240,9 @@ def _brake_theta_pull_deg():
     if LEVERS_POSE == "engaged":
         from .housing import BRAKE_INNER_TRAVEL_DEG
         return BRAKE_INNER_TRAVEL_DEG
+    if LEVERS_POSE == "brake_midway":
+        from .levers import BRAKE_PAD_MOUNT_TILT_DEG
+        return BRAKE_PAD_MOUNT_TILT_DEG
     raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
 
 
@@ -215,39 +311,58 @@ def _export_assembly():
     build_n = _bump_build_counter()
     assembly = (
         cq.Assembly(name="retractable_cable_spool")
-        .add(main_body,     name="main_body")
-        .add(bearing_cap_top,    name="bearing_cap_top",    loc=cq.Location((0, 0, 0)))
+        .add(main_body,     name="main_body",     color=color(COLOR["main_body"]))
+        .add(bearing_cap_top,    name="bearing_cap_top",    color=color(COLOR["bearing_cap_top"]),
+             loc=cq.Location((0, 0, 0)))
         # Cable top rim placed CABLE_RIM_AIR_GAP above the TOP of the bottom rim
         # (= spool.CABLE_TOP_RIM_BASE_Z). This is its max realistic spacing for a
         # thick cable; the spring-strip screw hole tracks the lid's top off this.
         # Translation baked into the geometry (not via the assembly loc) so the
         # STEP export unambiguously shows it at height. Slides freely on the hub.
         .add(cable_top_rim.translate((0, 0, spool.CABLE_TOP_RIM_BASE_Z)),
-             name="cable_top_rim", loc=cq.Location((0, 0, 0)))
+             name="cable_top_rim", color=color(COLOR["cable_top_rim"]),
+             loc=cq.Location((0, 0, 0)))
         # Fixed (housing-attached) cable-retention cage — already modelled at
         # its working position (cable-channel Z-band), floating for now.
-        .add(cable_retainer, name="cable_retainer", loc=cq.Location((0, 0, 0)))
-        .add(bearing_bottom,     name="bearing_bottom",     loc=cq.Location((0, 0, 0)))
-        .add(bearing_top,        name="bearing_top",        loc=cq.Location((0, 0, 0)))
-        .add(mount_bracket,          name="mount_bracket",          loc=cq.Location((0, 0, 0)))
-        .add(axle,          name="axle")
-        .add(housing, name="housing")
-        .add(brake_pin_chunk, name="brake_pin_chunk")
-        .add(guide_wheel, name="guide_wheel")
-        .add(_ratchet_lever_for_assembly(), name="ratchet_lever")
-        .add(_brake_lever_for_assembly(),   name="brake_lever")
-        .add(ratchet_spring, name="ratchet_spring")
-        .add(brake_spring,   name="brake_spring")
-        .add(_brake_pad_rubber_for_assembly(), name="brake_pad_rubber")
+        .add(cable_retainer, name="cable_retainer", color=color(COLOR["cable_retainer"]),
+             loc=cq.Location((0, 0, 0)))
+        .add(bearing_bottom,     name="bearing_bottom",     color=color(COLOR["bearing_bottom"]),
+             loc=cq.Location((0, 0, 0)))
+        .add(bearing_top,        name="bearing_top",        color=color(COLOR["bearing_top"]),
+             loc=cq.Location((0, 0, 0)))
+        .add(mount_bracket,          name="mount_bracket",          color=color(COLOR["mount_bracket"]),
+             loc=cq.Location((0, 0, 0)))
+        .add(axle_top,      name="axle_top",      color=color(COLOR["axle_top"]))
+        .add(axle_bottom,   name="axle_bottom",   color=color(COLOR["axle_bottom"]))
+        .add(housing, name="housing", color=color(COLOR["housing"]))
+        .add(brake_pin_chunk, name="brake_pin_chunk", color=color(COLOR["brake_pin_chunk"]))
+        .add(ratchet_pin_chunk, name="ratchet_pin_chunk", color=color(COLOR["ratchet_pin_chunk"]))
+        .add(floating_tenon, name="floating_tenon", color=color(COLOR["floating_tenon"]))
+        .add(guide_wheel, name="guide_wheel", color=color(COLOR["guide_wheel"]))
+        .add(guide_wheel_plus, name="guide_wheel_plus",
+             color=color(COLOR["guide_wheel"]))
+        .add(_ratchet_lever_for_assembly(), name="ratchet_lever",
+             color=color(COLOR["ratchet_lever"]))
+        .add(_brake_lever_for_assembly(),   name="brake_lever",
+             color=color(COLOR["brake_lever"]))
+        # Lever pivot spacers: glued to each lever's outer Y face at the M2
+        # pivot screw axis. Placed at the housing's pivot X/Z, offset outward
+        # in Y by HOUSING_W/2 + lever thickness so the spacer's inner face
+        # sits flush on the lever's outer face. Rotated to point along Y.
+        .add(ratchet_spring, name="ratchet_spring", color=color(COLOR["ratchet_spring"]))
+        .add(brake_spring,   name="brake_spring",   color=color(COLOR["brake_spring"]))
+        .add(_brake_pad_rubber_for_assembly(), name="brake_pad_rubber",
+             color=color(COLOR["brake_pad_rubber"]))
     )
     counter = _build_counter_model(build_n)
     if counter is not None:
-        assembly.add(counter, name="build_counter")
+        assembly.add(counter, name="build_counter", color=color(COLOR["build_counter"]))
     assembly.save("assembly.step")
     print(f"Wrote assembly.step  [build #{build_n}]"
           + (f"  [levers {LEVERS_POSE.upper()}]" if LEVERS_POSE != "rest" else ""),
           flush=True)
     _push_onshape()
+    _refresh_freecad_viewer()
 
 
 def _push_onshape() -> None:
@@ -266,6 +381,29 @@ def _push_onshape() -> None:
                        check=False, cwd=os.getcwd())
     except Exception as e:                                  # noqa: BLE001 — push must never break the build
         print(f"[onshape] push skipped: {e}", file=sys.stderr)
+
+
+def _refresh_freecad_viewer() -> None:
+    """Best-effort: ensure the shared Archive/3D FreeCAD viewer is open and
+    watching this project. Calls the shared launcher under freecad/, which
+    is idempotent (PID-marker — no-op when a viewer is already up for this
+    project). Every project's build.py is expected to call this at the end,
+    so each rebuild always leaves a live viewer up without the user (or LLM
+    agent) needing a separate launch step. Failure must not break the build.
+    """
+    import os, subprocess
+    launcher = (pathlib.Path(__file__).resolve().parents[2]
+                / "freecad" / "open_viewer.ps1")
+    if not launcher.exists():
+        return
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(launcher), "-Project", os.getcwd()],
+            check=False, cwd=os.getcwd(), timeout=30,
+        )
+    except Exception as e:                                  # noqa: BLE001 — viewer refresh must never break the build
+        print(f"[freecad] viewer refresh skipped: {e}", file=sys.stderr)
 
 
 def main() -> None:

@@ -321,9 +321,9 @@ def heal(wp: cq.Workplane) -> cq.Workplane:
     domain adjacent faces before STEP export. cadquery pipelines of
     many boolean ops can accumulate tiny invalidities (around lofted
     BSpline faces, near-tangent fuses, etc.) that pass cadquery's
-    shallow validator but get flagged by strict STEP importers like
-    Onshape. The unify pass also collapses fuse-of-disjoint Compounds
-    down to plain Solids."""
+    shallow validator but get flagged by strict STEP importers. The
+    unify pass also collapses fuse-of-disjoint Compounds down to plain
+    Solids."""
     from OCP.ShapeFix import ShapeFix_Shape  # type: ignore[import]
     from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain  # type: ignore[import]
     from OCP.TopAbs import TopAbs_SOLID, TopAbs_COMPOUND
