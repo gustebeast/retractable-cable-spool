@@ -45,7 +45,7 @@ R_BAND        = RIM_OD / 2                  # 58.9 — brake-band surface (= rat
 R_RATCHET_TIP = R_BAND                      # 58.9 — tooth tip flush with brake band's outer
                                             #        (no overhang; the cone transitions the
                                             #        wall between them)
-R_ROOT        = R_BAND - RATCHET_DEPTH      # 57.2 — pawl seats on the valley floor
+R_ROOT        = R_BAND - RATCHET_DEPTH      # 57.4 — pawl seats on the valley floor
 
 PAWL_CLEAR_MM           = 1.0
 BRAKE_REST_MM           = 1.0

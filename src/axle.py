@@ -11,9 +11,11 @@ Print orientation:
   • BOTTOM half: print -z (axle bottom) on the bed, building toward +z.
     The cap at the bore's closed bottom becomes a "hole appears" event
     (the previous solid layer supports the new annular layer), so no
-    overhang there. The lever lip's -z face is now the expanding
-    overhang; a 45° cone fixes it. The bearing seats at the cone's
-    bottom (where the diameter begins to grow from the shaft).
+    overhang there. The mortise collar runs all the way down to the
+    bottom bearing seat, so there's no separate lever lip: the collar's
+    chamfered foot (Ø shaft → Ø mortise) IS the bottom bearing shoulder,
+    and its 45° rise self-supports the collar's -z underside. The bearing
+    seats at the chamfer's bottom (where the Ø begins to grow from the shaft).
   • TOP half: print -z (tenon tip) on the bed, building toward +z. The
     pancake lip's -z face is the expanding overhang; a 45° cone fixes it.
 
@@ -34,14 +36,18 @@ from .helpers import cone_solid, cyl
 # ── Mortise-and-tenon center joint ─────────────────────────────────────────
 JOINT_TENON_D        = AXLE_PRINT_D                          # 7.9 — male, on TOP half
 JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR            # 8.2 — female bore (FIT_CLR per side)
-JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.6 — outer wall
-JOINT_H              = 18.0                                  # tenon length = bore depth — sized to fit
-                                                             # the slit overlap exactly so the bottom
-                                                             # slit doesn't extend past the bore into
-                                                             # the cap.
-JOINT_CAP_H          = STRUCT_WALL                           # 1.7 — closed-bottom cap of the
-                                                             # mortise, joining the bore's
-                                                             # outer ring to the shaft below.
+JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.4 — outer wall
+JOINT_H              = 23.0                                  # bore depth = tenon engagement = slit
+                                                             # length. Lengthened from 18 to grip more
+                                                             # spring strip: the mortise top moved up
+                                                             # (only MORTISE_TOP_GAP below the top
+                                                             # bearing lip) and the collar now runs all
+                                                             # the way down to the BOTTOM bearing seat,
+                                                             # taking over the (removed) bottom bearing
+                                                             # lip. Below the bore the collar stays
+                                                             # solid (cap + bearing-shoulder foot).
+MORTISE_TOP_GAP      = 4.0                                   # gap from the mortise top up to the
+                                                             # top-axle bearing lip (was 5.7)
 
 # ── Spring-strip slit ──────────────────────────────────────────────────────
 # Each half has its own slit (cut through Y) so the parts can be slid down
@@ -50,11 +56,8 @@ JOINT_CAP_H          = STRUCT_WALL                           # 1.7 — closed-bo
 # -z = tenon tip). Where both slits coexist along Z, the strip is held by
 # both halves — that's the engagement region.
 SLIT_W            = 1.0           # X width of the slit
-SLIT_OVERLAP_H    = 18.0          # Z height where both halves have the slit
-# For symmetric slits each is (SLIT_OVERLAP_H + JOINT_H) / 2 tall, so each
-# extends (SLIT_OVERLAP_H − JOINT_H) / 2 = 1.5 mm beyond the joint into
-# its own half.
-SLIT_EACH_H       = (SLIT_OVERLAP_H + JOINT_H) / 2  # 16.5
+SLIT_OVERLAP_H    = JOINT_H       # slit overlap == bore depth (the slit fills the joint exactly)
+SLIT_EACH_H       = (SLIT_OVERLAP_H + JOINT_H) / 2  # = JOINT_H — each slit spans the whole joint
 
 
 def _axle_cross_hole(z_center):
@@ -67,50 +70,46 @@ def _axle_cross_hole(z_center):
 
 
 def _build_halves():
-    # 45° cone height for transitioning a Ø AXLE_PRINT_D shaft to an
-    # Ø AXLE_LIP_OD lip (or vice versa).
+    # 45° cone height transitioning the Ø AXLE_PRINT_D shaft to the Ø AXLE_LIP_OD
+    # TOP (pancake) bearing lip.
     cone_h = (AXLE_LIP_OD - AXLE_PRINT_D) / 2
+    # The mortise collar's chamfered foot (Ø AXLE_PRINT_D → Ø JOINT_MORTISE_OD)
+    # doubles as the BOTTOM bearing shoulder, so it gets its own cone height.
+    mortise_cone_h = (JOINT_MORTISE_OD - AXLE_PRINT_D) / 2
 
-    # Each bearing-lip feature group (cone + lip) bounds the cavity. The
-    # cavity midpoint is between the TOP of the lever group and the BOTTOM
-    # of the pancake group.
+    # Top bearing lip (pancake) — unchanged.
     pancake_lip_inner_z = PANCAKE_CAP_SEAT_Z0 - AXLE_LIP_H        # bottom face of pancake lip
-    cavity_top_z        = pancake_lip_inner_z - cone_h            # bottom of pancake cone
-    cavity_bot_z        = LEVER_CAP_SEAT_Z1 + cone_h + AXLE_LIP_H # top of lever lip (above cone)
-    cavity_midpoint_z   = (cavity_top_z + cavity_bot_z) / 2
+    cavity_top_z        = pancake_lip_inner_z - cone_h            # bottom of pancake cone (top lip foot)
 
-    # Joint Z layout. The whole mortise body (collar of height
-    # JOINT_H + JOINT_CAP_H) is centered on the cavity midpoint, so the
-    # shaft-segment lengths from the lever lip to the mortise and from the
-    # mortise to the pancake lip are equal.
-    mortise_body_h  = JOINT_H + JOINT_CAP_H
-    mortise_top_z   = cavity_midpoint_z + mortise_body_h / 2
-    bore_bottom_z   = mortise_top_z - JOINT_H
-    collar_bottom_z = bore_bottom_z - JOINT_CAP_H
+    # Joint Z layout. The mortise TOP sits MORTISE_TOP_GAP below the top bearing
+    # lip; the bore runs JOINT_H deep below that (= slit length). The collar runs
+    # FURTHER down to the bottom bearing seat (LEVER_CAP_SEAT_Z1) — its chamfered
+    # foot replaces the old separate bottom bearing lip — so below the bore the
+    # collar stays solid (cap + shoulder foot).
+    mortise_top_z   = cavity_top_z - MORTISE_TOP_GAP             # 37
+    bore_bottom_z   = mortise_top_z - JOINT_H                    # 14 (= tenon tip = slit bottom)
+    collar_bottom_z = LEVER_CAP_SEAT_Z1 + mortise_cone_h         # 9.75 (chamfer foot on the seat)
 
     axle_z_bot = -AXLE_EXTRA_LEVER
     axle_z_top = -AXLE_EXTRA_LEVER + AXLE_H
 
-    # ── BOTTOM half (lever-side) — shaft + lever lip + mortise collar ──
-    # Print -axle_z (axle bottom) on the bed → grows toward +axle_z. Lever
-    # lip's -z face is the upward-expanding overhang in this direction →
-    # 45° cone below the lip. Bearing seats at the cone's bottom
-    # (= LEVER_CAP_SEAT_Z1), where Ø just begins to grow above shaft Ø.
-    bottom = cyl(AXLE_PRINT_D, collar_bottom_z - axle_z_bot, z=axle_z_bot)
-    # Cone BELOW lever lip: Ø AXLE_PRINT_D at z=LEVER_CAP_SEAT_Z1 (bearing
-    # seat) → Ø AXLE_LIP_OD at z=LEVER_CAP_SEAT_Z1 + cone_h (lip bottom).
+    # ── BOTTOM half (lever-side) — shaft + mortise collar. NO separate bearing
+    # lip: the collar's chamfered foot IS the bottom bearing shoulder. ──
+    # Print -axle_z (axle bottom) on the bed → grows toward +axle_z.
+    bottom = cyl(AXLE_PRINT_D, collar_bottom_z - axle_z_bot, z=axle_z_bot)   # shaft up to collar foot
+    # Chamfer Ø AXLE_PRINT_D → Ø JOINT_MORTISE_OD bottoming out at the bearing
+    # seat (LEVER_CAP_SEAT_Z1), so the bearing still seats there; its 45° rise
+    # also makes the collar's -z underside self-supporting in the print direction.
     bottom = bottom.union(cone_solid(
-        d_bottom=AXLE_PRINT_D, d_top=AXLE_LIP_OD,
-        h=cone_h, z_base=LEVER_CAP_SEAT_Z1,
+        d_bottom=AXLE_PRINT_D, d_top=JOINT_MORTISE_OD,
+        h=mortise_cone_h, z_base=collar_bottom_z - mortise_cone_h,
     ))
-    # Lip ABOVE the cone, full Ø AXLE_LIP_OD for AXLE_LIP_H.
-    bottom = bottom.union(cyl(AXLE_LIP_OD, AXLE_LIP_H,
-                              z=LEVER_CAP_SEAT_Z1 + cone_h))
-    # Mortise collar (solid Ø JOINT_MORTISE_OD cylinder, JOINT_H + JOINT_CAP_H tall).
+    # Mortise collar (solid Ø JOINT_MORTISE_OD) from the foot up to the mortise top.
     bottom = bottom.union(cyl(JOINT_MORTISE_OD,
                               mortise_top_z - collar_bottom_z,
                               z=collar_bottom_z))
-    # Bore (cylindrical pocket Ø JOINT_MORTISE_HOLE_D, JOINT_H deep, opens at top).
+    # Bore (Ø JOINT_MORTISE_HOLE_D, JOINT_H deep, opens at top). Below it the
+    # collar stays solid down to collar_bottom_z (cap + bearing-shoulder foot).
     bottom = bottom.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=bore_bottom_z))
     # Spring-strip slit — opens at +z (mortise top), extends SLIT_EACH_H
     # down. Cuts through the axle in Y.
@@ -149,5 +148,3 @@ def _build_halves():
 
 
 axle_bottom, axle_top = _build_halves()
-# Assembled view (for the assembly STEP).
-axle = axle_bottom.union(axle_top)

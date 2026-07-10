@@ -12,12 +12,12 @@ from .dimensions import (
     AXLE_D,
     BEARING_BORE, BEARING_LIP_H, BEARING_LIP_ID,
     BEARING_W, BOOL_OVERSHOOT,
-    CABLE_RIM_AIR_GAP, TOP_RIM_H,
+    CABLE_TOP_RIM_GAP, TOP_RIM_H,
     CAP_H, CAP_STOP_ID, CAP_STOP_LIP_H,
     DRUM_BOTTOM_Z, DRUM_H, DRUM_ID, DRUM_OD, DRUM_TOP_Z, DRUM_WALL,
     FLANGE_H, FLANGE_INNER_ID, FLANGE_OD, FLANGE_LIP_T,
-    HUB_CAVITY_D, HUB_OD,
-    M2_INSERT_PILOT_D, M2_INSERT_DEPTH, M2_SHAFT_CLR_D,
+    HUB_CAVITY_D, HUB_OD, SCREW_BOSS_H,
+    M2_INSERT_DEPTH,
     RATCHET_TEETH, RATCHET_DEPTH, RATCHET_TOOTH_OFFSET_DEG,
     LEVER_CAP_SEAT_Z0, LEVER_CAP_SEAT_Z1,
     LEVER_STOP_LIP_Z0, LEVER_STOP_LIP_Z1,
@@ -25,12 +25,16 @@ from .dimensions import (
     SPOKE_COUNT, SPOKE_W, SPOOL_H,
     STRUCT_WALL,
     TOP_BEARING_BORE,
+    WINDING_OUTER_R,
 )
 from .helpers import (
     cyl, cone_solid, heal, make_keys,
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
+# Shared M2 hole geometry (freecad/fasteners.py). `.dimensions` already put the
+# freecad/ folder on sys.path, so this flat import resolves.
+from fasteners import m2_insert_bore_cutter
 
 # No drum-skirt extension — the lever-flange chamfer apex now sits ABOVE
 # DRUM_BOTTOM_Z (chamfer rises up into the drum region), so the chamfer
@@ -137,25 +141,7 @@ RATCHET_BAND_H = 6.0                  # ratchet teeth z-height (3→6: doubled
                                       # pawl contact area — teeth were skipping)
 # 45° conical transition between the ratchet rim and the (wider) brake rim.
 # At 45°, the cone's axial height equals its radial step = RATCHET_DEPTH.
-CONE_H         = RATCHET_DEPTH        # 1.7
-# The +Z extent of the ratchet_pin_chunk (housing.py). The chunk's cut
-# plane is z − y ≤ RATCHET_CHUNK_CUT_C, so its top point is at y = +HOUSING_W/2
-# where z reaches RATCHET_CHUNK_CUT_C + HOUSING_W/2. Mirrored here as a
-# literal (with the same derivation) so the brake-rim height can be sized
-# off it without spool.py needing to import from housing.py (which would
-# be circular). Update both together if any of the inputs change.
-#   = (RATCHET_PIVOT_Z + LEVER_PIVOT_BOSS_OD/2)        # boss top z       = 19.1
-#   + 0.5                                              # boss inside-y offset
-#   + RATCHET_CHUNK_RING_CLR · √2                      # 0.4·√2 = 0.566
-#   = 20.166
-# (RATCHET_PIVOT_Z = 16.1 — derived in housing.py from the 6 mm guide
-# wheel: BRAKE_RIM_Z_LO 7.5 + wheel 6.0 + face clr 1.0 + 0.4 solid +
-# M2 bore half 1.2.)
-RATCHET_CHUNK_Z_MAX = 20.166
-# Manual clearance above the ratchet_pin_chunk's top — added to anything
-# that needs to sit ABOVE the chunk (the cable retainer's bottom ring, the
-# housing's front-thicken top) so the chunk has a small breathing margin.
-RATCHET_CHUNK_CLEARANCE = 0.8
+CONE_H         = RATCHET_DEPTH        # 1.5
 # Brake-rim STRAIGHT section z-height — just the cylindrical portion above
 # the cone, NOT including the cone itself. Sized directly from what must
 # fit on the band:
@@ -163,41 +149,49 @@ RATCHET_CHUNK_CLEARANCE = 0.8
 #   + 1.0               — clearance between the pad's top and the retainer
 #   + STRUCT_WALL       — the retainer's bottom ring (RETAIN_RING_T) wraps
 #                         the band's top
-# (Previously sized so the retainer's ring cleared the ratchet chunk's top
-# — that tied the band height to the whole lever-pivot stack and made the
-# band ~3.5 mm taller than the brake needs. The chunk split / retainer /
-# ratchet-axle interactions are being redesigned separately, so the chunk
-# clearance constraint is dropped here.)
 BRAKE_PAD_TARGET_H = 9.0
 BRAKE_BAND_H   = BRAKE_PAD_TARGET_H + 1.0 + STRUCT_WALL          # 11.6
 # Z of the brake rim's STRAIGHT section bottom — top of the cone, also where
 # the brake rim's cylindrical wall meets the cone's expanding face. Stationary
 # things on the spool's side that need to align with the brake rim's bottom
 # (e.g. the guide wheel) key off this.
-BRAKE_RIM_Z_LO = RATCHET_BAND_H + CONE_H              # 4.7
-RIM_H      = RATCHET_BAND_H + CONE_H + BRAKE_BAND_H   # rim total height (15.766)
-# RIM_OD is the brake-band OD that the brake lever, the cable top rim, and
-# the cable retainer all key off. Bumped 114.4→117.8 so the brake band's
-# OUTER matches the ratchet TOOTH TIP extent (RIM_OD/2 = 58.9 = old
-# r_tip) — no more overhang of the teeth past the brake band's wall.
-# A 45° cone (RATCHET_DEPTH tall) below the brake band transitions the
-# wall outward from the ratchet valley radius up to this new brake outer.
-# Wall thickness stays at STRUCT_WALL (1.7) throughout.
-RIM_OD     = 117.8                    # new brake-band outer (= old r_tip)
-RIM_WALL   = STRUCT_WALL              # 1.7 — brake-band wall thickness
-# RIM_ID is the cable-channel inner edge at the NARROWEST point of the rim
-# (the ratchet level — kept at the old value so the ratchet bore, the cable
-# channel spokes, and the cable_rim spoke count are unchanged). The BRAKE
-# band's inner is (RIM_OD - 2*RIM_WALL) = 114.4 — larger, because the brake
-# band grew outward but the wall stayed 1.7 mm. The cone smoothly steps
-# the bore from RIM_ID up to that larger inner over RATCHET_DEPTH in z.
-RIM_ID     = 111.0                    # cable-channel inner at ratchet level
+BRAKE_RIM_Z_LO = RATCHET_BAND_H + CONE_H              # 7.5
+RIM_H      = RATCHET_BAND_H + CONE_H + BRAKE_BAND_H   # rim total height (19.1)
+
+# ── SPOOL DIAMETER ───────────────────────────────────────────────────────────
+# The capacity knob is dimensions.WINDING_OUTER_R (imported) — it lives in the
+# leaf module so the ratchet tooth offset can also derive from it without a
+# circular import. The cable spirals out in ONE axial layer (the cable top rim
+# slides down to enforce a single layer, preventing knots) to that radius, the
+# brake-band INNER radius. Everything radial downstream — rim, cone, ratchet
+# bore/teeth, brake band, cable top rim, cable retainer, the whole housing
+# X-envelope, and the mount bracket — derives from RIM_OD below.
+#   single-layer capacity ≈ eff · π · (WINDING_OUTER_R² − hub_r²) / cable_d
+#   (hub_r = HUB_OD/2 = 33.2 now the Ø56 spring grew the hub — capacity drops
+#    ~9% vs the old Ø47-spring hub_r of 28.7, the cost of the stronger spring.)
+# NOTE: the hub (HUB_OD, spring cavity) and the pancake-side bearing cap are
+# NOT affected — only the bottom cable rim grows; the hub keeps its full
+# height at its own diameter, so the cap geometry is unchanged.
+RIM_WALL   = STRUCT_WALL                       # brake-band wall thickness
+RIM_OD     = 2 * (WINDING_OUTER_R + RIM_WALL)  # brake-band outer (inner = WINDING_OUTER_R)
+# RIM_ID is the cable-channel inner edge at the NARROWEST point (the ratchet
+# level / tooth bore). Derived to hold the structural wall under the teeth
+# constant: bore sits RATCHET_DEPTH (tip→valley) + _RATCHET_BACK_WALL
+# (valley→bore) inside the tip radius on each side.
+_RATCHET_BACK_WALL = 1.9              # solid wall under the teeth (bore→valley)
+RIM_ID     = RIM_OD - 2 * (RATCHET_DEPTH + _RATCHET_BACK_WALL)
 
 # Minimum radial gap between the spool's OD and any STATIONARY feature
 # (housing walls/thicken, cable retainer's bottom ring, etc.) — covers spool
 # wobble under load. Used by cable_retainer.RETAIN_RADIAL_GAP and by
 # housing.PIVOT_X (the front-thicken's inner face is held at this gap).
 SPOOL_HORIZONTAL_CLEARANCE = 2.5
+
+# Hub↔rim spoke-WEB thickness (the cable-channel grid only — NOT the inner
+# hub or the outer rim, which stay STRUCT_WALL). Thinned below STRUCT_WALL to
+# cut spool-body material; the deck spoke count tracks it to hold the cable
+# gap. 0.8 mm = 2 perimeters at a 0.4 mm nozzle.
+SPOKE_WEB_W = 0.8
 
 
 def _cyl_ratchet_band(z_lo, z_hi):
@@ -275,14 +269,16 @@ def _cable_entry_prism(w):
     )
 
 
-# Spoke region: tunnel + shell are capped to this z range so they don't run
+# Spoke region: tunnel + shell are capped to z = 0..RIM_H so they don't run
 # above/below the spokes they need to cross. The prism itself extends past
-# both ends (entry/exit clearance); the cap clips that to z = 0..16.47.
-_SPOKE_REGION_Z_HI = 16.47
+# both ends (entry/exit clearance); the cap clips that. (Was a hardcoded
+# 16.47 — the old RIM_H — which silently truncated the tunnel when the rim
+# grew; tied to RIM_H so it tracks.)
+_SPOKE_REGION_Z_HI = RIM_H
 
 
 def _spoke_region_cap():
-    """Z-bounded box (z = 0..16.47, full XY span) intersected with the
+    """Z-bounded box (z = 0..RIM_H, full XY span) intersected with the
     cable-entry tunnel/shell to clip them to the spoke region."""
     big = 1000.0
     return (cq.Workplane("XY")
@@ -337,7 +333,12 @@ def _channel_spokes():
     z_brake_lo    = z_ratchet_top + CONE_H
     r_out_lo      = RIM_ID / 2 + 0.5
     r_out_hi      = brake_inner + 0.5
-    w             = STRUCT_WALL
+    # Spoke WEB thickness — thinner than the structural wall (the spokes are
+    # an internal hub↔rim web, not a watertight wall), to cut material. Only
+    # the web is thinned; the inner hub and the outer rim keep STRUCT_WALL.
+    # The deck count (n_top below) auto-bumps with the thinner wall to hold
+    # the cable-gap target, so cable support is unchanged.
+    w             = SPOKE_WEB_W
 
     n_top = math.ceil(2 * math.pi * brake_inner / (CABLE_D + w))
     n_top = 4 * ((n_top + 3) // 4)                    # multiple of 4
@@ -408,39 +409,6 @@ def _channel_spokes():
         out = out.union(ground_trunk(theta_ground))
 
     return out
-
-
-def compare_spoke_top_profile():
-    """Verify the spoke top profile matches the original 48-spoke design.
-    Prints angular position of each prong's inner and outer endpoints
-    compared to a pure-radial 48-spoke reference. With the twist-extrude
-    implementation in _channel_spokes() each prong is a TRUE radial bar,
-    so the angles should match exactly (within float precision)."""
-    brake_inner = (RIM_OD - 2 * RIM_WALL) / 2
-    r_out_hi    = brake_inner + 0.5
-    r_in_local  = HUB_OD / 2 - 0.5
-    n_top = math.ceil(2 * math.pi * brake_inner / (CABLE_D + STRUCT_WALL))
-    n_top = 4 * ((n_top + 3) // 4)
-    spoke_pitch = 2 * math.pi / n_top
-
-    print(f"\n  n_top = {n_top} prongs, spoke_pitch = {math.degrees(spoke_pitch):.3f}°")
-    print(f"  r_in = {r_in_local:.2f}, r_out_hi = {r_out_hi:.2f}")
-    print(f"  {'k':>3} {'orig (°)':>10} {'new outer (°)':>14} {'Δouter (°)':>11} "
-          f"{'new inner (°)':>14} {'Δinner (°)':>11}")
-    print(f"  {'-'*3} {'-'*10} {'-'*14} {'-'*11} {'-'*14} {'-'*11}")
-
-    # All 4 prongs in branch j=0 (other branches are rotated copies — same Δ).
-    for k in range(4):
-        theta_prong = k * spoke_pitch
-        orig_deg = math.degrees(theta_prong)
-        # New: true radial bar at theta_prong (both endpoints at same angle).
-        new_outer_deg = math.degrees(math.atan2(
-            r_out_hi * math.sin(theta_prong), r_out_hi * math.cos(theta_prong)))
-        new_inner_deg = math.degrees(math.atan2(
-            r_in_local * math.sin(theta_prong), r_in_local * math.cos(theta_prong)))
-        print(f"  {k:>3} {orig_deg:>10.3f} {new_outer_deg:>14.3f} "
-              f"{new_outer_deg - orig_deg:>+11.3e} "
-              f"{new_inner_deg:>14.3f} {new_inner_deg - orig_deg:>+11.3e}")
 
 
 def _hub_key_bumps():
@@ -756,18 +724,23 @@ pancake_bearing_z0 = PANCAKE_CAP_SEAT_Z0
 # with the boss pad; the screw may protrude past the hub OD (acceptable - it's
 # clear of the cable channel, which is lower in z).
 SPRING_SCREW_ANGLE = 270.0
-# Cable top-rim sits CABLE_RIM_AIR_GAP above the bottom rim's top (= RIM_H); its
+# Cable top-rim sits CABLE_TOP_RIM_GAP above the bottom rim's top (= RIM_H); its
 # lid body is TOP_RIM_H tall. (build.py places it at CABLE_TOP_RIM_BASE_Z.)
-CABLE_TOP_RIM_BASE_Z = RIM_H + CABLE_RIM_AIR_GAP        # lid bottom face
+# Decoupled from the retainer's CABLE_RIM_AIR_GAP so the retainer window can
+# grow without moving the lid (the lid slides freely in use anyway).
+CABLE_TOP_RIM_BASE_Z = RIM_H + CABLE_TOP_RIM_GAP        # lid bottom face
 _CABLE_TOP_RIM_TOP_Z = CABLE_TOP_RIM_BASE_Z + TOP_RIM_H  # lid top face
-# Put the screw hole so its lower edge (the Ø M2_SHAFT_CLR_D shank hole that exits
-# the OD) is FLUSH with the lid's top — so the protruding screw clears the lid at
-# its maximum spacing. Tracks the air gap automatically: bump the gap → both the
-# lid and this hole move up together.
-SPRING_SCREW_Z     = _CABLE_TOP_RIM_TOP_Z + M2_SHAFT_CLR_D / 2
-SCREW_BOSS_H       = 2.0    # radial height the boss protrudes inward from wall A
-                            # (boss + 1.7 mm wall = 3.7 mm > the M2_INSERT_DEPTH pocket)
+# SCREW_BOSS_H lives in dimensions.py now (the spring cavity ID derives from it —
+# the boss pad is the binding constraint on spring OD, not the wall).
 SCREW_BOSS_SIDE    = 8.0    # square pad side at the boss face (the strip seats here)
+# Pin the spring-strip screw mount just UNDER the bearing-retention lip (the
+# cap-stop cone bottom = PANCAKE_CAP_SEAT_Z0 - CAP_STOP_LIP_H = 42), so the
+# boss hugs the lip from below without colliding into it. The boss + its 45°
+# flare extend (SCREW_BOSS_SIDE + 2·SCREW_BOSS_H)/2 above the screw axis, so
+# the axis sits that far below the lip. (Was derived from the cable-rim top,
+# which rode too high and the boss top punched into the lip.)
+_BEARING_LIP_BOTTOM_Z = PANCAKE_CAP_SEAT_Z0 - CAP_STOP_LIP_H            # 42.0
+SPRING_SCREW_Z = _BEARING_LIP_BOTTOM_Z - (SCREW_BOSS_SIDE + 2 * SCREW_BOSS_H) / 2  # 36.0
 # Insert pilot / depth and screw clearance reuse the shared M2 heat-set-insert
 # constants (M2_INSERT_PILOT_D = 3.3, M2_INSERT_DEPTH = 3.5, M2_SHAFT_CLR_D = 2.4),
 # which are already sized for the McMaster 94459A110 insert — see dimensions.py.
@@ -794,21 +767,21 @@ def _spring_screw_boss():
 
 
 def _spring_screw_bore():
-    """Radial bore through the boss + wall: an insert pocket (M2_INSERT_PILOT_D
-    dia x M2_INSERT_DEPTH) from the pad face, then an M2_SHAFT_CLR_D clearance
-    hole the rest of the way out past the OD (so the screw shank can protrude)."""
+    """Radial bore through the boss + wall: a heat-set insert pocket from the pad
+    face, then a clearance hole the rest of the way out past the OD (so the screw
+    shank can protrude). Insert-MANDATORY — the screw threads into the insert, and
+    the clearance beyond it is not something a screw could bite."""
     r_pad = HUB_CAVITY_D / 2 - SCREW_BOSS_H
-    x_clr = r_pad + M2_INSERT_DEPTH
-    clr_len = (HUB_OD / 2 + 5.0) - x_clr            # run out well past the OD
-    pocket = cq.Solid.makeCylinder(M2_INSERT_PILOT_D / 2, M2_INSERT_DEPTH,
-                                   cq.Vector(r_pad, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
-    clr = cq.Solid.makeCylinder(M2_SHAFT_CLR_D / 2, clr_len,
-                                cq.Vector(x_clr, 0, SPRING_SCREW_Z), cq.Vector(1, 0, 0))
-    bore = pocket.fuse(clr).rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), SPRING_SCREW_ANGLE)
-    return cq.Workplane(obj=bore)
+    clr_len = (HUB_OD / 2 + 5.0) - (r_pad + M2_INSERT_DEPTH)   # run out well past the OD
+    return (m2_insert_bore_cutter(
+                (r_pad, 0, SPRING_SCREW_Z), (1, 0, 0), clr_len,
+                reason="only SCREW_BOSS_H + HUB_WALL = 3.6 mm of material here "
+                       "(< M2_ANCHOR_MIN_WALL 5.5), so a pocket leaves 0.1 mm of "
+                       "bite; growing the boss inward would eat spring OD")
+            .rotate((0, 0, 0), (0, 0, 1), SPRING_SCREW_ANGLE))
 
 
-SPRING_SCREW_ACCESS_D = 6.0   # driver-access hole Ø through the opposite hub wall
+SPRING_SCREW_ACCESS_D = 10.0  # driver-access hole Ø through the opposite hub wall
 
 
 def _spring_screw_access_hole():

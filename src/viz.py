@@ -101,43 +101,20 @@ bearing_top    = _bearing_dummy(pancake_bearing_z0)
 # giving ideal flat contact with the band there. Built at the lever's rest
 # pose and pre-rotated by the same warp pre-comp as the printed lever.
 def _brake_pad_rubber():
-    import math
     import cadquery as cq
     from .housing import LEVER_REST_PRECOMP_DEG
-    from .levers import (BRAKE_Y0, BRAKE_Y1, BRAKE_ARM_X_LO, BRAKE_RUBBER_T,
-                         RUBBER_PAD_Z_LO, PAD_Z_HI, PAD_Y_MID, R_RIM,
-                         BRAKE_PAD_MOUNT_TILT_DEG)
-    # X- and Y-tilts (mirroring the brake-lever horizontal arm).
-    half_h    = (PAD_Z_HI - RUBBER_PAD_Z_LO) / 2
-    tilt_dx_x = half_h * math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-    x_band    = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)
-    dx_dy_at_rest = abs(PAD_Y_MID) / (
-        math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG)) * x_band)
-    y_len     = BRAKE_Y1 - BRAKE_Y0
-    tilt_dx_y = (y_len / 2) * dx_dy_at_rest
-
-    # XZ parallelograms at y=BRAKE_Y0 and y=BRAKE_Y1, lofted.
-    # Lever-side face follows the lever's tilted mount; band-side is offset
-    # BRAKE_RUBBER_T in -X.
-    def _poly(sign_y):
-        # sign_y: -1 for BRAKE_Y0, +1 for BRAKE_Y1
-        offy = sign_y * tilt_dx_y
-        x_lev_bot = BRAKE_ARM_X_LO - tilt_dx_x + offy
-        x_lev_top = BRAKE_ARM_X_LO + tilt_dx_x + offy
-        x_rim_bot = x_lev_bot - BRAKE_RUBBER_T
-        x_rim_top = x_lev_top - BRAKE_RUBBER_T
-        return [
-            (x_lev_bot, RUBBER_PAD_Z_LO),
-            (x_rim_bot, RUBBER_PAD_Z_LO),
-            (x_rim_top, PAD_Z_HI),
-            (x_lev_top, PAD_Z_HI),
-        ]
-
-    slab = (cq.Workplane("XZ").workplane(offset=-BRAKE_Y0)
-            .polyline(_poly(-1)).close()
-            .workplane(offset=BRAKE_Y0 - BRAKE_Y1)
-            .polyline(_poly(+1)).close()
-            .loft(ruled=True, combine=True))
+    from .levers import brake_pad_rect_corners
+    # True rectangular prism: the strip-stock pad with square cuts. The two
+    # congruent rectangles (lever face / band face) come from levers.py —
+    # loft between them gives the BRAKE_RUBBER_T-thick slab on the tilted
+    # mount plane.
+    lever_pts, band_pts = brake_pad_rect_corners()
+    wire_lever = cq.Wire.makePolygon([cq.Vector(*p) for p in lever_pts],
+                                     close=True)
+    wire_band  = cq.Wire.makePolygon([cq.Vector(*p) for p in band_pts],
+                                     close=True)
+    slab = cq.Workplane("XY").add(
+        cq.Solid.makeLoft([wire_lever, wire_band], ruled=True))
     return slab.rotate((BRAKE_PIVOT_X, 0, BRAKE_PIVOT_Z),
                        (BRAKE_PIVOT_X, 1, BRAKE_PIVOT_Z),
                        LEVER_REST_PRECOMP_DEG)
