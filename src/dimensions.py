@@ -6,15 +6,29 @@ build.py next to the part they apply to.
 """
 
 import math
+import pathlib
+import sys
+
+# Shared fastener dims live in the Archive/3D freecad/ folder (one source for
+# ALL projects). Add it to sys.path the same way build.py does, then import flat
+# and re-export — so the rest of the project keeps doing `from .dimensions
+# import M2_…` unchanged.
+_FREECAD = pathlib.Path(__file__).resolve().parents[2] / "freecad"
+if str(_FREECAD) not in sys.path:
+    sys.path.insert(0, str(_FREECAD))
+from fasteners import (  # noqa: E402
+    M2_SELFTAP_D, M2_SHAFT_CLR_D, M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
+    M2_INSERT_PILOT_D, M2_INSERT_DEPTH,
+)
 
 # ── Spool body (drum + flanges + hub) ────────────────────────────────────────
 DRUM_OD        = 155.0   # cable drum outer diameter (cable-wrap region).
                          # Sized to fit a 3 mm-deep helical cable groove
                          # (Ø6 mm × 7 mm pitch) with ≥1.5 mm wall behind it.
 DRUM_WALL      =   4.5   # drum wall thickness → drum ID = 146 mm
-DRUM_H         =  37.0   # drum axial extent. Sized for the cassette spring
-                         # cavity to be ≥ 33 mm tall (clears the 31.7 mm
-                         # Stanley 30-455 cassette assembly with axial slack).
+# DRUM_H (drum axial extent) is DERIVED in the Derived section from SPRING_H —
+# the cassette spring cavity inside the drum is what sets the drum's height. See
+# SPRING_H (spring sizing) and the DRUM_H derivation below.
 
 FLANGE_OD      = DRUM_OD   # flange outer diameter — flush with drum (no
                            # outer overhang). Both rims (smooth brake/wheel
@@ -37,15 +51,37 @@ FLANGE_LIP_T   =   3.2   # rim thickness: 1.7 mm of clean support material above
 # wall (3 mm) for hoop strength under the press-fit.
 STRUCT_WALL    =   1.6
 
-HUB_OD         =  57.4   # hub outer diameter = cavity ID 54 mm + 2×HUB_WALL.
-                         # Sized for the TRIMMED clock spring (fits a 49 mm hole
-                         # tight / 50 mm comfortably); the 54 mm cavity leaves
-                         # ~2 mm/side for the strip-retention channel. Shrinking
-                         # the hub (vs the old 70.4) also widens the cable
-                         # channel (hub OD → RIM_ID). (Was 70.4 for the 64 mm
-                         # Stanley cassette.)
-HUB_WALL       = STRUCT_WALL   # hub wall thickness in the spring-cavity region.
-                         # Pinned to STRUCT_WALL — see its comment above.
+# ── Spring + hub (inner spool) sizing ────────────────────────────────────────
+# The hub cavity holds a flat clock/power spring. THE knob is the spring's outer-
+# coil diameter (SPRING_OD); the inner spool is sized from it. The cavity is NOT
+# a clean bore — the spring's usable space is pinched by its two tightest
+# opposing intrusions, ONE PER SIDE:
+#   • the M2 spring-screw boss pad, protruding SCREW_BOSS_H from the wall (it
+#     hosts the heat-set insert anchoring the strip's outer hook), and
+#   • the cap-stop / bearing-retention lip on the FAR side, inset SPRING_FAR_LIP
+#     (the boss is pinned just under this lip — see spool.py).
+# SPRING_CLR is the DIAMETRAL slack between the spring and those two faces:
+#     boss-to-far-lip gap = SPRING_OD + SPRING_CLR
+#     cavity wall ID      = that gap + SCREW_BOSS_H + SPRING_FAR_LIP
+# so HUB_CAVITY_D shrinks 1:1 with SPRING_CLR. SPRING_CLR = 4.2 reproduces the
+# current Ø63.2 cavity; drop toward ~1.0 to tighten the fit (the spring's outer
+# hook is screwed to the boss, so the far-side slack is just dead space).
+SPRING_OD      =  56.0   # spring outer-coil Ø — capacity/force knob (small spring measured 47)
+SPRING_CLR     =   4.2   # DIAMETRAL slack between the spring and its 2 tightest intrusions
+SCREW_BOSS_H   =   2.0   # M2 boss radial protrusion from the wall (hosts the M2 insert;
+                         # boss + HUB_WALL = 3.6 > M2_INSERT_DEPTH 3.5). Shared with spool.py.
+SPRING_FAR_LIP =   1.0   # far-side cap-stop/bearing-lip inset (= CAP_STOP_INSET; asserted below)
+HUB_WALL       = STRUCT_WALL   # hub wall thickness in the spring-cavity region (= STRUCT_WALL)
+HUB_CAVITY_D   = SPRING_OD + SPRING_CLR + SCREW_BOSS_H + SPRING_FAR_LIP   # spring cavity ID (= 63.2)
+HUB_OD         = HUB_CAVITY_D + 2 * HUB_WALL                              # hub outer Ø (= 66.4)
+
+# Spring HEIGHT drives the cavity height the way SPRING_OD drives its diameter.
+# SPRING_H is the cassette/spring axial height; the cavity is built SPRING_AXIAL_CLR
+# taller so the cassette clears with end slack. The drum height (DRUM_H → SPOOL_H)
+# is solved from this in the Derived section below — it can't be done here because
+# it also needs CAP_H / CAP_STOP_LIP_H. 31.7 + 2.3 reproduces the current 34 mm cavity.
+SPRING_H         = 31.7  # spring/cassette axial height (Stanley 30-455 = 31.7)
+SPRING_AXIAL_CLR =  2.3  # end-to-end axial slack added to the cavity over SPRING_H
 
 # ── 608 bearing (purchased part) ─────────────────────────────────────────────
 BEARING_OD     =  22.0   # 608 bearing outer race diameter
@@ -56,7 +92,7 @@ BEARING_LIP_ID =  20.0   # retention lip ID (< BEARING_OD → stops the bearing)
 
 # ── Axle ─────────────────────────────────────────────────────────────────────
 AXLE_D         =   8.0   # nominal — 608 bearing bore (the metal bearing's ID)
-AXLE_PRINT_D   =   AXLE_D - 0.1   # 7.9 — printed axle Ø, 0.05 mm per side under nominal
+AXLE_PRINT_D   =   AXLE_D - 0.05  # 7.95 — printed axle Ø, 0.025 mm per side under the bore
 
 # Bearing-retention lip on a printed axle: a short Ø(AXLE_LIP_OD) × AXLE_LIP_H
 # shoulder that sits flat against the bearing's INNER race rim. Mirrors the
@@ -217,6 +253,16 @@ FLANGE_INNER_LIP_H = 2.0 # vertical inner lip height (analogous to the
 RATCHET_TEETH  = 30      # 12° pitch — smooth hand feel, reliable pawl drop
 RATCHET_DEPTH  = 1.5     # tooth depth (mm) into the flange top surface
 
+# ── SPOOL CAPACITY KNOB — single source of truth for the winding diameter ────
+# The cable spirals out in one axial layer to this radius (the brake-band
+# inner radius). spool.RIM_OD = 2·(WINDING_OUTER_R + RIM_WALL) derives from it
+# (spool.py imports this), as does the ratchet tooth offset just below — so
+# resizing the spool is changing this ONE line.
+#   WINDING_OUTER_R = drum_OD/2 − RIM_WALL  →  63.4 gives a 130 mm drum OD.
+# (90 mm ≈ 11 ft of 6.6 mm cable single-layer at ~90% pack; capacity scales
+# with WINDING_OUTER_R² − hub_r², so 63.4 holds roughly half as much.)
+WINDING_OUTER_R = 63.4
+
 # Angular offset applied to the tooth pattern. Chosen so a tooth's radial
 # CATCH FACE aligns with the ratchet lever's pawl-bump (see levers.py): the
 # bump's APEX sits at radius (R_TIP + FIT_CLR) on the lever's inner-Y face
@@ -225,42 +271,55 @@ RATCHET_DEPTH  = 1.5     # tooth depth (mm) into the flange top surface
 # at that angle so the bump's hypotenuse mates flat-on-flat with the
 # tooth wall instead of bumping its tip.
 #
-# Hard-coded copies of housing.HOUSING_W / housing.LEVER_RIM_H / spool.RIM_OD
-# (no circular import). Recompute if any of those change.
+# R_TIP derives from WINDING_OUTER_R above (R_TIP = RIM_OD/2 = WINDING_OUTER_R
+# + STRUCT_WALL), so the offset tracks the diameter automatically. HOUSING_W /
+# LEVER_RIM_H are Y-axis quantities (independent of diameter) hard-mirrored
+# here to avoid a circular import — keep in sync if those change.
 _HOUSING_W_FOR_RATCHET   = 22.0       # housing.HOUSING_W
 _LEVER_RIM_H_FOR_RATCHET = 3.3        # housing.LEVER_RIM_H
-_RIM_OD_FOR_RATCHET      = 117.8      # spool.RIM_OD
 _RATCHET_LEVER_Y0        = _HOUSING_W_FOR_RATCHET / 2 + _LEVER_RIM_H_FOR_RATCHET  # 14.3
-_RATCHET_TIP_R           = _RIM_OD_FOR_RATCHET / 2                                # 58.9
-_RATCHET_BUMP_APEX_R     = _RATCHET_TIP_R + 0.15                                  # 59.05 — hardcoded FIT_CLR (defined later in this file)
+_RATCHET_TIP_R           = WINDING_OUTER_R + STRUCT_WALL                          # = spool.RIM_OD/2
+_RATCHET_BUMP_APEX_R     = _RATCHET_TIP_R + 0.15                                  # + FIT_CLR (defined later)
 _RATCHET_PITCH_DEG       = 360.0 / RATCHET_TEETH                                  # 12.0
 RATCHET_TOOTH_OFFSET_DEG = math.degrees(
     math.asin(_RATCHET_LEVER_Y0 / _RATCHET_BUMP_APEX_R)
 ) % _RATCHET_PITCH_DEG
 
-# ── Shared M2 cap-screw / heat-set-insert constants ──────────────────────────
-# Used everywhere the spool consumes an M2 cap screw (lever pivots, axle
-# cross-pins, axle spring engagement). Keep these as the SINGLE source of
-# truth — every new feature that drills, recesses, or threads M2 should
-# reference these instead of redefining its own copy.
-M2_SHAFT_CLR_D     = 2.4     # 2 mm thread + 0.20 mm clearance per side (was 2.3 — too
-                             # tight; the guide-wheel axle hole stays at its own
-                             # GUIDE_AXLE_SHAFT_D = 2.2 mm tight-thread fit)
-M2_HEAD_RECESS_D   = 4.1     # M2 cap head ≈ 3.8 mm OD + 0.15 mm clearance per side
-M2_HEAD_RECESS_H   = 2.0     # cap-head counterbore depth
-M2_INSERT_PILOT_D  = 3.3     # McMaster 94459A110 heat-set insert pilot
-M2_INSERT_DEPTH    = 3.5     # 2.5 mm insert + 1 mm margin
-
+# ── M2 cap-screw / heat-set-insert constants ─────────────────────────────────
+# Imported at the top of this module from the SHARED freecad/fasteners.py, so
+# every Archive/3D project uses one set of numbers (M2_SELFTAP_D, M2_SHAFT_CLR_D,
+# M2_HEAD_RECESS_D/H, M2_INSERT_PILOT_D, M2_INSERT_DEPTH). Used everywhere the
+# spool consumes an M2 cap screw (lever pivots, axle cross-pins, axle spring
+# engagement); every new M2 feature references these, never a local copy.
+# (The guide-wheel axle keeps its own GUIDE_AXLE_SHAFT_D = 2.2 mm tight-thread fit.)
 AXLE_CROSS_HOLE_D = M2_SHAFT_CLR_D    # M2 clearance through the axle.
 
-# ── Cable top-rim (sliding lid) placement ────────────────────────────────────
-# The lid slides on the hub and sits CABLE_RIM_AIR_GAP above the bottom rim's
-# top (= RIM_H). That gap sets the cable-channel height, so it's tuned to the
-# thickest cable we want to support. Shared here so the spring-strip screw boss
-# (spool.py) can sit its hole flush with the lid's top automatically — bumping
-# the gap moves both the lid and the screw together.
+# ── Guide wheel (physical part) ──────────────────────────────────────────────
+# Lives here (the leaf module) so BOTH housing.py (wheel pocket + axle screw)
+# and cable_retainer.py (tenon depth — the axle screw double-duties as the
+# retainer-joint pin, see RETAIN_TENON_DEPTH) can derive the wheel/screw
+# geometry from one source without a circular import.
+GUIDE_WHEEL_OD          = 14.25  # THE knob: the axle sits at the Ø14 tangent
+                                 # position, so any OD above 14 presses the face
+                                 # into the band by half the excess. Drop the OD
+                                 # to reduce the squeeze; raise it to add.
+GUIDE_WHEEL_BORE_D      = 2.6    # spinning clearance for the M2 axle
+# Preload (rim overlap) derives from OD: with the axle fixed at the Ø14
+# tangent, overlap = (OD − 14)/2. So OD alone controls the squeeze; the axle
+# hole position (GUIDE_WHEEL_CX in housing.py) stays put as OD changes.
+_GUIDE_WHEEL_TANGENT_OD = 14.0
+GUIDE_WHEEL_RIM_PRELOAD = (GUIDE_WHEEL_OD - _GUIDE_WHEEL_TANGENT_OD) / 2   # 0.125
+
+# ── Cable top-rim (sliding lid) + retainer gap ───────────────────────────────
+# CABLE_RIM_AIR_GAP sets the cable-RETAINER cage's ring-to-ring gap (its window
+# height) above the bottom rim top (= RIM_H). CABLE_TOP_RIM_GAP sets where the
+# sliding lid is MODELLED (and the spring-strip screw hole, which sits flush
+# with the lid top). The two used to be one constant; they're split so the
+# retainer window can grow without dragging the lid up — the lid slides freely
+# in operation anyway, so its modelled height is just a reference position.
 TOP_RIM_H          = 7.0     # axial height of the cable top-rim lid body
-CABLE_RIM_AIR_GAP  = 10.0    # lid bottom sits this far above the bottom rim top
+CABLE_RIM_AIR_GAP  = 12.0    # retainer ring-gap (window height) above the rim top
+CABLE_TOP_RIM_GAP  = 10.0    # lid bottom modelled this far above the rim top
 
 # Standard "extend past a face" margin for boolean cut/union operations.
 # Applied to through-cuts (workplane offset by -BOOL_OVERSHOOT, extrude
@@ -275,14 +334,14 @@ BOOL_OVERSHOOT     =   0.5
 # service; in operation the top bearing's axial load is upward (bearing
 # press-fit into cap), and gravity keeps the cap seated.
 FIT_CLR        =   0.15  # shared per-side slip-fit clearance for hand-assembled
-                         # cylindrical/rectangular fits (cap seat, anti-rotation
-                         # keys, etc.). Single source of truth for fitted parts.
-CROSS_PRINT_CLR =  0.30  # per-side clearance for joints whose mortise and tenon
-                         # are printed in DIFFERENT orientations. The retainer↔
-                         # housing tongue-and-groove fits well at 0.3 in practice.
-                         # Joints printed face-to-face (e.g. the floating tenon
-                         # whose mating mortises share a chunk's print bed) keep
-                         # using FIT_CLR.
+                         # cylindrical/rectangular fits (anti-rotation keys, etc.).
+                         # Single source of truth for fitted parts.
+CAP_SEAT_CLR   =   0.10  # tighter exception for the top bearing cap's RADIAL slip
+                         # fit into the spool cavity (CAP_OD) — 0.15 read too loose.
+CROSS_PRINT_CLR =  0.25  # per-side clearance for joints whose mortise and tenon
+                         # are printed in DIFFERENT orientations — currently the
+                         # retainer↔housing tongue-and-groove. (0.3 slid well in
+                         # practice but a touch loose; tightened to 0.25.)
 CHUNK_RAIL_CLR  =  0.40  # per-side clearance for the brake-chunk↔housing and
                          # ratchet-chunk↔housing rail joints specifically. These
                          # have a wider/deeper octagonal cross-section than the
@@ -301,8 +360,14 @@ DRUM_ID        = DRUM_OD - 2 * DRUM_WALL                   # 146 mm
 FLANGE_ID      = DRUM_ID                                   # 146 mm (bottom flange ID)
 FLANGE_INNER_ID = DRUM_OD - 2 * FLANGE_INNER_EXT           # 127 mm (lever rim ID; pancake top-rim ID derives from band width)
 FLANGE_RIM_MID_R = (FLANGE_INNER_ID + DRUM_OD) / 4         # 70.5 — boundary between ratchet (inner) and brake (outer) bands
-HUB_CAVITY_D   = HUB_OD - 2 * HUB_WALL                     # 54 mm  — spring cavity ID
-SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # overall spool height
+# Spring cavity HEIGHT → drum height → SPOOL_H. The cavity is the drum interior
+# between the two cap-stop lips: CAP_H + CAP_STOP_LIP_H of bearing/lip stack at the
+# bottom, CAP_H at the top. Size it to SPRING_H + SPRING_AXIAL_CLR and solve back
+# for DRUM_H. (31.7 + 2.3 → cavity 34 → DRUM_H 37 → SPOOL_H 51.)
+CAP_H          = BEARING_W + BEARING_LIP_H                 #  8 mm — lip (1) + pocket (7)
+SPRING_CAVITY_H = SPRING_H + SPRING_AXIAL_CLR              # 34 — target spring-cavity height
+DRUM_H         = SPRING_CAVITY_H + 2 * CAP_H + CAP_STOP_LIP_H - 2 * FLANGE_H  # 37
+SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # overall spool height (51)
 AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE  # 64 mm
 BEARING_BORE   = BEARING_OD + BEARING_CLR                  # 22.3 mm
 TOP_BEARING_BORE = BEARING_BORE                            # standardized — same as bottom
@@ -314,18 +379,16 @@ TOP_BEARING_BORE = BEARING_BORE                            # standardized — sa
 DRUM_BOTTOM_Z  = FLANGE_H                                  #  7 mm
 DRUM_TOP_Z     = SPOOL_H - FLANGE_H                        # 31 mm
 
-# Cap geometry
-CAP_H          = BEARING_W + BEARING_LIP_H                 #  8 mm — lip (1) + pocket (7)
-CAP_OD         = HUB_CAVITY_D - 2 * FIT_CLR                # 53.7 mm (slip fit in 54 mm cavity)
+# Cap geometry (CAP_H is defined above — SPOOL_H/DRUM_H need it)
+CAP_OD         = HUB_CAVITY_D - 2 * CAP_SEAT_CLR          # 63.0 mm (0.1/side slip fit in the cavity)
 CAP_STOP_ID    = HUB_CAVITY_D - 2 * CAP_STOP_INSET         # 52 mm — cavity ID at the stop lip
 
 # Main body cavity z-map (from top down):
-#   z = SPOOL_H             (38)   top face of main body
-#   z = SPOOL_H − CAP_H     (30)   cap bottom rests here (on top of the stop lip)
-#   z = 30 − CAP_STOP_LIP_H (29.5) cavity resumes full 34 mm ID
-#   z = 8                          bottom of spring cavity (= top of bottom lip)
-#   z = 7                          bottom of bottom bearing lip
-#   z = 0                          bottom of main body
+#   z = SPOOL_H          (51)   top face of main body
+#   z = SPOOL_H − CAP_H  (43)   bearing-pocket bottom = spring-cavity TOP
+#   z = 9                       top of bottom cap-stop lip = spring-cavity BOTTOM
+#   z = 8                       bottom of cap-stop lip (= top of bottom cap seat)
+#   z = 0                       bottom of main body
 PANCAKE_CAP_SEAT_Z0 = SPOOL_H - CAP_H                          # 43 — bearing-pocket region starts (was cap-seat top)
 LEVER_CAP_SEAT_Z0   = 0                                        # bottom cap seat starts
 LEVER_CAP_SEAT_Z1   = LEVER_CAP_SEAT_Z0 + CAP_H                # 8 — bottom cap seat ends
@@ -363,6 +426,8 @@ assert TOP_BEARING_BORE >= BEARING_BORE, \
     "top-bearing pocket must be at least as loose as the standard pocket"
 assert BEARING_LIP_ID < BEARING_OD, \
     "bearing retention lip must overlap the bearing's outer-race face"
+assert SPRING_FAR_LIP == CAP_STOP_INSET, \
+    "spring's far-side lip inset must track the cap-stop lip (they're the same feature)"
 assert CAP_OD < HUB_CAVITY_D, \
     "cap must fit inside hub cavity with clearance"
 assert CAP_STOP_ID < HUB_CAVITY_D, \

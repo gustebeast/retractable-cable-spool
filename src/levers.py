@@ -5,13 +5,13 @@ on a Y-axis M2 pivot screw through the front-housing block. It hangs DOWN
 the +X side of the housing; the user reaches under and pulls the handle
 toward +X. See housing.py's header for the forced engagement directions:
 
-  - RATCHET pivot sits ABOVE the teeth band (RATCHET_PIVOT_Z=10, teeth at
-    z=0..RATCHET_BAND_H=3). Rest = ENGAGED: the pawl's inner edge meshes
-    against the rim teeth at r=R_ROOT=57.2. Pulling the handle swings the
+  - RATCHET pivot sits ABOVE the teeth band (RATCHET_PIVOT_Z=16.1, teeth at
+    z=0..RATCHET_BAND_H=6). Rest = ENGAGED: the pawl's inner edge meshes
+    against the rim teeth at r=R_ROOT=57.4. Pulling the handle swings the
     pawl outward to clear the teeth.
   - BRAKE pivot sits BELOW the brake band (BRAKE_PIVOT_Z=2, band at
-    z=RATCHET_BAND_H..RIM_H). Rest = DISENGAGED: the pad sits lifted off
-    the smooth band (r=57.2). Pulling the handle swings the pad inward
+    z=BRAKE_RIM_Z_LO=7.5..RIM_H). Rest = DISENGAGED: the pad sits lifted
+    off the smooth band (r=58.9). Pulling the handle swings the pad inward
     onto the band.
 
 The rim already carries both bands (spool.py), so this module no longer
@@ -54,31 +54,31 @@ LEVER_HANDLE_W = 6.0                             # vertical handle's X width
                                                  # finger and the +X tail of
                                                  # the horizontal arm doesn't
                                                  # eat into the housing wall.
-LEVER_INNER_Y = HOUSING_W / 2 + LEVER_RIM_H      # 15.5 — inner face, past the gap
-RATCHET_Y0, RATCHET_Y1 = LEVER_INNER_Y, LEVER_INNER_Y + LEVER_T   #  15.5 .. 21.5
-BRAKE_Y1,  BRAKE_Y0    = -LEVER_INNER_Y, -LEVER_INNER_Y - LEVER_T # -15.5 .. -21.5
+LEVER_INNER_Y = HOUSING_W / 2 + LEVER_RIM_H      # 14.3 — inner face, past the gap
+RATCHET_Y0, RATCHET_Y1 = LEVER_INNER_Y, LEVER_INNER_Y + LEVER_T   #  14.3 .. 24.3
+BRAKE_Y1,  BRAKE_Y0    = -LEVER_INNER_Y, -LEVER_INNER_Y - LEVER_T # -14.3 .. -24.3
 
 # M2 head recess in the lever's OUTER face — Ø M2_HEAD_RECESS_D (= 4.1 mm)
 # bored LEVER_HEAD_RECESS_H deep. The depth is set so that the M2x20 screw
 # shaft is equally split between the lever and the housing:
 #
 #   shaft_in_lever = LEVER_T - LEVER_HEAD_RECESS_H    (left after the recess)
-#   air_gap        = LEVER_INNER_Y - HOUSING_W/2      (= LEVER_RIM_H = 4.5)
+#   air_gap        = LEVER_INNER_Y - HOUSING_W/2      (= LEVER_RIM_H = 3.3)
 #   shaft_in_housing = 20 - shaft_in_lever - air_gap
 #
 # Setting shaft_in_lever == shaft_in_housing and solving for the depth:
 #   LEVER_HEAD_RECESS_H = LEVER_T - (20 - air_gap) / 2
-#                       = 10 - 15.5/2 = 2.25
+#                       = 10 - 16.7/2 = 1.65
 M2_SCREW_LEN          = 20.0
-_LEVER_AIR_GAP        = LEVER_INNER_Y - HOUSING_W / 2             # 4.5
-_SCREW_IN_LEVER       = (M2_SCREW_LEN - _LEVER_AIR_GAP) / 2       # 7.75
-LEVER_HEAD_RECESS_H   = LEVER_T - _SCREW_IN_LEVER                 # 2.25
+_LEVER_AIR_GAP        = LEVER_INNER_Y - HOUSING_W / 2             # 3.3
+_SCREW_IN_LEVER       = (M2_SCREW_LEN - _LEVER_AIR_GAP) / 2       # 8.35
+LEVER_HEAD_RECESS_H   = LEVER_T - _SCREW_IN_LEVER                 # 1.65
 
 HANDLE_Z_BOT = -19.0      # common grab height for both handles. Raised again
                           # (was -26) thanks to the ratchet/brake band swap,
                           # which lifts the brake pivot above the spool bottom.
 
-R_RIM        = RIM_OD / 2                        # 57.2 — brake-band / tooth-tip radius
+R_RIM        = RIM_OD / 2                        # 58.9 — brake-band / tooth-tip radius
 
 # Rubber pad bonded to the brake pad's rim-facing face (viz + clearance).
 BRAKE_RUBBER_T = 3.3
@@ -280,11 +280,15 @@ def _build_ratchet_lever():
 # its lever arm above the brake pivot stays long enough for A_BRAKE_OVERLAP).
 # The BRAKE_RUBBER_T
 # rubber slab (viz) bonds to the printed pad's rim-facing face; at the rest
-# (disengaged) pose that rubber face sits PAD_REST_GAP off the band (r=57.2),
+# (disengaged) pose that rubber face sits PAD_REST_GAP off the band (r=58.9),
 # so the PRINTED pad body starts BRAKE_RUBBER_T further out. Both faces are
 # arcs (conform to the band). Pulling the handle swings the pad in.
-# Pad top sits 1 mm below the cable retainer's bottom ring.
-PAD_Z_HI = RIM_H - STRUCT_WALL - 1.0
+# Pad top margin to the cable retainer's bottom ring (at RIM_H − STRUCT_WALL):
+# 1.0 mm of true clearance + 0.8 mm for the rubber band-face's upward drift.
+# (The rubber slab is extruded along the tilted mount-plane NORMAL, whose +Z
+# component lifts the band-side top corner BRAKE_RUBBER_T·W_z ≈ 0.8 mm above
+# PAD_Z_HI — without this allowance the actual corner gap was only 0.2 mm.)
+PAD_Z_HI = RIM_H - STRUCT_WALL - 1.8
 PAD_Y_MID = (BRAKE_Y0 + BRAKE_Y1) / 2
 
 # ── Ratchet-brake handoff: brake first contact = ratchet pawl clears tips ──
@@ -382,6 +386,64 @@ RUBBER_PAD_Z_LO = PAD_Z_LO
 # Derived rest gap (whatever the handoff timing produced).
 PAD_REST_GAP = (math.hypot(BRAKE_ARM_X_LO - BRAKE_RUBBER_T, PAD_Y_MID)
                 - R_RIM)
+
+# ── Rubber pad: true RECTANGLE on the mount plane (square strip cuts) ───────
+# The mount face is a doubly-tilted plane (X-tilt = BRAKE_PAD_MOUNT_TILT_DEG
+# about Y for mid-travel verticality; Y-tilt slope _C for band tangency at
+# PAD_Y_MID). The lever arm's face region is a PARALLELOGRAM on that plane:
+# its edges follow world z=const / y=const planes, which meet at ~85°
+# in-plane — so a pad matching it needs angled cuts. The physical pad is cut
+# from BRAKE_RUBBER_T strip stock with SQUARE cuts (one for length, one for
+# width), so the modeled pad is instead the largest axis-aligned RECTANGLE
+# inscribed in that parallelogram:
+#   U — in-plane unit vector along the z=const edges (horizontal in world)
+#   V — in-plane unit vector perpendicular to U
+#   L = base − side·sin(skew)   (length along U, the strip-length cut)
+#   H = side · cos(skew)        (width along V, the strip-width cut)
+# Inscribed ⊂ parallelogram → the existing arm face fully backs the pad; the
+# arm needs no redesign. The pad's end faces lean ~5° from vertical in world
+# (they're square ON THE STRIP), and its top/bottom edges stay horizontal.
+_C = abs(PAD_Y_MID) / (math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
+                       * math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2))   # face dx per unit y
+_B = math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))              # face dx per unit z
+_NU = math.sqrt(1 + _C * _C)
+_NE = math.sqrt(1 + _B * _B)
+_U  = (_C / _NU, 1 / _NU, 0.0)            # in-plane, along z=const edges
+_E  = (_B / _NE, 0.0, 1 / _NE)            # in-plane, along y=const edges
+_SINPHI = _B * _C / (_NU * _NE)           # in-plane skew between _E and _V
+_COSPHI = math.sqrt(1 - _SINPHI ** 2)
+_V  = tuple((e - _SINPHI * u) / _COSPHI for e, u in zip(_E, _U))
+# Outward normal of the mount face, pointing toward the band (-X side).
+_W = (_U[1] * _V[2] - _U[2] * _V[1],
+      _U[2] * _V[0] - _U[0] * _V[2],
+      _U[0] * _V[1] - _U[1] * _V[0])
+if _W[0] > 0:
+    _W = (-_W[0], -_W[1], -_W[2])
+
+_PAD_PARA_BASE = (BRAKE_Y1 - BRAKE_Y0) * _NU       # parallelogram base length (along U)
+_PAD_PARA_SIDE = BRAKE_PAD_H * _NE                 # parallelogram side length (along E)
+BRAKE_PAD_RECT_L = _PAD_PARA_BASE - _PAD_PARA_SIDE * _SINPHI   # strip-length cut
+BRAKE_PAD_RECT_H = _PAD_PARA_SIDE * _COSPHI                    # strip-width cut
+
+_PAD_FACE_CENTER = (BRAKE_ARM_X_LO, PAD_Y_MID, (PAD_Z_LO + PAD_Z_HI) / 2)
+
+
+def brake_pad_rect_corners():
+    """(lever_face_corners, band_face_corners) of the rectangular rubber
+    pad — each a list of 4 (x, y, z) tuples in consistent winding order.
+    Lever-face rectangle is centred on the mount face; band-face is the
+    same rectangle offset BRAKE_RUBBER_T along the outward normal."""
+    cx, cy, cz = _PAD_FACE_CENTER
+    lever, band = [], []
+    for su, sv in ((-1, -1), (+1, -1), (+1, +1), (-1, +1)):
+        px = cx + su * BRAKE_PAD_RECT_L / 2 * _U[0] + sv * BRAKE_PAD_RECT_H / 2 * _V[0]
+        py = cy + su * BRAKE_PAD_RECT_L / 2 * _U[1] + sv * BRAKE_PAD_RECT_H / 2 * _V[1]
+        pz = cz + su * BRAKE_PAD_RECT_L / 2 * _U[2] + sv * BRAKE_PAD_RECT_H / 2 * _V[2]
+        lever.append((px, py, pz))
+        band.append((px + BRAKE_RUBBER_T * _W[0],
+                     py + BRAKE_RUBBER_T * _W[1],
+                     pz + BRAKE_RUBBER_T * _W[2]))
+    return lever, band
 
 
 def _build_brake_lever():
@@ -494,13 +556,8 @@ _TDX_Y = ((BRAKE_Y1 - BRAKE_Y0) / 2) * abs(PAD_Y_MID) / (
 def _lever_left_x(y_sign, z_sign):
     return BRAKE_ARM_X_LO + z_sign * _TDX_X + y_sign * _TDX_Y
 
-# Band-side rubber-pad corners (offset BRAKE_RUBBER_T inward from lever face)
-_PAD_BAND_CORNERS = [
-    (_lever_left_x(-1, -1) - BRAKE_RUBBER_T, BRAKE_Y0, PAD_Z_LO),
-    (_lever_left_x(-1, +1) - BRAKE_RUBBER_T, BRAKE_Y0, PAD_Z_HI),
-    (_lever_left_x(+1, -1) - BRAKE_RUBBER_T, BRAKE_Y1, PAD_Z_LO),
-    (_lever_left_x(+1, +1) - BRAKE_RUBBER_T, BRAKE_Y1, PAD_Z_HI),
-]
+# Band-side rubber-pad corners — the RECTANGULAR pad's actual band face.
+_PAD_BAND_CORNERS = brake_pad_rect_corners()[1]
 # Lever arm's bottom-inner edge corners (at z=PAD_Z_LO, on the lever face)
 _ARM_BOTTOM_CORNERS = [
     (_lever_left_x(-1, -1), BRAKE_Y0, PAD_Z_LO),

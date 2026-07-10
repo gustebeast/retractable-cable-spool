@@ -19,11 +19,13 @@ import cadquery as cq
 from .dimensions import (
     HUB_OD, FIT_CLR, STRUCT_WALL, TOP_RIM_H,
     KEY_W, KEY_DEPTH, BOOL_OVERSHOOT,
-    M2_SHAFT_CLR_D, M2_INSERT_PILOT_D, M2_INSERT_DEPTH,
-    M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
+    M2_INSERT_PILOT_D,
 )
-from .spool import RIM_ID, RIM_OD, CABLE_D
+from .spool import RIM_ID, RIM_OD, CABLE_D, SPOKE_WEB_W
 from .helpers import cyl, make_keys
+# Shared M2 hole geometry (freecad/fasteners.py). `.dimensions` already put the
+# freecad/ folder on sys.path, so this flat import resolves.
+from fasteners import M2_ANCHOR_MIN_WALL, m2_anchor_cutter, m2_head_bore_cutter
 
 
 COLLAR_WALL = 2.0                                   # radial wall of the hub-wrapping collar
@@ -38,9 +40,10 @@ _OUTER_ID   = _OUTER_OD - 2 * STRUCT_WALL
 # Same spoke count as the bottom rim (gap ≤ CABLE_D at the rim), offset by
 # half a pitch so the top grid's spokes sit over the bottom grid's gaps.
 # (Sized against the BRAKE-band inner — the widest part of the bottom rim's
-# cable channel — matching spool._channel_spokes.)
+# cable channel — matching spool._channel_spokes. Uses the thinned spoke-web
+# width SPOKE_WEB_W so the count tracks it, like the bottom rim.)
 _N_SPOKES     = math.ceil(2 * math.pi * ((RIM_OD - 2 * STRUCT_WALL) / 2)
-                          / (CABLE_D + STRUCT_WALL))
+                          / (CABLE_D + SPOKE_WEB_W))
 _SPOKE_OFFSET = 180.0 / _N_SPOKES                   # half-pitch
 
 # ── Split-collar pinch clamp (height lock) ──────────────────────────────────
@@ -56,10 +59,13 @@ CLAMP_BOSS_H      = 12.0    # boss rises ABOVE the 7 mm rim so the screw hole si
                             # the side). The collar still clamps over the 7 mm height.
 CLAMP_BOSS_R0     = _COLLAR_ID / 2          # boss inner radius (collar bore)
 CLAMP_BOSS_R1     = 44.0                     # boss outer radius (< RIM_ID/2 = 54, clears the wall)
-CLAMP_INSERT_LIP_T = 1.0    # lip length the insert seats against (its hole is the
-                            # Ø M2_SHAFT_CLR_D the screw passes through)
-# Lug must fit the heat-set insert (M2_INSERT_DEPTH) PLUS the seating lip.
-CLAMP_LUG_W       = M2_INSERT_DEPTH + CLAMP_INSERT_LIP_T   # 4.5
+# Far lug is a standard M2 anchor (self-tap now, insert later): the Ø3.3 × 3.5
+# pocket opens at the lug's OUTER face — the face a soldering iron can reach —
+# and M2_MIN_BITE of Ø2.2 self-tap runs from there to the slit. So the lug must
+# be M2_ANCHOR_MIN_WALL wide. (In practice this clamp always gets the insert,
+# because the pinch pressure needs a real thread — but the geometry is the same
+# standard anchor as everywhere else, not a special case.)
+CLAMP_LUG_W       = M2_ANCHOR_MIN_WALL   # 5.5 = 3.5 pocket + 2.0 self-tap bite
 
 
 def _clamp_features():
@@ -95,22 +101,18 @@ def _clamp_features():
              centered=(False, True, False))
     )
 
-    def _cyl_y(d, h, y0, ydir):
-        return cq.Workplane().add(cq.Solid.makeCylinder(
-            d / 2, h, pnt=cq.Vector(cx, y0, cz), dir=cq.Vector(0, ydir, 0)))
+    # +Y head lug: head recess at the outer face + shaft clearance to the slit,
+    # so the screw spins free here and can PULL the two lugs together.
+    head_bore = m2_head_bore_cutter((cx, lug_outer_y, cz), (0, -1, 0),
+                                    clr_len=CLAMP_LUG_W + 0.25, overshoot=0.25)
+    # -Y far lug: the standard M2 anchor, mouthed at the -Y OUTER face — the
+    # accessible side, where the insert melts in. Its Ø2.2 self-tap continues
+    # inward to the slit, so the screw (arriving from the slit side) bites the
+    # plastic on the first build and threads into the insert once one is fitted.
+    anchor = m2_anchor_cutter((cx, -lug_outer_y, cz), (0, 1, 0),
+                              depth=CLAMP_LUG_W, overshoot=0.5)
 
-    # +Y head lug: head recess at the outer face + shaft clearance to the slit.
-    head_recess = _cyl_y(M2_HEAD_RECESS_D, M2_HEAD_RECESS_H + 0.25, lug_outer_y + 0.25, -1)
-    head_clr    = _cyl_y(M2_SHAFT_CLR_D, CLAMP_LUG_W + 0.5, lug_outer_y + 0.25, -1)
-    # -Y insert lug: heat-set pilot drilled from the -Y OUTER face (the
-    # accessible side). The insert seats against a CLAMP_INSERT_LIP_T (1 mm)
-    # long lip on the slit side, whose bore is the Ø M2_SHAFT_CLR_D the screw
-    # passes through to pull the insert against it.
-    pilot_inner_y = -lug_outer_y + M2_INSERT_DEPTH         # pilot's inner (slit-facing) end
-    pilot   = _cyl_y(M2_INSERT_PILOT_D, M2_INSERT_DEPTH + 0.5, -lug_outer_y - 0.5, +1)
-    lip_clr = _cyl_y(M2_SHAFT_CLR_D, (pilot_inner_y * -1) + half_y + 1.0, pilot_inner_y, +1)
-
-    cut = slit.union(head_recess).union(head_clr).union(pilot).union(lip_clr)
+    cut = slit.union(head_bore).union(anchor)
     return (boss.rotate((0, 0, 0), (0, 0, 1), CLAMP_SLIT_ANGLE),
             cut.rotate((0, 0, 0), (0, 0, 1), CLAMP_SLIT_ANGLE))
 
@@ -128,7 +130,7 @@ def _build_cable_top_rim():
         sp = (
             cq.Workplane("XY")
             .center((r_in + r_out) / 2, 0)
-            .box(r_out - r_in, STRUCT_WALL, TOP_RIM_H, centered=(True, True, False))
+            .box(r_out - r_in, SPOKE_WEB_W, TOP_RIM_H, centered=(True, True, False))
             .rotate((0, 0, 0), (0, 0, 1), ang)
         )
         part = part.union(sp)

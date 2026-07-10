@@ -511,16 +511,21 @@ def _bracket_envelope():
 
 
 def cut_from_housing(housing):
-    """Carve the bracket pocket out of the housing AND apply the M2
-    cap-screw + heat-set insert pattern at each chunk's centerline. The
-    pattern matches the axle cross-pin exactly: full-Y Ø2.3 clearance,
-    Ø4.1 × 2 head counterbore on +Y, Ø3.3 × 3.5 insert pilot (with cone
-    chamfer) on -Y. The bracket chunk fills the middle of this hole with
-    a matching Ø2.3 pass-through, so the assembled M2 clamps the chunk
-    between the two housing walls (head on +Y, insert in -Y wall).
-    Orientation matches the axle cross-pin so the head pocket sits on
-    the print's top face (no flat-bottomed overhang) and the insert
-    pilot's cone chamfer sits on the build-plate side."""
+    """Carve the bracket pocket out of the housing AND apply the standard M2
+    anchor (self-tap now, heat-set insert later) at each chunk's centerline.
+    The pattern matches the axle cross-pin exactly: full-Y Ø2.2 self-tap bore,
+    Ø4.1 × 2 head counterbore on +Y, Ø3.3 × 3.5 insert pocket on -Y. The
+    bracket chunk fills the middle of this hole with a Ø2.4 clearance
+    pass-through, so the assembled M2 clamps the chunk between the two housing
+    walls (head on +Y, anchor in the -Y wall). Orientation matches the axle
+    cross-pin so the head pocket sits on the print's top face (no flat-bottomed
+    overhang) and the insert pocket opens on the build-plate side.
+
+    CAVEAT: the -Y anchor wall is only 4.6 mm here, so the pocket leaves just
+    1.1 mm of Ø2.2 self-tap below it — under the M2_MIN_BITE (2.0 mm) rule of
+    thumb. The screw holds on the first build, but this is the project's
+    weakest self-tap; fitting the insert is the intended long-term state. To
+    reach a full bite the -Y wall needs ~1 mm more material (see CLAUDE.md)."""
     from . import housing as _h
     out = housing.cut(_bracket_envelope(), clean=False)
     # Chamfer the housing plate material above the TOP strip. The
