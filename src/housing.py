@@ -44,9 +44,9 @@ from .dimensions import (
     HOUSING_GAP_PANCAKE,
     SPOOL_H, STRUCT_WALL,
 )
-# Shared fastener spec + hole primitives (freecad/fasteners.py). `.dimensions`
-# already put the freecad/ folder on sys.path, so this flat import resolves.
-from fasteners import M2, anchor_cutter, pocket_cutter, selftap_cutter
+# Shared fastener spec + hole primitives (cadkit/fasteners.py). `.dimensions`
+# already put the cadkit/ folder on sys.path, so this flat import resolves.
+from cadkit.fasteners import M2, anchor_cutter, pocket_cutter, selftap_cutter
 from .helpers import cyl, cone_solid
 from .spool import (RIM_OD, RIM_H, RATCHET_BAND_H, BRAKE_RIM_Z_LO,
                     SPOOL_HORIZONTAL_CLEARANCE)
@@ -315,7 +315,7 @@ LEVER_PIVOT_BOSS_OD = 6.0 # reinforcement boss OD coaxial with each pivot
 HOUSING_BOSS_EXT = SPRING_SPACER_T   # 0.4
 
 LEVER_SCREW_CLR_D      = M2.selftap_d         # 2.2 — the M2 self-taps the housing side; the lever's own pivot_hole is the Ø2.4 clearance bore so it can pivot free
-# Self-tap NOW, heat-set insert LATER (Archive/3D/CLAUDE.md, freecad/fasteners.py):
+# Self-tap NOW, heat-set insert LATER (Archive/3D/CLAUDE.md, cadkit/fasteners.py):
 # the M2 self-taps the Ø2.2 bore directly on the first build, and a Ø3.3 × 3.5
 # pocket waits concentric at the bore MOUTH, unused until those plastic threads
 # strip. (This pocket was previously pinned to Ø2.2 — i.e. deleted — back when

@@ -9,14 +9,10 @@ import math
 import pathlib
 import sys
 
-# Shared fastener dims live in the Archive/3D freecad/ folder (one source for
-# ALL projects). Add it to sys.path the same way build.py does, then import flat
-# and re-export — so the rest of the project keeps doing `from .dimensions
-# import M2_…` unchanged.
-_FREECAD = pathlib.Path(__file__).resolve().parents[2] / "freecad"
-if str(_FREECAD) not in sys.path:
-    sys.path.insert(0, str(_FREECAD))
-from fasteners import (  # noqa: E402
+# Shared fastener dims live in the vendored cadkit/ package (one source for ALL
+# projects) — import flat and re-export, so the rest of the project keeps doing
+# `from .dimensions import M2_…` unchanged.
+from cadkit.fasteners import (  # noqa: E402
     M2_SELFTAP_D, M2_SHAFT_CLR_D, M2_HEAD_RECESS_D, M2_HEAD_RECESS_H,
     M2_INSERT_PILOT_D, M2_INSERT_DEPTH,
 )
@@ -286,7 +282,7 @@ RATCHET_TOOTH_OFFSET_DEG = math.degrees(
 ) % _RATCHET_PITCH_DEG
 
 # ── M2 cap-screw / heat-set-insert constants ─────────────────────────────────
-# Imported at the top of this module from the SHARED freecad/fasteners.py, so
+# Imported at the top of this module from the SHARED cadkit/fasteners.py, so
 # every Archive/3D project uses one set of numbers (M2_SELFTAP_D, M2_SHAFT_CLR_D,
 # M2_HEAD_RECESS_D/H, M2_INSERT_PILOT_D, M2_INSERT_DEPTH). Used everywhere the
 # spool consumes an M2 cap screw (lever pivots, axle cross-pins, axle spring

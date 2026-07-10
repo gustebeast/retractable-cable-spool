@@ -16,9 +16,8 @@ escape `cut_anchor()` demands, kept in one greppable place.
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "freecad"))
 
-from fasteners import M2, measured_bite  # noqa: E402
+from cadkit.fasteners import M2, measured_bite  # noqa: E402
 from src import housing as H  # noqa: E402
 from src import mount_bracket as MB
 from src.dimensions import PANCAKE_CROSS_PIN_Z

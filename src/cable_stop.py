@@ -23,9 +23,9 @@ from .dimensions import (
     M2_HEAD_RECESS_D,
 )
 from .helpers import cyl
-# Shared M2 hole geometry (freecad/fasteners.py). `.dimensions` already put the
-# freecad/ folder on sys.path, so this flat import resolves.
-from fasteners import M2_ANCHOR_MIN_WALL, cut_m2_anchor, cut_m2_head_bore
+# Shared M2 hole geometry (cadkit/fasteners.py). `.dimensions` already put the
+# cadkit/ folder on sys.path, so this flat import resolves.
+from cadkit.fasteners import M2_ANCHOR_MIN_WALL, cut_m2_anchor, cut_m2_head_bore
 
 
 CABLE_STOP_ID_CLAMPED = 10.0   # closed bore Ø — passes the Ø8 cable, blocks the Ø12 head

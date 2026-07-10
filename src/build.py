@@ -29,14 +29,13 @@ import sys
 
 import cadquery as cq
 
-# Shared helpers from the Archive/3D freecad/ folder: color() (cq.Color from hex
+# Shared helpers from the Archive/3D cadkit/ folder: color() (cq.Color from hex
 # strings, 0..255 tuples, and SVG/X11 names), export_step() (names each STEP
 # product after its file), and show() (opens/refreshes the FreeCAD viewer hub).
-# See freecad/README.md.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "freecad"))
-from cq_colors import color
-from step_export import export_step
-from freecad_view import show
+# See cadkit/README.md.
+from cadkit.cq_colors import color
+from cadkit.step_export import export_step
+from cadkit.freecad import show
 
 from .helpers import heal, cyl
 from .dimensions import SPOOL_H
