@@ -23,9 +23,9 @@ from .dimensions import (
 )
 from .spool import RIM_ID, RIM_OD, CABLE_D, SPOKE_WEB_W
 from .helpers import cyl, make_keys
-# Shared M2 hole geometry (freecad/fasteners.py). `.dimensions` already put the
-# freecad/ folder on sys.path, so this flat import resolves.
-from fasteners import M2_ANCHOR_MIN_WALL, m2_anchor_cutter, m2_head_bore_cutter
+# Shared M2 hole geometry (cadkit/fasteners.py). `.dimensions` already put the
+# cadkit/ folder on sys.path, so this flat import resolves.
+from cadkit.fasteners import M2_ANCHOR_MIN_WALL, m2_anchor_cutter, m2_head_bore_cutter
 
 
 COLLAR_WALL = 2.0                                   # radial wall of the hub-wrapping collar

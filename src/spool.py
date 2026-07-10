@@ -32,9 +32,9 @@ from .helpers import (
     lever_flange_solid, pancake_flange_solid,
     spokes_solid,
 )
-# Shared M2 hole geometry (freecad/fasteners.py). `.dimensions` already put the
-# freecad/ folder on sys.path, so this flat import resolves.
-from fasteners import m2_insert_bore_cutter
+# Shared M2 hole geometry (cadkit/fasteners.py). `.dimensions` already put the
+# cadkit/ folder on sys.path, so this flat import resolves.
+from cadkit.fasteners import m2_insert_bore_cutter
 
 # No drum-skirt extension — the lever-flange chamfer apex now sits ABOVE
 # DRUM_BOTTOM_Z (chamfer rises up into the drum region), so the chamfer
