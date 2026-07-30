@@ -1,150 +1,122 @@
-"""Main spool axle: shaft + bearing-retention shoulders + cross-pin hole +
-center mortise-and-tenon joint. The axle is printed in TWO halves that
-glue together at the joint — the tape-spring assembly only has a 13.46 mm
-opening, and the joint must pass through it, so we trade single-piece
-removability for shape: tenon Ø AXLE_PRINT_D (= 7.9) descends from the
-pancake-side (TOP) half; mortise (Ø JOINT_MORTISE_HOLE_D bore inside Ø
-JOINT_MORTISE_OD = 11.45 wall) on the lever-side (BOTTOM) half. Joint
-glued.
+"""AXLE — the proven original two-half axle (center mortise+tenon glue joint,
+spring-strip slit, bearing shoulders), MIRRORED in z to match the flipped
+spring housing and EXTENDED to this design's frame:
 
-Print orientation:
-  • BOTTOM half: print -z (axle bottom) on the bed, building toward +z.
-    The cap at the bore's closed bottom becomes a "hole appears" event
-    (the previous solid layer supports the new annular layer), so no
-    overhang there. The mortise collar runs all the way down to the
-    bottom bearing seat, so there's no separate lever lip: the collar's
-    chamfered foot (Ø shaft → Ø mortise) IS the bottom bearing shoulder,
-    and its 45° rise self-supports the collar's -z underside. The bearing
-    seats at the chamfer's bottom (where the Ø begins to grow from the shaft).
-  • TOP half: print -z (tenon tip) on the bed, building toward +z. The
-    pancake lip's -z face is the expanding overhang; a 45° cone fixes it.
+  * the halves swap roles under the mirror — the original design's collar/mortise half becomes
+    this design's TOP half (its chamfered collar foot now seats the fused +Z bearing),
+    the original design's tenon/lip half becomes this design's BOTTOM half (its lip now retains the
+    removable cap's bearing from above);
+  * the bottom end extends down flush with the bottom plus underside, the top
+    end trims flush with the top plus top — both plus centres carry AXLE_BORE_D
+    slip bores (see frame.py).
 
-Slit through the joint (for the spring leg to engage) — TODO next."""
+FIXING HARDWARE: the original design's M2 cross-pin is replaced by a printed PLASTIC ROD
+(axle_pin) through a horizontal plan-45° bore (+xy → −xy) through the
+frame_top crossing AND the axle at the crossing mid-height — inserted from
+the open quadrant between the plus arms. The spring's constant radial load on
+the axle friction-locks the rod; no thread needed.
+"""
+
+import math
 
 import cadquery as cq
 
-from .dimensions import (
-    AXLE_CROSS_HOLE_D, AXLE_D, AXLE_EXTRA_LEVER, AXLE_H,
-    AXLE_LIP_H, AXLE_LIP_OD, AXLE_PRINT_D,
-    FIT_CLR, STRUCT_WALL,
-    LEVER_CAP_SEAT_Z1,
-    PANCAKE_CAP_SEAT_Z0, PANCAKE_CROSS_PIN_Z,
+from src.axle_base import axle_bottom as _base_bottom, axle_top as _base_top
+from src.dimensions import SPOOL_H, AXLE_PRINT_D
+from src.helpers import cyl, heal
+from cadkit.holes import teardrop_hole
+from .params import (
+    BOT_RIB_Z0, TOP_RIB_Z1, ROD_D, ROD_HOLE_D, ROD_L, ROD_Z, ROD_Z_BOT,
+    HEX_DRIVE_AC, HEX_DRIVE_L, HEX_DRIVE_Z0,
+    WIND_TOOL_CLR, WIND_TOOL_L, WIND_TOOL_W, WIND_TOOL_T,
+    WIND_TOOL_BOSS_OD, WIND_TOOL_BOSS_H,
 )
-from .helpers import cone_solid, cyl
+
+_S45 = 1.0 / math.sqrt(2.0)
 
 
-# ── Mortise-and-tenon center joint ─────────────────────────────────────────
-JOINT_TENON_D        = AXLE_PRINT_D                          # 7.9 — male, on TOP half
-JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR            # 8.2 — female bore (FIT_CLR per side)
-JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.4 — outer wall
-JOINT_H              = 23.0                                  # bore depth = tenon engagement = slit
-                                                             # length. Lengthened from 18 to grip more
-                                                             # spring strip: the mortise top moved up
-                                                             # (only MORTISE_TOP_GAP below the top
-                                                             # bearing lip) and the collar now runs all
-                                                             # the way down to the BOTTOM bearing seat,
-                                                             # taking over the (removed) bottom bearing
-                                                             # lip. Below the bore the collar stays
-                                                             # solid (cap + bearing-shoulder foot).
-MORTISE_TOP_GAP      = 4.0                                   # gap from the mortise top up to the
-                                                             # top-axle bearing lip (was 5.7)
-
-# ── Spring-strip slit ──────────────────────────────────────────────────────
-# Each half has its own slit (cut through Y) so the parts can be slid down
-# onto the spring's metal strip from each end of the joint. The slits open at
-# the piece's joint-side face (bottom half: +z = mortise opening; top half:
-# -z = tenon tip). Where both slits coexist along Z, the strip is held by
-# both halves — that's the engagement region.
-SLIT_W            = 1.0           # X width of the slit
-SLIT_OVERLAP_H    = JOINT_H       # slit overlap == bore depth (the slit fills the joint exactly)
-SLIT_EACH_H       = (SLIT_OVERLAP_H + JOINT_H) / 2  # = JOINT_H — each slit spans the whole joint
+def _flip_z(wp):
+    """Mirror about z = SPOOL_H/2 — the same flip applied to the spring
+    housing, so every axle shoulder lands on its (flipped) bearing."""
+    return cq.Workplane(obj=wp.val().mirror("XY")).translate((0, 0, SPOOL_H))
 
 
-def _axle_cross_hole(z_center):
-    """M2 clearance hole through the axle, axis along y, centered at z."""
-    return cq.Workplane("XY").add(cq.Solid.makeCylinder(
-        AXLE_CROSS_HOLE_D / 2, AXLE_D + 2,
-        pnt=cq.Vector(0, -(AXLE_D / 2 + 1), z_center),
-        dir=cq.Vector(0, 1, 0),
-    ))
+def rod_hole(z, up=1.0):
+    """A diagonal rod BORE: horizontal, plan-45° (+xy → −xy), through the axle
+    at height `z` (ROD_Z at the top crossing, ROD_Z_BOT at the bottom one).
+    frame.py cuts the SAME bores through the plus crossings so the holes line
+    up by construction. Cut as a TEARDROP (cadkit.holes — a sideways round
+    bore's ceiling sags); `up` is the cut part's PRINT direction in world z:
+    +1 for the frames (print −Z→+Z), −1 for the axle halves (print FLIPPED)
+    — each part's ceiling peak points its own print-up, while the round
+    lower halves (where the rod actually bears) still line up exactly."""
+    L = 60.0
+    return teardrop_hole(ROD_HOLE_D, L,
+                         (L / 2.0 * _S45, L / 2.0 * _S45, z),
+                         (-_S45, -_S45, 0.0), (0.0, 0.0, up))
 
 
-def _build_halves():
-    # 45° cone height transitioning the Ø AXLE_PRINT_D shaft to the Ø AXLE_LIP_OD
-    # TOP (pancake) bearing lip.
-    cone_h = (AXLE_LIP_OD - AXLE_PRINT_D) / 2
-    # The mortise collar's chamfered foot (Ø AXLE_PRINT_D → Ø JOINT_MORTISE_OD)
-    # doubles as the BOTTOM bearing shoulder, so it gets its own cone height.
-    mortise_cone_h = (JOINT_MORTISE_OD - AXLE_PRINT_D) / 2
-
-    # Top bearing lip (pancake) — unchanged.
-    pancake_lip_inner_z = PANCAKE_CAP_SEAT_Z0 - AXLE_LIP_H        # bottom face of pancake lip
-    cavity_top_z        = pancake_lip_inner_z - cone_h            # bottom of pancake cone (top lip foot)
-
-    # Joint Z layout. The mortise TOP sits MORTISE_TOP_GAP below the top bearing
-    # lip; the bore runs JOINT_H deep below that (= slit length). The collar runs
-    # FURTHER down to the bottom bearing seat (LEVER_CAP_SEAT_Z1) — its chamfered
-    # foot replaces the old separate bottom bearing lip — so below the bore the
-    # collar stays solid (cap + shoulder foot).
-    mortise_top_z   = cavity_top_z - MORTISE_TOP_GAP             # 37
-    bore_bottom_z   = mortise_top_z - JOINT_H                    # 14 (= tenon tip = slit bottom)
-    collar_bottom_z = LEVER_CAP_SEAT_Z1 + mortise_cone_h         # 9.75 (chamfer foot on the seat)
-
-    axle_z_bot = -AXLE_EXTRA_LEVER
-    axle_z_top = -AXLE_EXTRA_LEVER + AXLE_H
-
-    # ── BOTTOM half (lever-side) — shaft + mortise collar. NO separate bearing
-    # lip: the collar's chamfered foot IS the bottom bearing shoulder. ──
-    # Print -axle_z (axle bottom) on the bed → grows toward +axle_z.
-    bottom = cyl(AXLE_PRINT_D, collar_bottom_z - axle_z_bot, z=axle_z_bot)   # shaft up to collar foot
-    # Chamfer Ø AXLE_PRINT_D → Ø JOINT_MORTISE_OD bottoming out at the bearing
-    # seat (LEVER_CAP_SEAT_Z1), so the bearing still seats there; its 45° rise
-    # also makes the collar's -z underside self-supporting in the print direction.
-    bottom = bottom.union(cone_solid(
-        d_bottom=AXLE_PRINT_D, d_top=JOINT_MORTISE_OD,
-        h=mortise_cone_h, z_base=collar_bottom_z - mortise_cone_h,
-    ))
-    # Mortise collar (solid Ø JOINT_MORTISE_OD) from the foot up to the mortise top.
-    bottom = bottom.union(cyl(JOINT_MORTISE_OD,
-                              mortise_top_z - collar_bottom_z,
-                              z=collar_bottom_z))
-    # Bore (Ø JOINT_MORTISE_HOLE_D, JOINT_H deep, opens at top). Below it the
-    # collar stays solid down to collar_bottom_z (cap + bearing-shoulder foot).
-    bottom = bottom.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=bore_bottom_z))
-    # Spring-strip slit — opens at +z (mortise top), extends SLIT_EACH_H
-    # down. Cuts through the axle in Y.
-    slit_y_overshoot = JOINT_MORTISE_OD + 10
-    bottom = bottom.cut(
-        cq.Workplane("XY")
-        .workplane(offset=mortise_top_z - SLIT_EACH_H)
-        .rect(SLIT_W, slit_y_overshoot)
-        .extrude(SLIT_EACH_H)
-    )
-
-    # ── TOP half (pancake-side) — tenon (= shaft continuation) + pancake lip ──
-    # Print -axle_z (tenon tip) on the bed → grows toward +axle_z. Pancake
-    # lip's -z face is the upward-expanding overhang in this direction →
-    # 45° cone.
-    top = cyl(AXLE_PRINT_D, axle_z_top - bore_bottom_z, z=bore_bottom_z)
-    # Cone below pancake lip: Ø AXLE_PRINT_D at z=pancake_lip_inner_z - cone_h
-    # (shaft) → Ø AXLE_LIP_OD at z=pancake_lip_inner_z (lip bottom).
-    top = top.union(cone_solid(
-        d_bottom=AXLE_PRINT_D, d_top=AXLE_LIP_OD,
-        h=cone_h, z_base=pancake_lip_inner_z - cone_h,
-    ))
-    top = top.union(cyl(AXLE_LIP_OD, AXLE_LIP_H, z=pancake_lip_inner_z))
-    # Cross-pin hole — pancake-side only.
-    top = top.cut(_axle_cross_hole(PANCAKE_CROSS_PIN_Z))
-    # Spring-strip slit — opens at -z (tenon tip), extends SLIT_EACH_H up.
-    # Cuts through the tenon in Y.
-    top = top.cut(
-        cq.Workplane("XY")
-        .workplane(offset=bore_bottom_z)
-        .rect(SLIT_W, slit_y_overshoot)
-        .extrude(SLIT_EACH_H)
-    )
-
-    return bottom, top
+def _build_bottom():
+    """BOTTOM half = original top half mirrored (tenon up, retention lip at the
+    cap bearing), extended down through the bottom plus. Mirrored span was
+    z −6..37; the plain-shaft stub grows to BOT_RIB_Z0, then continues as the
+    PRE-WIND HEX DRIVE: a male hex inscribed in the shaft profile (bearing
+    still slides over it) sticking HEX_DRIVE_L below the frame — turned with
+    a 7 mm bit or the printed winding_tool to tension the spring after
+    assembly, before the bottom rod pin locks the axle. In the flipped print
+    the hex points up: a vertical prism, overhang-free."""
+    b = _flip_z(_base_top)
+    b = b.union(cyl(AXLE_PRINT_D, -5.0 - BOT_RIB_Z0, z=BOT_RIB_Z0))  # 1 mm overlap
+    b = b.union(cq.Workplane("XY").workplane(offset=HEX_DRIVE_Z0)
+                .polygon(6, HEX_DRIVE_AC).extrude(HEX_DRIVE_L + 1.0))  # 1 mm overlap
+    b = b.cut(rod_hole(ROD_Z_BOT, up=-1.0))       # axle prints flipped
+    return heal(b)
 
 
-axle_bottom, axle_top = _build_halves()
+def _build_top():
+    """TOP half = original bottom half mirrored (mortise collar down, its foot
+    seating the fused bearing), trimmed flush with the top plus top and bored
+    for the diagonal rod."""
+    t = _flip_z(_base_bottom)                                 # spans 14..68
+    t = t.cut(cyl(AXLE_PRINT_D + 4.0, 10.0, z=TOP_RIB_Z1))    # trim above 64.2
+    t = t.cut(rod_hole(ROD_Z, up=-1.0))           # axle prints flipped
+    return heal(t)
+
+
+def _build_pin():
+    """The plastic rod, modelled as a plain Ø ROD_D × ROD_L cylinder along Z
+    (prints standing); build.py places it along the +xy→−xy diagonal."""
+    return cyl(ROD_D, ROD_L, z=0)
+
+
+def _build_winding_tool():
+    """The printed WINDING TOOL for users without a 7 mm bit: two flat handle
+    arms and a centre BOSS whose female hex socket runs the FULL hex-drive
+    length for maximum grip — slip it over the hex drive and turn by the
+    handle ends. Prints flat −Z→+Z: arms are a thin plate, the boss rises
+    above them (vertical walls, overhang-free); the socket is a vertical
+    through-hole. The arm plate is a STADIUM (slot) profile — full-radius
+    rounded ends for a comfortable grip."""
+    tool = (cq.Workplane("XY")
+            .slot2D(WIND_TOOL_L, WIND_TOOL_W).extrude(WIND_TOOL_T)
+            .union(cyl(WIND_TOOL_BOSS_OD, WIND_TOOL_BOSS_H, z=0)))
+    socket = (cq.Workplane("XY").workplane(offset=-0.5)
+              .polygon(6, HEX_DRIVE_AC + WIND_TOOL_CLR)
+              .extrude(WIND_TOOL_BOSS_H + 1.0))
+    return heal(tool.cut(socket))
+
+
+axle_bottom = _build_bottom()
+axle_top = _build_top()
+axle_pin = _build_pin()
+winding_tool = _build_winding_tool()
+
+
+def pin_in_place(z=ROD_Z):
+    """A rod placed as installed: along the plan-45° diagonal, centred on the
+    axle at height `z` (for the assembly view — one at each crossing)."""
+    return (axle_pin
+            .translate((0, 0, -ROD_L / 2.0))                  # centre on origin
+            .rotate((0, 0, 0), (0, 1, 0), 90)                 # along +X
+            .rotate((0, 0, 0), (0, 0, 1), 45)                 # along +xy diagonal
+            .translate((0, 0, z)))

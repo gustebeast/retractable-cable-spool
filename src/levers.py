@@ -1,582 +1,521 @@
-"""Ratchet and brake levers — RADIAL engagement, 90°-rotated layout.
+"""ratchet + brake levers — the original design's radial-engagement design, hardware-free.
 
-Each lever is a flat plate in the X-Z plane (thickness LEVER_T in Y) riding
-on a Y-axis M2 pivot screw through the front-housing block. It hangs DOWN
-the +X side of the housing; the user reaches under and pulls the handle
-toward +X. See housing.py's header for the forced engagement directions:
+Ported from src/levers.py: XZ plate levers (LEVER_T=10 thick, HANDLE_W=6) at
++X, Y-axis pivots, pull = +X; RATCHET pivot ABOVE its tooth band (rest =
+ENGAGED, pull swings the pawl out), BRAKE pivot BELOW its band (rest = OFF,
+pull swings the pad in); the pawl edge is the exact tooth-profile negative +
+catch bump; the brake pad is the tilted-face + rectangular-TPU design solved
+for handoff timing / mid-travel parallelism / pad-bottom landing.
 
-  - RATCHET pivot sits ABOVE the teeth band (RATCHET_PIVOT_Z=16.1, teeth at
-    z=0..RATCHET_BAND_H=6). Rest = ENGAGED: the pawl's inner edge meshes
-    against the rim teeth at r=R_ROOT=57.4. Pulling the handle swings the
-    pawl outward to clear the teeth.
-  - BRAKE pivot sits BELOW the brake band (BRAKE_PIVOT_Z=2, band at
-    z=BRAKE_RIM_Z_LO=7.5..RIM_H). Rest = DISENGAGED: the pad sits lifted
-    off the smooth band (r=58.9). Pulling the handle swings the pad inward
-    onto the band.
+differences:
+  * the plates FLANK the +X beam (ratchet y 6..16, brake −16..−6) instead of
+    riding a housing spine;
+  * pivots are printed Ø4 PINS spanning fork posts on BOTH sides of each
+    lever (frame.py grows the posts; the −Z→+Z print direction allows it);
+  * NO hardware: return force = 95A TPU blocks compressed between each
+    handle tail's +X face and a fixed abutment post (pull compresses,
+    release re-seats; the ratchet's rest stop is the tooth valley itself,
+    the brake's is a stop post under the wall);
+  * the arms reach the separator rims through open-top WALL WINDOWS.
 
-The rim already carries both bands (spool.py), so this module no longer
-cuts teeth into the body — apply_to_main_body is a no-op pass-through.
+The original kinematic assertion suite runs at import (src/lever_kinematics.py).
+TPU parts (brake pad + 2 spring blocks) print in 95A TPU — black in the
+viewer per the cadkit colour convention.
 """
 
 import math
+
 import cadquery as cq
 
-from .dimensions import STRUCT_WALL, M2_HEAD_RECESS_D, FIT_CLR, RATCHET_DEPTH, RATCHET_TEETH
-from .spool import RIM_OD, RIM_ID, RIM_H, RATCHET_BAND_H, _cyl_ratchet_band
-from .helpers import cyl
+from src.helpers import cyl
+from cadkit.joinery import hook_tenon, hook_mortise
+from .separator import ratchet_star_world
 from .lever_kinematics import assert_kinematics, R_ROOT
-from .housing import (
-    HOUSING_W, LEVER_RIM_H, LEVER_PIVOT_BOSS_OD,
-    RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-    BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-    RATCHET_OUTER_TRAVEL_DEG, BRAKE_INNER_TRAVEL_DEG,
-    LEVER_REST_PRECOMP_DEG,
-    M2_SHAFT_CLR_D,
-    STOP_PIN_R, STOP_PIN_H, STOP_PIN_HOLE_D,
-    RATCHET_LEVER_PIN_ALPHA, BRAKE_LEVER_PIN_ALPHA,
-    SPRING_LEG_PIN_OFFSET_DEG, spring_leg_hole_dir_alpha_deg,
-    stop_pin_solid, stop_pin_hole, pivot_boss_sector,
+from .params import (
+    FLOOR_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
+    SEP_Z0, SEP_Z1, RATCHET_H, CONE_H, R_OUT_COIL, CABLE_D,
+    LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG, RATCHET_STOP_DEG,
+    RATCHET_LEV_Y0, RATCHET_LEV_Y1, BRAKE_LEV_Y0, BRAKE_LEV_Y1,
+    RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HANDLE_Z_BOT,
+    PIN_SQ_S, PIN_SQ_LEVER_CLR, LEVER_BOSS_OD,
+    PIN_PRETWIST_DEG, PIN_KEY_BASE_DEG, BRAKE_RUBBER_T,
+    PAD_JOINT_CLR, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
+    PAD_FLANGE_H, PAD_FLANGE_T, WALL_SPLIT_Z,
 )
 
-# ── Plate placement in Y ────────────────────────────────────────────────────
-LEVER_T       = 10.0                             # plate thickness (Y) — grown
-                                                 # 4→6→10. Wider Y footprint
-                                                 # gives more pad surface area
-                                                 # (and a longer contact line
-                                                 # with the band as the pad
-                                                 # sweeps through engagement).
-LEVER_HANDLE_W = 6.0                             # vertical handle's X width
-                                                 # (and the horizontal arm's
-                                                 # +X overshoot past the
-                                                 # pivot). Kept at 6 while
-                                                 # LEVER_T grew, so the grip
-                                                 # stays comfortable in the
-                                                 # finger and the +X tail of
-                                                 # the horizontal arm doesn't
-                                                 # eat into the housing wall.
-LEVER_INNER_Y = HOUSING_W / 2 + LEVER_RIM_H      # 14.3 — inner face, past the gap
-RATCHET_Y0, RATCHET_Y1 = LEVER_INNER_Y, LEVER_INNER_Y + LEVER_T   #  14.3 .. 24.3
-BRAKE_Y1,  BRAKE_Y0    = -LEVER_INNER_Y, -LEVER_INNER_Y - LEVER_T # -14.3 .. -24.3
+R_RIM = FLOOR_OD / 2.0                            # 72.9 — band / tooth-tip radius
+_HW   = LEVER_HANDLE_W / 2.0
 
-# M2 head recess in the lever's OUTER face — Ø M2_HEAD_RECESS_D (= 4.1 mm)
-# bored LEVER_HEAD_RECESS_H deep. The depth is set so that the M2x20 screw
-# shaft is equally split between the lever and the housing:
-#
-#   shaft_in_lever = LEVER_T - LEVER_HEAD_RECESS_H    (left after the recess)
-#   air_gap        = LEVER_INNER_Y - HOUSING_W/2      (= LEVER_RIM_H = 3.3)
-#   shaft_in_housing = 20 - shaft_in_lever - air_gap
-#
-# Setting shaft_in_lever == shaft_in_housing and solving for the depth:
-#   LEVER_HEAD_RECESS_H = LEVER_T - (20 - air_gap) / 2
-#                       = 10 - 16.7/2 = 1.65
-M2_SCREW_LEN          = 20.0
-_LEVER_AIR_GAP        = LEVER_INNER_Y - HOUSING_W / 2             # 3.3
-_SCREW_IN_LEVER       = (M2_SCREW_LEN - _LEVER_AIR_GAP) / 2       # 8.35
-LEVER_HEAD_RECESS_H   = LEVER_T - _SCREW_IN_LEVER                 # 1.65
+# Band z-geometry (world): the separator seats at RIM_SEAT_Z, teeth first.
+RATCHET_BAND_Z0 = SEP_Z0                          # 19.5
+RATCHET_BAND_Z1 = SEP_Z0 + RATCHET_H              # 24.5
+BRAKE_BAND_Z0   = RATCHET_BAND_Z1 + CONE_H        # 26.0 — brake band bottom
+BRAKE_BAND_Z1   = SEP_Z1                          # 31.5
 
-HANDLE_Z_BOT = -19.0      # common grab height for both handles. Raised again
-                          # (was -26) thanks to the ratchet/brake band swap,
-                          # which lifts the brake pivot above the spool bottom.
-
-R_RIM        = RIM_OD / 2                        # 58.9 — brake-band / tooth-tip radius
-
-# Rubber pad bonded to the brake pad's rim-facing face (viz + clearance).
-BRAKE_RUBBER_T = 3.3
+# Pawl block spans the tooth band; kinematics sample at its mid point.
+PAWL_Z_LO, PAWL_Z_HI = RATCHET_BAND_Z0, RATCHET_BAND_Z1
+PAWL_Y_MID = (RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0        # 11
+PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2.0                  # 22
 
 
-def _arc_strip(r_in, r_out, y_near, y_far, z_lo, z_hi):
-    """An annular strip between radii r_in/r_out, clipped to the lever's
-    y-range [y_near, y_far], extruded in Z over [z_lo, z_hi]. The inner/outer
-    faces follow the rim arc so the contact conforms to the cylinder at the
-    lever's azimuth (proper engagement, not a flat chord). Requires
-    r_in > |y|."""
-    x_in_near  = math.sqrt(r_in ** 2  - y_near ** 2)
-    x_out_near = math.sqrt(r_out ** 2 - y_near ** 2)
-    x_in_far   = math.sqrt(r_in ** 2  - y_far ** 2)
-    x_out_far  = math.sqrt(r_out ** 2 - y_far ** 2)
-    y_mid = (y_near + y_far) / 2
-    x_in_mid  = math.sqrt(r_in ** 2  - y_mid ** 2)
-    x_out_mid = math.sqrt(r_out ** 2 - y_mid ** 2)
-    return (cq.Workplane("XY").workplane(offset=z_lo)
-            .moveTo(x_in_far, y_far).lineTo(x_out_far, y_far)
-            .threePointArc((x_out_mid, y_mid), (x_out_near, y_near))
-            .lineTo(x_in_near, y_near)
-            .threePointArc((x_in_mid, y_mid), (x_in_far, y_far))
-            .close()
-            .extrude(z_hi - z_lo))
+def _pivot_boss(pivot_x, pivot_z, y0, y1):
+    """Ø LEVER_BOSS_OD cylindrical boss along the pivot axis, spanning the
+    lever plate's thickness — the handle is only 6 wide, narrower than the
+    axle's pocket, so this local bulge carries the pivot."""
+    return (cq.Workplane("XZ").center(pivot_x, pivot_z)
+            .circle(LEVER_BOSS_OD / 2)
+            .extrude(-(y1 - y0)).translate((0, y0, 0)))
 
 
-def _pivot_hole(pivot_x, pivot_z, y0, y1):
-    """M2 shaft CLEARANCE hole along the pivot axis (Y), with overshoot.
-    Uses M2_SHAFT_CLR_D = 2.4 mm — oversized so the lever pivots freely on
-    the M2 cap-screw. The screw's tight thread-fit lives in the HOUSING's
-    pivot bore (LEVER_SCREW_CLR_D = 2.2 mm); the lever just rides on it."""
-    return (cq.Workplane("XY").circle(M2_SHAFT_CLR_D / 2)
-            .extrude((y1 - y0) + 1)
+def _pivot_hole(pivot_x, pivot_z, y_outer, y_inner):
+    """SQUARE axle pocket straight THROUGH the lever (user redesign — one
+    plain square prism, no sections): the lever prints along Y, so this is
+    a vertical hole in its print and ANY clock costs nothing. Clocked to
+    PIN_KEY_BASE_DEG − PIN_PRETWIST_DEG: the frame keys the straight axle
+    at 45° (diamond) at both ends, so seating the lever at rest twists the
+    axle's middle by the pre-twist — hold the lever pulled by that angle
+    (~12°) to slide the axle in at install."""
+    side = PIN_SQ_S + 2.0 * PIN_SQ_LEVER_CLR
+    lo = min(y_outer, y_inner)
+    return (cq.Workplane("XY").rect(side, side)
+            .extrude(abs(y_inner - y_outer) + 1.0)
             .rotate((0, 0, 0), (1, 0, 0), -90)
-            .translate((pivot_x, y0 - 0.5, pivot_z)))
-
-
-def _pivot_head_recess(pivot_x, pivot_z, side):
-    """Ø M2_HEAD_RECESS_D × LEVER_HEAD_RECESS_H counterbore in the lever's
-    OUTER face for the M2 cap-screw head. side = +1 for the +Y (ratchet)
-    lever, -1 for the -Y (brake) lever. Sized so the shaft after the recess
-    matches the shaft seated in the housing (LEVER_HEAD_RECESS_H derives
-    from that equal-split constraint).
-
-    The recess axis points INWARD (toward the spool centerline): for side
-    = +1 the cylinder grows in −Y from the +Y outer face; for side = −1
-    it grows in +Y from the −Y outer face. After rotation the cylinder
-    base sits at the outer face plus a tiny overshoot, and its other end
-    lands LEVER_HEAD_RECESS_H deep inside the lever."""
-    overshoot = 0.5
-    y_outer   = side * (LEVER_INNER_Y + LEVER_T)
-    # extrude along +Z, then rotate so +Z maps to −side·Y (i.e. INTO the lever):
-    #   side = +1 → rotate +90 around X (+Z → −Y)
-    #   side = −1 → rotate −90 around X (+Z → +Y)
-    return (cq.Workplane("XY").circle(M2_HEAD_RECESS_D / 2)
-            .extrude(LEVER_HEAD_RECESS_H + overshoot)
-            .rotate((0, 0, 0), (1, 0, 0), side * 90)
-            .translate((pivot_x, y_outer + side * overshoot, pivot_z)))
-
-
-def _lever_stop_pin_and_hole(part, pivot_x, pivot_z, lever_alpha, y_inner,
-                             y_body_end, side):
-    """Add the lever's own stop pin (projecting from the lever's inner face
-    into the gap toward the housing) and cut its spring-leg through-hole.
-    `side` = +1 for the +Y lever (ratchet), -1 for the -Y lever (brake)."""
-    # Spring-leg hole at the halfway point of the EXPOSED pin (the part in
-    # the gap, from y_inner - STOP_PIN_H to y_inner) — re-tuning STOP_PIN_H
-    # auto-centres the hole.
-    if side > 0:
-        y_from, y_to = y_inner - STOP_PIN_H, y_body_end          # 12 .. 19.5
-        hole_y = y_inner - STOP_PIN_H / 2
-    else:
-        y_from, y_to = y_body_end, -(abs(y_inner) - STOP_PIN_H)   # -19.5 .. -12
-        hole_y = -(abs(y_inner) - STOP_PIN_H / 2)
-    leg_a = lever_alpha + (+1) * SPRING_LEG_PIN_OFFSET_DEG
-    part = part.union(stop_pin_solid(pivot_x, pivot_z, lever_alpha, y_from, y_to))
-    part = part.cut(stop_pin_hole(pivot_x, pivot_z, lever_alpha, hole_y,
-                                  hole_dir_alpha_deg=spring_leg_hole_dir_alpha_deg(leg_a)))
-    return part
+            .translate((pivot_x, lo - 0.5, pivot_z))
+            .rotate((pivot_x, 0, pivot_z), (pivot_x, 1, pivot_z),
+                    PIN_KEY_BASE_DEG - PIN_PRETWIST_DEG))
 
 
 # ── Ratchet lever ────────────────────────────────────────────────────────────
-# The horizontal block at z=0..RATCHET_BAND_H is a rectangle from the spool
-# axis out to the vertical handle; subtracting the FULL rim solid leaves a
-# mating inner edge that's the exact negative of the rim's tooth profile.
-PAWL_Z_LO, PAWL_Z_HI = 0.0, RATCHET_BAND_H       # 0 .. 3
-PAWL_Y_MID = (RATCHET_Y0 + RATCHET_Y1) / 2       # 18.5 — kinematics sample point
-PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2         # 1.5 — kinematics sample point
-
-
 def _build_ratchet_lever():
-    """Ratchet lever in three primitives:
-      1. Horizontal block at PAWL_Z range (3 mm tall in Z): a generous
-         rectangle from the spool axis out to the vertical handle's right
-         edge, minus the full rim solid — the inner edge becomes the exact
-         negative of the rim teeth (perfect mesh at rest).
-      2. Vertical handle centered on the pivot's X (LEVER_HANDLE_W wide in X, LEVER_T thick in Y), spanning
-         from HANDLE_Z_BOT up past the pivot to RATCHET_PIVOT_Z + hw.
-      3. Disc at the bottom of (2) to round off the grip end."""
-    hw    = LEVER_HANDLE_W / 2
-    y_len = RATCHET_Y1 - RATCHET_Y0
+    """the original design's three primitives: (1) horizontal pawl block minus the separator's
+    tooth solid (inner edge = exact tooth negative) + the chord-tracking catch
+    bump; (2) vertical handle through the pivot; (3) grip-end disc. Plus the
+    TPU spring seat is just the arm tail's flat +X face (no socket)."""
+    y0, y1 = RATCHET_LEV_Y0, RATCHET_LEV_Y1
+    y_len = y1 - y0
 
-    # 1. Horizontal block. h_x_lo at the spool axis (=0) so the rectangle
-    #    sits INSIDE the rim's outer profile at every y in [Y0, Y1] — the
-    #    rim subtraction is then the sole determinant of the inner edge.
-    #    (A larger h_x_lo such as RIM_ID/2 would sit outside the rim at
-    #    y values where the outer profile dips inward of the rectangle
-    #    bound, leaving a visible gap between the rim and the lever.)
-    h_x_hi = RATCHET_PIVOT_X + hw
-    h_x_lo = 0.0
-    horiz_block = (cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
-                   .moveTo(h_x_lo, RATCHET_Y0).lineTo(h_x_hi, RATCHET_Y0)
-                   .lineTo(h_x_hi, RATCHET_Y1).lineTo(h_x_lo, RATCHET_Y1)
-                   .close()
-                   .extrude(PAWL_Z_HI - PAWL_Z_LO))
-    # Full rim solid at the tooth band = toothed annular ring + the central
-    # cylinder it sits on (so the cut removes everything inside the rim's
-    # outer profile, not just the tooth band itself).
-    teeth_ring = _cyl_ratchet_band(PAWL_Z_LO - 0.2, PAWL_Z_HI + 0.2)
-    core = cyl(RIM_ID, (PAWL_Z_HI - PAWL_Z_LO) + 0.4, z=PAWL_Z_LO - 0.2)
-    horiz = horiz_block.cut(teeth_ring.union(core))
+    # 1. Pawl block — from inside the rim out to the handle's +X edge, minus
+    #    the separator's solid tooth star (world position).
+    h_x_hi = LEVER_PIVOT_X + _HW
+    h_x_lo = 60.0                                # safely inside the valley radius
+    horiz = (cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
+             .polyline([(h_x_lo, y0), (h_x_hi, y0), (h_x_hi, y1), (h_x_lo, y1)])
+             .close().extrude(PAWL_Z_HI - PAWL_Z_LO))
+    horiz = horiz.cut(ratchet_star_world())
 
-    # Catch-face bump on the lever's inner-Y face. Built as a PARALLELOGRAM
-    # with one edge along the rim's catch face (radial at ts) and the
-    # opposite parallel edge offset along the rim's CHORD direction
-    # (valley_i → tip_{i+1}). The chord-direction back edge tracks the
-    # actual rim outer at the angles just CCW of the catch face — a
-    # straight axis-perpendicular back edge instead would diverge from
-    # the chord and leave a triangular sliver between the bump and the
-    # rim's outer boundary.
-    #
-    # Vertices (CCW: A → D → C → B):
-    #   A = outer-catch: on the catch face at radius R_RIM + outer_overlap
-    #       (overlapped into the lever's existing material so the union
-    #       closes solidly there).
-    #   B = inner-catch: at radius r_root on the catch face = the rim's
-    #       valley_i vertex itself — shares this point with the rim's
-    #       polygon exactly.
-    #   C = B + chord_dir × bump_depth, on the rim's chord at distance
-    #       bump_depth — so edge BC is a segment of the rim's chord.
-    #   D = A + chord_dir × bump_depth, the matching offset at the outer
-    #       end.
-    _BUMP_TS            = math.asin(RATCHET_Y0 / (R_RIM + FIT_CLR))
-    _BUMP_TS_NEXT       = _BUMP_TS + 2 * math.pi / RATCHET_TEETH
-    _BUMP_OUTER_OVERLAP = 0.5
-    _BUMP_DEPTH         = 0.4
-    _R_ROOT             = R_RIM - RATCHET_DEPTH
-    # Chord direction = (tip_{i+1} − valley_i) normalised.
-    _VALLEY = (_R_ROOT * math.cos(_BUMP_TS), _R_ROOT * math.sin(_BUMP_TS))
-    _TIP_NEXT = (R_RIM * math.cos(_BUMP_TS_NEXT), R_RIM * math.sin(_BUMP_TS_NEXT))
-    _CHORD_VEC = (_TIP_NEXT[0] - _VALLEY[0], _TIP_NEXT[1] - _VALLEY[1])
-    _CHORD_LEN = math.hypot(*_CHORD_VEC)
-    _CHORD_DIR = (_CHORD_VEC[0] / _CHORD_LEN, _CHORD_VEC[1] / _CHORD_LEN)
-    _A = ((R_RIM + _BUMP_OUTER_OVERLAP) * math.cos(_BUMP_TS),
-          (R_RIM + _BUMP_OUTER_OVERLAP) * math.sin(_BUMP_TS))
-    _B = _VALLEY
-    _C = (_B[0] + _BUMP_DEPTH * _CHORD_DIR[0],
-          _B[1] + _BUMP_DEPTH * _CHORD_DIR[1])
-    _D = (_A[0] + _BUMP_DEPTH * _CHORD_DIR[0],
-          _A[1] + _BUMP_DEPTH * _CHORD_DIR[1])
+    # Catch-face bump (the original design's parallelogram, chord-tracking back edge). One rim
+    # catch face sits exactly at ts = RATCHET_PHASE_DEG (the separator is
+    # phased for this); the bump rides it at the pawl's inner-y azimuth.
+    ts      = math.radians(RATCHET_PHASE_DEG)
+    ts_next = ts + 2 * math.pi / RATCHET_TEETH
+    r_root  = R_RIM - RATCHET_DEPTH
+    overlap, depth = 0.5, 0.4
+    valley   = (r_root * math.cos(ts), r_root * math.sin(ts))
+    tip_next = (R_RIM * math.cos(ts_next), R_RIM * math.sin(ts_next))
+    chord    = (tip_next[0] - valley[0], tip_next[1] - valley[1])
+    clen     = math.hypot(*chord)
+    cdir     = (chord[0] / clen, chord[1] / clen)
+    A = ((R_RIM + overlap) * math.cos(ts), (R_RIM + overlap) * math.sin(ts))
+    B = valley
+    C = (B[0] + depth * cdir[0], B[1] + depth * cdir[1])
+    D = (A[0] + depth * cdir[0], A[1] + depth * cdir[1])
     bump = (cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
-            .polyline([_A, _D, _C, _B]).close()
+            .polyline([A, D, C, B]).close()
             .extrude(PAWL_Z_HI - PAWL_Z_LO))
     horiz = horiz.union(bump)
 
-    # 2. Vertical handle centered on the pivot's X, from HANDLE_Z_BOT up to
-    #    RATCHET_PIVOT_Z + hw (so the pivot sits inside it).
-    vert_top = RATCHET_PIVOT_Z + hw
+    # 2. Vertical handle through the pivot.
+    vert_top = RATCHET_PIVOT_Z + _HW
     vert = (cq.Workplane("XZ")
-            .polyline([(RATCHET_PIVOT_X - hw, HANDLE_Z_BOT),
-                       (RATCHET_PIVOT_X + hw, HANDLE_Z_BOT),
-                       (RATCHET_PIVOT_X + hw, vert_top),
-                       (RATCHET_PIVOT_X - hw, vert_top)]).close()
-            .extrude(-y_len).translate((0, RATCHET_Y0, 0)))
+            .polyline([(LEVER_PIVOT_X - _HW, HANDLE_Z_BOT),
+                       (LEVER_PIVOT_X + _HW, HANDLE_Z_BOT),
+                       (LEVER_PIVOT_X + _HW, vert_top),
+                       (LEVER_PIVOT_X - _HW, vert_top)]).close()
+            .extrude(-y_len).translate((0, y0, 0)))
 
-    # 3. Round off the bottom of the vertical handle.
-    bottom = (cq.Workplane("XZ")
-              .center(RATCHET_PIVOT_X, HANDLE_Z_BOT)
-              .circle(hw)
-              .extrude(-y_len).translate((0, RATCHET_Y0, 0)))
+    # 3. Grip-end disc.
+    bottom = (cq.Workplane("XZ").center(LEVER_PIVOT_X, HANDLE_Z_BOT)
+              .circle(_HW).extrude(-y_len).translate((0, y0, 0)))
 
-    boss = pivot_boss_sector(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-                             RATCHET_Y0 - (LEVER_RIM_H - 2.5) / 2, RATCHET_Y1)
-
-    part = horiz.union(vert).union(bottom).union(boss)
-    part = _lever_stop_pin_and_hole(part, RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-                                    RATCHET_LEVER_PIN_ALPHA, LEVER_INNER_Y,
-                                    RATCHET_Y1, side=+1)
-    part = part.cut(_pivot_hole(RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-                                RATCHET_Y0 - LEVER_RIM_H, RATCHET_Y1))
-    part = part.cut(_pivot_head_recess(RATCHET_PIVOT_X, RATCHET_PIVOT_Z, side=+1))
+    part = horiz.union(vert).union(bottom)
+    part = part.union(_pivot_boss(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y0, y1))
+    # pin inserts from the +y (outer) side → pocket opens at y1
+    part = part.cut(_pivot_hole(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y1, y0))
     return part
 
 
-# ── Brake lever ──────────────────────────────────────────────────────────────
-# Pad is an arc strip on the upper part of the smooth brake band (the band now
-# spans z=RATCHET_BAND_H..RIM_H, but the pad stays high — z=RIM_H/2..RIM_H — so
-# its lever arm above the brake pivot stays long enough for A_BRAKE_OVERLAP).
-# The BRAKE_RUBBER_T
-# rubber slab (viz) bonds to the printed pad's rim-facing face; at the rest
-# (disengaged) pose that rubber face sits PAD_REST_GAP off the band (r=58.9),
-# so the PRINTED pad body starts BRAKE_RUBBER_T further out. Both faces are
-# arcs (conform to the band). Pulling the handle swings the pad in.
-# Pad top margin to the cable retainer's bottom ring (at RIM_H − STRUCT_WALL):
-# 1.0 mm of true clearance + 0.8 mm for the rubber band-face's upward drift.
-# (The rubber slab is extruded along the tilted mount-plane NORMAL, whose +Z
-# component lifts the band-side top corner BRAKE_RUBBER_T·W_z ≈ 0.8 mm above
-# PAD_Z_HI — without this allowance the actual corner gap was only 0.2 mm.)
-PAD_Z_HI = RIM_H - STRUCT_WALL - 1.8
-PAD_Y_MID = (BRAKE_Y0 + BRAKE_Y1) / 2
+# ── Brake lever + TPU pad — CONTACT-frame design (user's spec) ───────────────
+# The brake is validated at FIRST CONTACT only, and the arm + pad are BUILT
+# in that pose, where they read as ONE STRAIGHT FLAT PRISM: the arm is a
+# plain box ending in a FLAT face, the TPU pad is the straight constant-
+# thickness slab between that face and the band. The only non-orthogonal
+# feature is the face's small PLAN bevel (~8.7°) keeping it TANGENT to the
+# round band at the pad's mid azimuth — dead flush at contact (a face ⊥ the
+# arm would gap 1.6 across the pad's width). Both are back-rotated about the
+# pivot by the contact angle into the REST pose — the ARM angles instead of
+# carrying an angled cut. Past contact is the COMPRESSION regime (TPU
+# squish, reported not asserted). Guards: the BOT margin keeps the further
+# full-pull drop ≥1 clear of the ratchet tooth box; a swept-corner assertion
+# keeps the raised resting pad out of the spool chamber's cable keep-out.
+PAD_Y_MID = (BRAKE_LEV_Y0 + BRAKE_LEV_Y1) / 2.0   # −11
 
-# ── Ratchet-brake handoff: brake first contact = ratchet pawl clears tips ──
-# Clean handoff means the pawl is just clearing the tooth tips at the same
-# angle the brake-pad face center first touches the band. Before this angle,
-# only the ratchet is active; after it, only the brake.
+
 def _ratchet_pawl_clear_angle():
+    """Pull angle at which the pawl just clears the tooth tips (original math)."""
     x_pawl_rest = math.sqrt(R_ROOT ** 2 - PAWL_Y_MID ** 2)
-    target_x    = math.sqrt(R_RIM ** 2  - PAWL_Y_MID ** 2)
-    dx          = x_pawl_rest - RATCHET_PIVOT_X
-    dz          = PAWL_Z_MID  - RATCHET_PIVOT_Z
-    A   = dx
-    B   = -dz
-    rhs = target_x - RATCHET_PIVOT_X
-    R   = math.hypot(A, B)
+    target_x    = math.sqrt(R_RIM ** 2 - PAWL_Y_MID ** 2)
+    dx = x_pawl_rest - LEVER_PIVOT_X
+    dz = PAWL_Z_MID - RATCHET_PIVOT_Z
+    A, B = dx, -dz
+    rhs = target_x - LEVER_PIVOT_X
+    R = math.hypot(A, B)
     phi = math.degrees(math.atan2(B, A))
-    ac  = math.degrees(math.acos(max(-1.0, min(1.0, rhs / R))))
-    return min(s for s in (phi - ac, phi + ac)
-               if 0 < s < RATCHET_OUTER_TRAVEL_DEG)
-
-RATCHET_PAWL_CLEAR_DEG = _ratchet_pawl_clear_angle()
-
-# Extra pull angle between the pawl clearing the teeth and the brake pad
-# first touching the band. 0 = the original "clean handoff" (pad touches the
-# instant the pawl clears). Raising it buys rest-gap margin between the pad
-# and the band (the pad starts further out) at the cost of a small dead zone
-# in the pull where neither ratchet nor brake is active.
-BRAKE_CONTACT_DELAY_DEG = 3.0
+    ac = math.degrees(math.acos(max(-1.0, min(1.0, rhs / R))))
+    return min(s for s in (phi - ac, phi + ac) if 0 < s < LEVER_TRAVEL_DEG)
 
 
-# ── Joint solver: BRAKE_ARM_X_LO + BRAKE_PAD_H + pre-tilt θ ────────────────
-#
-# Constraints (with brake-rim cylinder at r=R_RIM):
-#
-#   1. FIRST CONTACT TIMING — the band-side face center reaches r=R_RIM at
-#      α_first = RATCHET_PAWL_CLEAR_DEG (clean handoff). Sets BRAKE_ARM_X_LO,
-#      which depends on z_fc = PAD_Z_HI − h/2 (and hence on h).
-#
-#   2. MID-CONTACT PARALLELISM — at α_mid = (α_first + α_max)/2, the face is
-#      parallel to the band tangent at PAD_Y_MID. Sets the pre-tilt θ = α_mid.
-#
-#   3. PAD-BOTTOM LANDING — at α_mid, the band-side BOTTOM corner at y=BRAKE_Y0
-#      (the pad's lowest-z point after rotation) lands at z = BRAKE_RIM_Z_LO,
-#      the brake rim's straight-section bottom. Sets BRAKE_PAD_H.
-#
-# PAD_REST_GAP (the radial gap at the face center at rest) is DERIVED — it
-# falls out of constraint 1. Delaying first contact pushes the pad further
-# from the band at rest; that's the intended consequence.
-def _solve_brake_pad_geom():
-    from .spool import BRAKE_RIM_Z_LO
-    px, pz       = BRAKE_PIVOT_X, BRAKE_PIVOT_Z
-    alpha_max    = BRAKE_INNER_TRAVEL_DEG
-    x_band_y_mid = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)
-    y_half       = (BRAKE_Y1 - BRAKE_Y0) / 2
-    alpha_first  = RATCHET_PAWL_CLEAR_DEG + BRAKE_CONTACT_DELAY_DEG
-    alpha_mid    = (alpha_first + alpha_max) / 2
-    a_rad        = math.radians(alpha_mid)
-    af_rad       = math.radians(alpha_first)
-
-    def brake_arm_x_lo_for_h(h):
-        """BRAKE_ARM_X_LO such that face center reaches band at alpha_first."""
-        dz = (PAD_Z_HI - h / 2) - pz
-        # px + (x_fc_band - px)*cos(af) - dz*sin(af) = x_band_y_mid
-        x_fc_band = px + (x_band_y_mid - px + dz * math.sin(af_rad)) \
-                       / math.cos(af_rad)
-        return x_fc_band + BRAKE_RUBBER_T
-
-    def pad_bottom_z_at_mid(h):
-        a = brake_arm_x_lo_for_h(h)
-        tilt_dx_x = (h / 2) * math.tan(a_rad)
-        tilt_dx_y = y_half * abs(PAD_Y_MID) / (math.cos(a_rad) * x_band_y_mid)
-        x_corner = a - tilt_dx_x - tilt_dx_y - BRAKE_RUBBER_T
-        z_corner = PAD_Z_HI - h
-        new_z = (pz + (x_corner - px) * math.sin(a_rad)
-                    + (z_corner - pz) * math.cos(a_rad))
-        return new_z, a
-
-    lo, hi = 0.5, 10.0
-    for _ in range(50):
-        mid = (lo + hi) / 2
-        nz, _ = pad_bottom_z_at_mid(mid)
-        if nz > BRAKE_RIM_Z_LO:
-            lo = mid
-        else:
-            hi = mid
-        if hi - lo < 0.001:
-            break
-    h_final = (lo + hi) / 2
-    _, a_final = pad_bottom_z_at_mid(h_final)
-    return a_final, h_final, alpha_mid
-
-BRAKE_ARM_X_LO, BRAKE_PAD_H, BRAKE_PAD_MOUNT_TILT_DEG = _solve_brake_pad_geom()
-PAD_Z_LO = PAD_Z_HI - BRAKE_PAD_H
-RUBBER_PAD_Z_LO = PAD_Z_LO
-# Derived rest gap (whatever the handoff timing produced).
-PAD_REST_GAP = (math.hypot(BRAKE_ARM_X_LO - BRAKE_RUBBER_T, PAD_Y_MID)
-                - R_RIM)
-
-# ── Rubber pad: true RECTANGLE on the mount plane (square strip cuts) ───────
-# The mount face is a doubly-tilted plane (X-tilt = BRAKE_PAD_MOUNT_TILT_DEG
-# about Y for mid-travel verticality; Y-tilt slope _C for band tangency at
-# PAD_Y_MID). The lever arm's face region is a PARALLELOGRAM on that plane:
-# its edges follow world z=const / y=const planes, which meet at ~85°
-# in-plane — so a pad matching it needs angled cuts. The physical pad is cut
-# from BRAKE_RUBBER_T strip stock with SQUARE cuts (one for length, one for
-# width), so the modeled pad is instead the largest axis-aligned RECTANGLE
-# inscribed in that parallelogram:
-#   U — in-plane unit vector along the z=const edges (horizontal in world)
-#   V — in-plane unit vector perpendicular to U
-#   L = base − side·sin(skew)   (length along U, the strip-length cut)
-#   H = side · cos(skew)        (width along V, the strip-width cut)
-# Inscribed ⊂ parallelogram → the existing arm face fully backs the pad; the
-# arm needs no redesign. The pad's end faces lean ~5° from vertical in world
-# (they're square ON THE STRIP), and its top/bottom edges stay horizontal.
-_C = abs(PAD_Y_MID) / (math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-                       * math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2))   # face dx per unit y
-_B = math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))              # face dx per unit z
-_NU = math.sqrt(1 + _C * _C)
-_NE = math.sqrt(1 + _B * _B)
-_U  = (_C / _NU, 1 / _NU, 0.0)            # in-plane, along z=const edges
-_E  = (_B / _NE, 0.0, 1 / _NE)            # in-plane, along y=const edges
-_SINPHI = _B * _C / (_NU * _NE)           # in-plane skew between _E and _V
-_COSPHI = math.sqrt(1 - _SINPHI ** 2)
-_V  = tuple((e - _SINPHI * u) / _COSPHI for e, u in zip(_E, _U))
-# Outward normal of the mount face, pointing toward the band (-X side).
-_W = (_U[1] * _V[2] - _U[2] * _V[1],
-      _U[2] * _V[0] - _U[0] * _V[2],
-      _U[0] * _V[1] - _U[1] * _V[0])
-if _W[0] > 0:
-    _W = (-_W[0], -_W[1], -_W[2])
-
-_PAD_PARA_BASE = (BRAKE_Y1 - BRAKE_Y0) * _NU       # parallelogram base length (along U)
-_PAD_PARA_SIDE = BRAKE_PAD_H * _NE                 # parallelogram side length (along E)
-BRAKE_PAD_RECT_L = _PAD_PARA_BASE - _PAD_PARA_SIDE * _SINPHI   # strip-length cut
-BRAKE_PAD_RECT_H = _PAD_PARA_SIDE * _COSPHI                    # strip-width cut
-
-_PAD_FACE_CENTER = (BRAKE_ARM_X_LO, PAD_Y_MID, (PAD_Z_LO + PAD_Z_HI) / 2)
+RATCHET_PAWL_CLEAR_DEG  = _ratchet_pawl_clear_angle()
+BRAKE_CONTACT_DELAY_DEG = 3.0                     # dead zone after pawl-clear (the original design)
+BRAKE_CONTACT_DEG = RATCHET_PAWL_CLEAR_DEG + BRAKE_CONTACT_DELAY_DEG
+# BRAKE_PAD_TOP_MARGIN / BOT_MARGIN / PAD_JOINT_CLR moved to params.py —
+# the BAND BUDGET derives from them now (pad face = the hook's quality
+# width; RIM_H grew to fit). Imported below with the band constants.
 
 
-def brake_pad_rect_corners():
-    """(lever_face_corners, band_face_corners) of the rectangular rubber
-    pad — each a list of 4 (x, y, z) tuples in consistent winding order.
-    Lever-face rectangle is centred on the mount face; band-face is the
-    same rectangle offset BRAKE_RUBBER_T along the outward normal."""
-    cx, cy, cz = _PAD_FACE_CENTER
+# ── Contact-frame geometry (closed form — replaces the tilt solver) ──────────
+_AC_RAD     = math.radians(BRAKE_CONTACT_DEG)
+_X_BAND_MID = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)      # 72.07 — band x at y −11
+_PLAN_TAN   = abs(PAD_Y_MID) / _X_BAND_MID                # tangent-plane dx/dy (~0.153)
+_FACE_OFF   = BRAKE_RUBBER_T * math.sqrt(1.0 + _PLAN_TAN ** 2)  # plane offset, in x
+Z_TOP_C     = BRAKE_BAND_Z1 - BRAKE_PAD_TOP_MARGIN        # pad SLAB z-band AT CONTACT
+Z_BOT_C     = BRAKE_BAND_Z0 + BRAKE_PAD_BOT_MARGIN
+BRAKE_PAD_H = Z_TOP_C - Z_BOT_C                           # 3.1 — the band-contact slab
+# L-SECTION pad (user's design): the slab above contacts the BAND; a taller
+# back FLANGE carries the hook joint at its quality width (6.6). The flange
+# hangs TOP-ALIGNED with the slab (opening downward — centered, its rest
+# swing would poke past the brake window's split-plane cap) and nests into
+# the arm's recessed end, so it sits BEHIND the old face radius — clear of
+# the coil keep-out above and the cone/teeth below (both are r ≤ band).
+PAD_FLANGE_TOP = Z_TOP_C
+PAD_FLANGE_BOT = Z_TOP_C - PAD_FLANGE_H
+_FL_OFF = PAD_FLANGE_T * math.sqrt(1.0 + _PLAN_TAN ** 2)  # plane offset, in x
+
+
+def _x_band_plane(y):
+    """CONTACT pose: the band's tangent plane at the pad's mid azimuth."""
+    return _X_BAND_MID + (y - PAD_Y_MID) * _PLAN_TAN
+
+
+def _x_face(y):
+    """CONTACT pose: the pad SLAB's back plane — tangent plane + slab
+    thickness (= the flange's FRONT plane)."""
+    return _x_band_plane(y) + _FACE_OFF
+
+
+def _x_face2(y):
+    """CONTACT pose: the ARM's flat end face — recessed one flange depth
+    behind the slab's back plane; the pad flange fills the gap and this is
+    the JOINT face."""
+    return _x_face(y) + _FL_OFF
+
+
+def _rest_xz(x, z):
+    """Map a CONTACT-pose point to the REST pose (+contact about the pivot)."""
+    dx, dz = x - LEVER_PIVOT_X, z - BRAKE_PIVOT_Z
+    ca, sa = math.cos(_AC_RAD), math.sin(_AC_RAD)
+    return (LEVER_PIVOT_X + dx * ca + dz * sa,
+            BRAKE_PIVOT_Z - dx * sa + dz * ca)
+
+
+def _to_rest(wp):
+    """Rotate a CONTACT-frame solid into the REST pose."""
+    return wp.rotate((LEVER_PIVOT_X, 0, BRAKE_PIVOT_Z),
+                     (LEVER_PIVOT_X, 1, BRAKE_PIVOT_Z), BRAKE_CONTACT_DEG)
+
+
+# rest-frame pad extremes (reference) — the arm face is the outermost plane
+PAD_Z_HI = _rest_xz(_x_face2(BRAKE_LEV_Y1), Z_TOP_C)[1]
+PAD_Z_LO = _rest_xz(_x_face2(BRAKE_LEV_Y0), PAD_FLANGE_BOT)[1]
+
+# A_PAD_WINDOW: REST is the swing's highest pose — the pad/arm top must
+# stay under the brake window's cap (wall_top's underside at the split
+# plane), which DROPPED when the rim shrank back to 12.4
+assert PAD_Z_HI <= WALL_SPLIT_Z - 0.5 + 1e-9, (
+    f"A_PAD_WINDOW: pad/arm rest top {PAD_Z_HI:.2f} is within 0.5 of the "
+    f"brake window cap at the split plane {WALL_SPLIT_Z:.2f} — lower "
+    f"PAD_FLANGE_TOP or grow BRAKE_PAD_TOP_MARGIN")
+
+
+# ── Pad ↔ arm SLIDE JOINT (glue-free, user's design) ─────────────────────────
+# A HOOKED TENON rail on the TPU pad's back slides into a mortise channel in
+# the arm's flat face, along the face's in-plane horizontal direction û (Y
+# tilted by the 8.7° plan bevel). Direction is picked by the BRAKING load:
+# the brake acts while the spool RETRACTS — CW viewed from +Z (= the user's
+# CCW seen from below) — and the band's drag on the pad at this azimuth is
+# then −û (toward the arm's OUTER end). So the STOP WALL sits at the outer
+# end and the channel opens through the arm's INNER face: braking presses
+# the tenon INTO the stop — no glue. (The fork column 1 mm outside and the
+# beam flank 1 mm inside also cage the pad once the lever is mounted.)
+# CROSS-SECTION: cadkit's HOOK — the single-flank dovetail for EDGE-BOUNDED
+# install-z sites (this arm was its first case; the geometry now lives in
+# the library, and slide_joint(install='z', bounded=True) at this face's
+# 4.15 width picks it — a symmetric dovetail can't fit printable shoulders
+# between the free edges). Width = the FULL 4.15 face, edges landing on the
+# arm/pad top and bottom faces; the library budgets one-nozzle walls, a
+# one-nozzle lip in the notch (hooks −n pull-off), closed floor/roof (±z).
+# PRINTS: the channel runs ≈ the lever's −Y→+Y build axis → every wall is
+# near-vertical and the bed-side stop wall means NO bridge; the pad prints
+# STANDING on its INNER end face (the rail is trimmed flush there, so it
+# rises straight off the bed — overhang-free; the curved band face is a
+# vertical surface, so no X-axis build needed).
+# PAD_JOINT_CLR lives in params now (the band budget derives from it); the
+# pad face BRAKE_PAD_H = the hook's QUALITY width → every joint segment on
+# both halves prints at 1.6 (was 0.8-1.0, user-caught as tear-prone TPU)
+_B_DEG   = math.degrees(math.atan(_PLAN_TAN))     # face plan-bevel (~8.7°)
+_U_LEN   = (BRAKE_LEV_Y1 - BRAKE_LEV_Y0) * math.sqrt(1.0 + _PLAN_TAN ** 2)
+_JT_STOP = 1.6                                    # stop wall at the outer end (along û)
+
+
+def _pad_joint(tenon):
+    """CONTACT-frame solid of the pad↔arm slide joint: tenon=True → the
+    library hook rail (union into the TPU pad, root sunk 0.5); False → the
+    mortise CUTTER (dilated, stop wall left at the outer end, mouth open
+    through the arm's inner face). Library frame (profile in plan, prism
+    along +Z, hook toward +Y) mapped: prism → û with the hook UP and the
+    head into the arm — rotate to lay the prism on −Y, offset along +Y,
+    then rotate the plan by −_B_DEG so y-offsets become û-offsets."""
+    L = _U_LEN - _JT_STOP + (0.3 if tenon else 1.0)   # tenon: trimmed flush at
+                                                      # the inner face; cutter: open
+    if tenon:
+        j = hook_tenon(PAD_FLANGE_H, L, clearance=PAD_JOINT_CLR, root=0.5)
+    else:
+        j = hook_mortise(PAD_FLANGE_H, L, clearance=PAD_JOINT_CLR, drop=1.0)
+    return (j.rotate((0, 0, 0), (1, 0, 0), 90.0)  # prism → −Y, hook → +z (up)
+            .translate((0.0, _JT_STOP + L, 0.0))  # spans y ∈ [_JT_STOP, stop+L]
+            .rotate((0, 0, 0), (0, 0, 1), -_B_DEG)    # y-offsets → û, +X → n̂
+            .translate((_x_face2(BRAKE_LEV_Y0), BRAKE_LEV_Y0,
+                        (PAD_FLANGE_BOT + PAD_FLANGE_TOP) / 2.0)))
+
+
+def brake_pad_rect_corners(h=None):
+    """(lever_face_corners, band_face_corners) of the TPU pad, REST pose.
+    `h` (DEMO only): a FORCED pad height, top edge kept — lets the viewer
+    show an oversized pad without touching the assertion-gated geometry."""
+    z_bot = Z_TOP_C - h if h is not None else Z_BOT_C
+    zf_bot = z_bot if h is not None else PAD_FLANGE_BOT
     lever, band = [], []
-    for su, sv in ((-1, -1), (+1, -1), (+1, +1), (-1, +1)):
-        px = cx + su * BRAKE_PAD_RECT_L / 2 * _U[0] + sv * BRAKE_PAD_RECT_H / 2 * _V[0]
-        py = cy + su * BRAKE_PAD_RECT_L / 2 * _U[1] + sv * BRAKE_PAD_RECT_H / 2 * _V[1]
-        pz = cz + su * BRAKE_PAD_RECT_L / 2 * _U[2] + sv * BRAKE_PAD_RECT_H / 2 * _V[2]
-        lever.append((px, py, pz))
-        band.append((px + BRAKE_RUBBER_T * _W[0],
-                     py + BRAKE_RUBBER_T * _W[1],
-                     pz + BRAKE_RUBBER_T * _W[2]))
+    for y, zs, zl in ((BRAKE_LEV_Y0, z_bot, zf_bot),
+                      (BRAKE_LEV_Y1, z_bot, zf_bot),
+                      (BRAKE_LEV_Y1, Z_TOP_C, Z_TOP_C),
+                      (BRAKE_LEV_Y0, Z_TOP_C, Z_TOP_C)):
+        # lever side = the FLANGE's outer plane (the L's back leg)
+        xf, zf = _rest_xz(_x_face2(y), zl)
+        # band corners sit ON the band cylinder (the face is cut concave)
+        xb, zb = _rest_xz(math.sqrt(R_RIM ** 2 - y * y), zs)
+        lever.append((xf, y, zf))
+        band.append((xb, y, zb))
     return lever, band
 
 
 def _build_brake_lever():
-    """Brake lever in three primitives. The contact face (left side of the
-    horizontal arm) is a straight vertical plane at x=BRAKE_ARM_X_LO; the
-    brake pad sits flush against it with its own straight right side.
-      1. Horizontal arm at PAD_Z range, x ∈ [BRAKE_ARM_X_LO, BRAKE_PIVOT_X+hw].
-      2. Vertical handle centered on the pivot's X (LEVER_HANDLE_W wide in X, LEVER_T thick in Y), from
-         HANDLE_Z_BOT up through the pivot to PAD_Z_HI.
-      3. Disc at the bottom of (2) to round off the grip end."""
-    hw    = LEVER_HANDLE_W / 2
-    y_len = BRAKE_Y1 - BRAKE_Y0
+    """Three primitives: (1) the STRAIGHT pad arm — a contact-frame box from
+    the flat (plan-beveled) face back through the pivot, back-rotated to
+    rest and trimmed flush with the handle's +X face; (2) vertical handle
+    through the pivot; (3) grip-end disc."""
+    y0, y1 = BRAKE_LEV_Y0, BRAKE_LEV_Y1
+    y_len = y1 - y0
+    h_x_hi = LEVER_PIVOT_X + _HW
+    # arm end face = _x_face2 (recessed one flange depth — the pad's L
+    # flange fills the gap) and the arm spans the FLANGE height, so the
+    # mortise host face is the full 6.6 between free edges
+    horiz = _to_rest(
+        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT)
+        .polyline([(_x_face2(y0), y0), (h_x_hi + 2.0, y0),
+                   (h_x_hi + 2.0, y1), (_x_face2(y1), y1)])
+        .close().extrude(PAD_FLANGE_TOP - PAD_FLANGE_BOT))
+    # the back-rotated box's far end sticks past the handle face — trim it
+    # flush (the cut is buried in the handle join, invisible at contact)
+    horiz = horiz.cut(
+        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT - 3.0)
+        .polyline([(h_x_hi, y0 - 1), (h_x_hi + 9.0, y0 - 1),
+                   (h_x_hi + 9.0, y1 + 1), (h_x_hi, y1 + 1)])
+        .close().extrude(PAD_FLANGE_H + 8.0))
 
-    # 1. Horizontal arm. Left face (the pad-mount surface) is pre-tilted
-    #    in BOTH the XZ plane (about Y) and the XY plane (about Z) so the
-    #    face matches the band's tangent at PAD_Y_MID, mid-travel.
-    #      X-tilt: leans OUTWARD as z increases (top at larger x).
-    #      Y-tilt: leans OUTWARD as y increases (BRAKE_Y1 corner at larger x).
-    #    After rotating CW by BRAKE_PAD_MOUNT_TILT_DEG, the X-tilt is undone
-    #    (face vertical in XZ); the Y-tilt remains, matching the band's
-    #    dx/dy slope at PAD_Y_MID for ideal flat contact at midpoint.
-    h_x_lo = BRAKE_ARM_X_LO
-    h_x_hi = BRAKE_PIVOT_X + hw
-    tilt_dx_x = (BRAKE_PAD_H / 2) * math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-    # Y-tilt: face's dx/dy at rest matches the band's tangent slope (rotated
-    # back by the X-tilt angle), so post-rotation dx/dy = |y_mid| / x_band.
-    x_band_at_pad_y_mid = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)
-    dx_dy_at_rest = (abs(PAD_Y_MID) /
-                     (math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-                      * x_band_at_pad_y_mid))
-    tilt_dx_y = (y_len / 2) * dx_dy_at_rest
-    # Build by lofting two XZ parallelograms — one at y=BRAKE_Y0, one at
-    # y=BRAKE_Y1 — with the left-face X shifted by ±tilt_dx_y.
-    # cq.Workplane("XZ") has normal -Y, so workplane(offset=d) moves -dY.
-    poly_y0 = [
-        (h_x_lo - tilt_dx_x - tilt_dx_y, PAD_Z_LO),
-        (h_x_hi,                          PAD_Z_LO),
-        (h_x_hi,                          PAD_Z_HI),
-        (h_x_lo + tilt_dx_x - tilt_dx_y, PAD_Z_HI),
-    ]
-    poly_y1 = [
-        (h_x_lo - tilt_dx_x + tilt_dx_y, PAD_Z_LO),
-        (h_x_hi,                          PAD_Z_LO),
-        (h_x_hi,                          PAD_Z_HI),
-        (h_x_lo + tilt_dx_x + tilt_dx_y, PAD_Z_HI),
-    ]
-    horiz = (cq.Workplane("XZ").workplane(offset=-BRAKE_Y0)
-             .polyline(poly_y0).close()
-             .workplane(offset=BRAKE_Y0 - BRAKE_Y1)
-             .polyline(poly_y1).close()
-             .loft(ruled=True, combine=True))
-
-    # 2. Vertical handle centered on the pivot's X, from HANDLE_Z_BOT up to
-    #    PAD_Z_HI (overlapping the horizontal arm at the top).
+    vert_top = _rest_xz(LEVER_PIVOT_X - _HW, Z_TOP_C)[1]   # arm's rest top at the handle
     vert = (cq.Workplane("XZ")
-            .polyline([(BRAKE_PIVOT_X - hw, HANDLE_Z_BOT),
-                       (BRAKE_PIVOT_X + hw, HANDLE_Z_BOT),
-                       (BRAKE_PIVOT_X + hw, PAD_Z_HI),
-                       (BRAKE_PIVOT_X - hw, PAD_Z_HI)]).close()
-            .extrude(-y_len).translate((0, BRAKE_Y0, 0)))
+            .polyline([(LEVER_PIVOT_X - _HW, HANDLE_Z_BOT),
+                       (LEVER_PIVOT_X + _HW, HANDLE_Z_BOT),
+                       (LEVER_PIVOT_X + _HW, vert_top),
+                       (LEVER_PIVOT_X - _HW, vert_top)]).close()
+            .extrude(-y_len).translate((0, y0, 0)))
+    bottom = (cq.Workplane("XZ").center(LEVER_PIVOT_X, HANDLE_Z_BOT)
+              .circle(_HW).extrude(-y_len).translate((0, y0, 0)))
 
-    # 3. Round off the bottom of the vertical handle.
-    bottom = (cq.Workplane("XZ")
-              .center(BRAKE_PIVOT_X, HANDLE_Z_BOT)
-              .circle(hw)
-              .extrude(-y_len).translate((0, BRAKE_Y0, 0)))
-
-    boss = pivot_boss_sector(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                             BRAKE_Y0, BRAKE_Y1 + (LEVER_RIM_H - 2.5) / 2)
-
-    part = horiz.union(vert).union(bottom).union(boss)
-    part = _lever_stop_pin_and_hole(part, BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                                    BRAKE_LEVER_PIN_ALPHA, LEVER_INNER_Y,
-                                    BRAKE_Y0, side=-1)
-    part = part.cut(_pivot_hole(BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                                BRAKE_Y0, BRAKE_Y1 + LEVER_RIM_H))
-    part = part.cut(_pivot_head_recess(BRAKE_PIVOT_X, BRAKE_PIVOT_Z, side=-1))
+    part = horiz.union(vert).union(bottom)
+    part = part.union(_pivot_boss(LEVER_PIVOT_X, BRAKE_PIVOT_Z, y0, y1))
+    # pad-joint mortise channel (built in the contact frame, rotated to
+    # rest, and cut from the WHOLE lever — AFTER every union: the L-flange
+    # joint reaches low enough that the Ø12 pivot boss crosses the channel
+    # band, and a boss unioned after this cut refills the cavity
+    # (5.3 mm³ rail collision, caught by the scan)
+    part = part.cut(_to_rest(_pad_joint(tenon=False)))
+    # pin inserts from the −y (outer) side → pocket opens at y0
+    part = part.cut(_pivot_hole(LEVER_PIVOT_X, BRAKE_PIVOT_Z, y0, y1))
     return part
 
 
-def _apply_rest_precomp(part, pivot_x, pivot_z):
-    """Pre-rotate the printed lever by +LEVER_REST_PRECOMP_DEG about its
-    pivot (the print-warp pre-compensation), applied as a final step."""
-    return part.rotate((pivot_x, 0, pivot_z), (pivot_x, 1, pivot_z),
-                       LEVER_REST_PRECOMP_DEG)
+def _build_brake_pad(h=None):
+    """The 95A TPU pad (contact frame): a straight slab off the arm's flat
+    face whose band side is CUT CONCAVE by the band cylinder itself — it
+    mates the rim's curvature exactly at contact (no sagitta gap), then
+    back-rotates to rest. NO GLUE: a hooked tenon rail on its back slides
+    into the arm's mortise channel (see _pad_joint) — braking drag presses
+    it into the stop. Prints STANDING on its inner (+y) end face."""
+    y0, y1 = BRAKE_LEV_Y0, BRAKE_LEV_Y1
+    z_bot = Z_TOP_C - h if h is not None else Z_BOT_C
+    slab = (cq.Workplane("XY").workplane(offset=z_bot)
+            .polyline([(_x_band_plane(y0) - 0.5, y0), (_x_face(y0), y0),
+                       (_x_face(y1), y1), (_x_band_plane(y1) - 0.5, y1)])
+            .close().extrude(Z_TOP_C - z_bot))
+    # concave band face: in the contact pose the pad is world-aligned with
+    # the band, so the actual band cylinder is the cutter
+    slab = slab.cut(cyl(2.0 * R_RIM, (Z_TOP_C - z_bot) + 2.0, z=z_bot - 1.0))
+    if h is not None:
+        return _to_rest(slab)
+    # the real pad: L-FLANGE + rail. The back flange — the joint-carrying
+    # leg of the L: slab back plane → the recessed arm face, spanning the
+    # flange height
+    slab = slab.union(
+        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT)
+        .polyline([(_x_face(y0), y0), (_x_face2(y0), y0),
+                   (_x_face2(y1), y1), (_x_face(y1), y1)])
+        .close().extrude(PAD_FLANGE_H))
+    pad = _to_rest(slab)
+    # the HANDLE prism and the Ø12 pivot boss live in the REST frame and
+    # lean across the contact-frame face planes — the deeper, taller
+    # L-flange now reaches them at its inner-top / inner-bottom corners
+    # (0.23 mm³ of parasitic sliver, scan-caught). Shave the pad BODY clear
+    # of both; the RAIL is exempt — it legitimately rides inside the
+    # mortise cavity, which tunnels through the handle. Guard clearance
+    # covers the ENTRY SLIDE too: û carries a sin(8.7°) ≈ 0.15 x-component,
+    # so a corner shaved flush at seat drifts up to ~0.33 back toward the
+    # handle plane during the first ~2 mm of travel (probe-caught).
+    _G = 0.45
+    gx0 = LEVER_PIVOT_X - _HW - _G
+    pad = pad.cut(
+        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT - 10.0)
+        .polyline([(gx0, y0 - 1.0), (gx0 + 30.0, y0 - 1.0),
+                   (gx0 + 30.0, y1 + 1.0), (gx0, y1 + 1.0)])
+        .close().extrude(40.0))
+    pad = pad.cut(
+        cq.Workplane("XZ").center(LEVER_PIVOT_X, BRAKE_PIVOT_Z)
+        .circle(LEVER_BOSS_OD / 2.0 + _G)
+        .extrude(-(y1 - y0 + 2.0)).translate((0, y0 - 1.0, 0)))
+    rail = _pad_joint(tenon=True)
+    # trim the rail's overshoot flush with the pad's inner end face —
+    # the print's bed face (the û-prism end is 8.7° off the y-plane)
+    rail = rail.cut(
+        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT - 1.0)
+        .center(_x_face2(y1) + 1.0, y1 + 5.0).rect(20.0, 10.0)
+        .extrude(PAD_FLANGE_H + 2.0))
+    return pad.union(_to_rest(rail))
 
 
-def apply_to_main_body(main_body: cq.Workplane) -> cq.Workplane:
-    """No lever-dependent cuts — the rim already carries both bands."""
-    return main_body
+def brake_pad_tall_demo(h):
+    """DEMO ONLY (viewer poses): the pad rebuilt at a forced height on the
+    same mount plane, top edge kept — visualizes WHY the solver caps the
+    height (the bottom strip sweeps below the band into the cone/teeth).
+    The exported/printable pad stays the solved `brake_pad_tpu`."""
+    return _build_brake_pad(h)
 
 
-# ── Kinematic assertions (radial) — fire at import ──────────────────────────
-# Verifies the geometry meets the design constraints: the two levers travel
-# through equal angles (A_ANGLES_MATCH), the pawl fully clears the teeth at
-# full pull (A_PAWL_CLEAR), and the brake pad is clear at rest / compressed at
-# full pull (A_BRAKE_REST / A_BRAKE_OVERLAP).
-# Brake test point: pad's max-compression corner = (BRAKE_Y0, PAD_Z_HI).
-# BRAKE_Y0 has the largest |y| in the pad's Y range; PAD_Z_HI is the top of the
-# pad, furthest from the brake pivot (z=2) in +Z. That corner swings furthest
-# at full pull and engages the band first.
-# Build the actual pad/arm corner positions (with X- and Y-tilts) so the
-# kinematic assertions run against real geometry, not a band-conforming hypo.
-_TDX_X = (BRAKE_PAD_H / 2) * math.tan(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-_TDX_Y = ((BRAKE_Y1 - BRAKE_Y0) / 2) * abs(PAD_Y_MID) / (
-    math.cos(math.radians(BRAKE_PAD_MOUNT_TILT_DEG))
-    * math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2))
-
-# Lever-arm left-face x at each (y_sign, z_sign) — sign +1 at top/at-Y1.
-def _lever_left_x(y_sign, z_sign):
-    return BRAKE_ARM_X_LO + z_sign * _TDX_X + y_sign * _TDX_Y
-
-# Band-side rubber-pad corners — the RECTANGULAR pad's actual band face.
+# ── Kinematic assertions — fire at import (contact-frame corners) ────────────
 _PAD_BAND_CORNERS = brake_pad_rect_corners()[1]
-# Lever arm's bottom-inner edge corners (at z=PAD_Z_LO, on the lever face)
-_ARM_BOTTOM_CORNERS = [
-    (_lever_left_x(-1, -1), BRAKE_Y0, PAD_Z_LO),
-    (_lever_left_x(+1, -1), BRAKE_Y1, PAD_Z_LO),
-]
+# the arm and the pad flange both bottom out at PAD_FLANGE_BOT now — pass
+# their bottom-front corners into the teeth-box sweep (they are RADIALLY
+# outside the tooth annulus, which the radial-aware check credits)
+_ARM_BOTTOM_CORNERS = []
+_FLANGE_BOTTOM_CORNERS = []
+for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
+    _xr, _zr = _rest_xz(_x_face2(_y), PAD_FLANGE_BOT)
+    _ARM_BOTTOM_CORNERS.append((_xr, _y, _zr))
+    _xr, _zr = _rest_xz(_x_face(_y), PAD_FLANGE_BOT)
+    _FLANGE_BOTTOM_CORNERS.append((_xr, _y, _zr))
 
-_KIN = assert_kinematics(
-    ratchet_pivot_x=RATCHET_PIVOT_X, ratchet_pivot_z=RATCHET_PIVOT_Z,
-    ratchet_travel_deg=RATCHET_OUTER_TRAVEL_DEG,
+KIN = assert_kinematics(
+    ratchet_pivot_x=LEVER_PIVOT_X, ratchet_pivot_z=RATCHET_PIVOT_Z,
+    ratchet_stop_deg=RATCHET_STOP_DEG,
     pawl_y_mid=PAWL_Y_MID, pawl_z_mid=PAWL_Z_MID,
-    brake_pivot_x=BRAKE_PIVOT_X, brake_pivot_z=BRAKE_PIVOT_Z,
-    brake_travel_deg=BRAKE_INNER_TRAVEL_DEG,
+    brake_pivot_x=LEVER_PIVOT_X, brake_pivot_z=BRAKE_PIVOT_Z,
+    brake_travel_deg=LEVER_TRAVEL_DEG,
+    brake_contact_deg=BRAKE_CONTACT_DEG,
+    brake_band_z0=BRAKE_BAND_Z0, brake_band_z1=BRAKE_BAND_Z1,
+    # spool-chamber keep-out: outermost design wrap + 0.2 sweep margin,
+    # starting at the separator top
+    chamber_r_min=R_OUT_COIL + CABLE_D / 2.0 + 0.2, chamber_z0=SEP_Z1,
     pad_band_corners=_PAD_BAND_CORNERS,
     arm_bottom_corners=_ARM_BOTTOM_CORNERS,
-    ratchet_band_h=RATCHET_BAND_H,
+    flange_bottom_corners=_FLANGE_BOTTOM_CORNERS,
+    ratchet_band_z0=RATCHET_BAND_Z0, ratchet_band_z1=RATCHET_BAND_Z1,
 )
 
 
-ratchet_lever = _apply_rest_precomp(_build_ratchet_lever(),
-                                    RATCHET_PIVOT_X, RATCHET_PIVOT_Z)
-brake_lever   = _apply_rest_precomp(_build_brake_lever(),
-                                    BRAKE_PIVOT_X, BRAKE_PIVOT_Z)
+ratchet_lever = _build_ratchet_lever()
+brake_lever = _build_brake_lever()
+brake_pad_tpu = _build_brake_pad()
+
+# TPU TORSION-BAR pivot pin (95A, prints standing) — ONE stepped pin per
+# lever, inserted from the OUTER post's face. Tip-first profile: round TIP
+# (inner-post bearing) → LEVER hex (keys the boss pocket) → NECK (the torsion
+# spring) → POST hex (keyed in the clocked outer-post keyway) → flange HEAD.
+from .params import (  # noqa: E402
+    LEVER_PIN_L, PIN_TIP_END_Y,
+)
+
+
+def _build_axle_pin():
+    """The SQUARE torsion axle as PRINTED (user redesign — the stepped hex
+    pin's corners printed too soft to grip): ONE plain PIN_SQ_S prism,
+    standing on end — a square column, trivially printable. No steps, no
+    flanges: the frame's diamond holes and the lever's clocked pocket do
+    all the keying, the blind-bore floor registers the depth, and the free
+    spans across the two side gaps are the torsion springs (working in
+    parallel)."""
+    return (cq.Workplane("XY").rect(PIN_SQ_S, PIN_SQ_S)
+            .extrude(LEVER_PIN_L))
+
+
+lever_pin = _build_axle_pin()                                 # the print
+
+
+def lever_pin_in_place(pivot_z, y_sign, pull_deg=0.0):
+    """The axle placed as INSTALLED, showing the REAL WORKING TWIST (the
+    viewer solid is twist-extruded — a rigid prism can't be keyed 45° in
+    the frame AND 45−PRETWIST in the lever at once): frame-keyed spans at
+    45°, the lever span at the pocket's clock (−PRETWIST, − pull when the
+    lever is posed pulled), twisting across the two free side gaps — the
+    torsion springs, made visible."""
+    from .params import LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L
+    k = 1.0 if y_sign > 0 else -1.0               # local CCW → world +Y clock sign
+    mid = PIN_KEY_BASE_DEG - PIN_PRETWIST_DEG - pull_deg
+    base = PIN_KEY_BASE_DEG
+    seg_in = BEAM_SIZE / 2.0 - PIN_TIP_END_Y      # keyed in the beam flank
+    gap = LEVER_Y_IN - BEAM_SIZE / 2.0            # the free torsion spans
+    seg_out = POST_OUT_T + PIN_GRIP_L             # column + grip stub
+
+    def seg(z0, length, a0, twist):
+        wp = cq.Workplane("XY").rect(PIN_SQ_S, PIN_SQ_S)
+        s = wp.twistExtrude(length, k * twist) if twist else wp.extrude(length)
+        return s.rotate((0, 0, 0), (0, 0, 1), k * a0).translate((0, 0, z0))
+
+    z1 = seg_in
+    z2 = z1 + gap
+    z3 = z2 + LEVER_T
+    z4 = z3 + gap
+    p = (seg(0.0, seg_in, base, 0.0)
+         .union(seg(z1, gap, base, mid - base))
+         .union(seg(z2, LEVER_T, mid, 0.0))
+         .union(seg(z3, gap, mid, base - mid))
+         .union(seg(z4, seg_out, base, 0.0)))
+    return (p.rotate((0, 0, 0), (1, 0, 0), -y_sign * 90)   # +Z → ±Y, inner end first
+            .translate((LEVER_PIVOT_X, y_sign * PIN_TIP_END_Y, pivot_z)))

@@ -12,6 +12,14 @@ cadkit/
                      one FastenerSpec API, print-undersize aware
   threads.py         self-supporting 45° FDM screw threads (read THREADS_README.md first)
   joinery.py         printable mortise-and-tenon slide joints (read JOINERY_README.md)
+  supports.py        teardrop + 45° wall-ramp support for short SIDEWAYS bosses
+                     (horizontal cylinder off a wall, printed -Z→+Z)
+  holes.py           teardrop_hole() — cutter for SIDEWAYS round holes: 45°
+                     teardrop ceiling replaces the sagging round top; round
+                     lower half untouched (pins/rods bear as in a round bore)
+  contact.py         minimal-contact rub features: contact_rib_size(nozzle)
+                     = exactly one nozzle (width AND proud; Arachne keeps
+                     exact-nozzle lines); contact_ring() = ring + teardrop tail
   step_export.py     export_step(obj, path) — names the STEP product after the file
   overlap_check.py   parallel interpenetration gate (wrap in tools/check_overlaps.py)
   cq_colors.py       hex / 0..255 / name -> cq.Color, for baking colours into a STEP

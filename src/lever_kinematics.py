@@ -1,63 +1,53 @@
-"""Radial-engagement lever kinematics + load-time assertions.
+"""lever kinematics + load-time assertions — ported from
+src/lever_kinematics.py with the current design's radii, and the ratchet tooth box
+generalized to an arbitrary z-band (this design's tooth band sits at the separator's
+seat height, not at z=0).
 
-Replaces the old AXIAL A1–A5 suite. The levers were rotated 90°, so the
-contacts now engage the rim's OUTER cylindrical face and "throw" is a RADIAL
-displacement produced by rotating the contact point about the (Y-axis) pivot
-by the pull travel.
+Assertions (fire at import via assert_kinematics, called from the current design.levers).
+The brake is validated at its CONTACT POSE (user's spec) — the pull past
+contact is the TPU-compression regime and carries no geometric assertions
+(full-pull compression is REPORTED, not asserted):
 
-Assertions (fire at import via assert_kinematics, called from levers.py):
-
-  A_ANGLES_MATCH  : both levers travel through the same angle, so they start
-                    (rest) and end (full pull) at the same orientation.
-  A_PAWL_CLEAR    : at full pull, the ratchet pawl's rim-contact point has
-                    swung radially OUT past the tooth tips by ≥ PAWL_CLEAR_MM.
-  A_BRAKE_REST    : at rest, the brake rubber face sits ≥ BRAKE_REST_MM off
-                    the band (disengaged).
-  A_BRAKE_OVERLAP : at full pull, the brake rubber face has swung radially IN
-                    to ≥ BRAKE_OVERLAP_MM past the band surface (compressed).
+  A_PAWL_CLEAR    : at the ratchet's WALL STOP (the window sill catches the
+                    pawl block's bottom edge at ratchet_stop_deg — the
+                    lever's real travel limit), the pawl's rim-contact
+                    point has swung radially OUT past the tooth tips by ≥
+                    PAWL_CLEAR_MM. (The old equal-travels assertion is
+                    retired: the ratchet is wall-stopped, the brake is
+                    TPU-compression-limited — different angles by design.)
+  A_BRAKE_REST    : at rest, no brake-pad band-side corner is inside the band.
+  A_BRAKE_CONTACT_FLUSH : at the contact angle, every band-side pad corner
+                    sits ON the band — gap in [0, FLUSH_TOL] (the positive
+                    slack is the flat-face-vs-cylinder sagitta; parallelism
+                    itself holds by construction, pre-tilt = contact angle).
+  A_BRAKE_CONTACT_SPAN  : at the contact angle, all band-side corners land
+                    inside the band's z-extent.
+  A_BRAKE_CABLE_CLR : swept over the whole pull, any band corner above
+                    `chamber_z0` (the spool chamber) keeps its radius ≥
+                    `chamber_r_min` (outermost wrap + margin) — the tall
+                    resting pad must never clip a full coil.
   A_BRAKE_RATCHET_CLR : at full pull, the brake assembly's closest corners
-                    (lever arm bottom-inner edge and rubber pad band-side
-                    bottom) each keep ≥ BRAKE_RATCHET_CLR_MM 3-D distance
-                    from the ratchet tooth box (worst-case tooth alignment).
-
-The pawl contact is sampled at the lever's mid-azimuth and the band's mid-Z
-— representative of where the pawl tooth meshes.
-
-The brake contact is sampled at the pad's MAX-COMPRESSION corner: the y with
-the largest |y| (furthest from the spool axis) and the z furthest from the
-brake pivot in +Z (the pad's top edge for a pivot below the pad). That corner
-swings the most at full pull, so it engages the band first and most deeply.
-Testing at the corner instead of the mid-point lets the pad grow downward (in
--Z) without artificially failing A_BRAKE_OVERLAP — what matters is that
-SOME part of the pad engages, and the corner is the first part to do so.
+                    keep ≥ BRAKE_RATCHET_CLR_MM 3-D distance from the ratchet
+                    tooth box (worst-case tooth alignment) — WARNS, not fatal.
 """
 
 import math
 
-from .spool import RIM_OD
-from .dimensions import RATCHET_DEPTH
+from .params import FLOOR_OD, RATCHET_DEPTH
 
-# Brake-band outer radius and ratchet tooth-tip radius are now EQUAL (the brake
-# band was bumped 1.7→RATCHET_DEPTH so it matches the tip extent — no overhang).
-# The teeth grow INWARD from the brake-band outer to a valley at R_BAND −
-# RATCHET_DEPTH; a 45° cone (in spool._lever_rim) bridges between the two.
-R_BAND        = RIM_OD / 2                  # 58.9 — brake-band surface (= ratchet tooth tip)
-R_RATCHET_TIP = R_BAND                      # 58.9 — tooth tip flush with brake band's outer
-                                            #        (no overhang; the cone transitions the
-                                            #        wall between them)
-R_ROOT        = R_BAND - RATCHET_DEPTH      # 57.4 — pawl seats on the valley floor
+R_BAND        = FLOOR_OD / 2.0              # 72.9 — brake band = tooth tip radius
+R_RATCHET_TIP = R_BAND
+R_ROOT        = R_BAND - RATCHET_DEPTH      # 71.4 — pawl seats on the valley floor
 
-PAWL_CLEAR_MM           = 1.0
-BRAKE_REST_MM           = 1.0
-BRAKE_OVERLAP_MM        = 0.5
-BRAKE_RATCHET_CLR_MM    = 1.0    # min 3-D clearance, brake pad ↔ nearest tooth
-                                 # (worst-case alignment), at full engagement
+PAWL_CLEAR_MM        = 1.0
+BRAKE_REST_MM        = 1.0
+BRAKE_FLUSH_TOL_MM   = 0.40      # ≥ flat-face sagitta across the pad width (~0.17)
+BRAKE_RATCHET_CLR_MM = 1.0
 _EPS = 1e-6
 
 
 def _rotate_xz_about(x, z, px, pz, theta_deg):
-    """Rotate (x, z) about (px, pz) by theta_deg about +Y.
-    (Pull = -travel; matches build.py's assembly transform.)"""
+    """Rotate (x, z) about (px, pz) by theta_deg about +Y (pull = −travel)."""
     t = math.radians(theta_deg)
     dx, dz = x - px, z - pz
     return (px + dx * math.cos(t) + dz * math.sin(t),
@@ -66,78 +56,86 @@ def _rotate_xz_about(x, z, px, pz, theta_deg):
 
 def _contact_radius_after_pull(pivot_x, pivot_z, r_rest, y, z, travel_deg):
     """Radius (in XY) of a rim point at radius r_rest, at the given y and z,
-    after the lever is pulled (rotated -travel about +Y at the pivot)."""
+    after the lever is pulled (rotated −travel about +Y at the pivot)."""
     x_rest = math.sqrt(max(0.0, r_rest ** 2 - y ** 2))
     x2, _z2 = _rotate_xz_about(x_rest, z, pivot_x, pivot_z, -travel_deg)
     return math.hypot(x2, y)
 
 
-def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_travel_deg,
+def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_stop_deg,
                       pawl_y_mid, pawl_z_mid,
                       brake_pivot_x, brake_pivot_z, brake_travel_deg,
+                      brake_contact_deg, brake_band_z0, brake_band_z1,
+                      chamber_r_min, chamber_z0,
                       pad_band_corners,
                       arm_bottom_corners,
-                      ratchet_band_h):
-    """Brake assertions evaluate the ACTUAL pad geometry — the band-side
-    face of the (flat, tilted) rubber pad has 4 explicit corners passed in
-    as `pad_band_corners` = [(x, y, z), ...], and the lever-arm's bottom-
-    inner edge has 2 corners as `arm_bottom_corners`. We rotate each by the
-    travel and inspect every one — no band-conforming hypothetical."""
-    # A_ANGLES_MATCH ----------------------------------------------------------
-    assert abs(ratchet_travel_deg - brake_travel_deg) < _EPS, (
-        f"A_ANGLES_MATCH: lever travels differ "
-        f"({ratchet_travel_deg}° vs {brake_travel_deg}°) — the levers would "
-        f"not start/end at the same angles.")
-
-    # A_PAWL_CLEAR ------------------------------------------------------------
-    # Pawl seats in the valley (r=R_ROOT) at rest; after the disengage pull it
-    # must clear the tooth tips (r=R_RIM) by ≥ PAWL_CLEAR_MM.
+                      ratchet_band_z0, ratchet_band_z1,
+                      flange_bottom_corners=()):
+    """contract: the ratchet tooth box is z ∈ [ratchet_band_z0/z1] (band
+    at seat height), the ratchet's travel limit is its WALL STOP
+    (`ratchet_stop_deg`), and the BRAKE validates at `brake_contact_deg`
+    (flush + in-band) plus the swept spool-chamber keep-out — see header."""
+    # A_PAWL_CLEAR — at the WALL STOP, the lever's real travel limit --------
     r_pawl = _contact_radius_after_pull(ratchet_pivot_x, ratchet_pivot_z,
                                         R_ROOT, pawl_y_mid, pawl_z_mid,
-                                        ratchet_travel_deg)
+                                        ratchet_stop_deg)
     need = R_RATCHET_TIP + PAWL_CLEAR_MM
     assert r_pawl >= need - _EPS, (
-        f"A_PAWL_CLEAR: pawl reaches r={r_pawl:.2f} mm at full pull, "
-        f"need ≥ {need:.2f} (tip {R_RATCHET_TIP:.2f} + {PAWL_CLEAR_MM}). "
-        f"Raise RATCHET_PIVOT_Z or increase travel.")
+        f"A_PAWL_CLEAR: pawl reaches r={r_pawl:.2f} mm at the wall stop "
+        f"({ratchet_stop_deg:.1f} deg), need ≥ {need:.2f}. Raise "
+        f"RATCHET_STOP_DEG (lowers the sill) or RATCHET_PIVOT_Z.")
 
-    # ── Brake-pad rest gaps (real geometry) ──────────────────────────────────
-    # At rest each pad band-side corner sits at some radius from the spool
-    # axis. The MIN gap (across all 4 corners) is the worst-case rest
-    # clearance. The DESIGN gap (at the face center) is set elsewhere; here
-    # we just verify no corner is already inside the band.
-    rest_gaps = []
-    for x, y, _z in pad_band_corners:
-        rest_gaps.append(math.hypot(x, y) - R_BAND)
+    # A_BRAKE_REST ------------------------------------------------------------
+    rest_gaps = [math.hypot(x, y) - R_BAND for x, y, _z in pad_band_corners]
     min_rest_gap = min(rest_gaps)
     assert min_rest_gap > -_EPS, (
         f"A_BRAKE_REST: a pad band-side corner is INSIDE the band at rest "
-        f"(min gap {min_rest_gap:.3f} mm). Move BRAKE_ARM_X_LO outward.")
+        f"(min gap {min_rest_gap:.3f} mm) — the contact-frame back-rotation "
+        f"leaves too little rest standoff; raise BRAKE_CONTACT_DEG margins.")
 
-    # ── Brake overlap at full pull (real geometry) ───────────────────────────
-    # Rotate every pad band-side corner by -brake_travel_deg about the brake
-    # pivot, compute the corner's new radius, and check the DEEPEST corner
-    # makes ≥ BRAKE_OVERLAP_MM of compression into the band.
-    overlaps = []
+    # A_BRAKE_CONTACT_FLUSH + A_BRAKE_CONTACT_SPAN ---------------------------
+    contact_gaps, contact_zs = [], []
     for x, y, z in pad_band_corners:
-        nx, _nz = _rotate_xz_about(x, z,
-                                   brake_pivot_x, brake_pivot_z,
-                                   -brake_travel_deg)
-        overlaps.append((R_BAND - math.hypot(nx, y), x, y, z))
-    overlaps.sort(reverse=True)               # deepest first
-    max_overlap, mx, my, mz = overlaps[0]
-    assert max_overlap >= BRAKE_OVERLAP_MM - _EPS, (
-        f"A_BRAKE_OVERLAP: deepest pad corner overlaps band by "
-        f"{max_overlap:.2f} mm at full pull (corner y={my:.2f}, z={mz:.2f}), "
-        f"need ≥ {BRAKE_OVERLAP_MM}. Lower BRAKE_PIVOT_Z, increase travel, "
-        f"or shrink PAD_REST_GAP.")
+        nx, nz = _rotate_xz_about(x, z, brake_pivot_x, brake_pivot_z,
+                                  -brake_contact_deg)
+        contact_gaps.append(math.hypot(nx, y) - R_BAND)
+        contact_zs.append(nz)
+    assert (min(contact_gaps) > -0.05 - _EPS
+            and max(contact_gaps) < BRAKE_FLUSH_TOL_MM + _EPS), (
+        f"A_BRAKE_CONTACT_FLUSH: at contact ({brake_contact_deg:.2f} deg) "
+        f"corner gaps span [{min(contact_gaps):.3f}, {max(contact_gaps):.3f}]"
+        f" mm, need [0, {BRAKE_FLUSH_TOL_MM}]. The face is not flush.")
+    assert (min(contact_zs) >= brake_band_z0 - _EPS
+            and max(contact_zs) <= brake_band_z1 + _EPS), (
+        f"A_BRAKE_CONTACT_SPAN: at contact the pad spans z "
+        f"[{min(contact_zs):.2f}, {max(contact_zs):.2f}], outside the band "
+        f"[{brake_band_z0}, {brake_band_z1}].")
 
-    # ── A_BRAKE_RATCHET_CLR (real geometry) ──────────────────────────────────
-    # At full engagement, the brake assembly's bottom edges sweep close to
-    # the ratchet teeth. We check the bottom-z 2 corners of pad_band_corners
-    # plus the 2 arm_bottom_corners. Each must keep ≥ BRAKE_RATCHET_CLR_MM
-    # 3-D distance from the tooth box {r ∈ [R_BAND, R_RATCHET_TIP],
-    # z ∈ [0, ratchet_band_h]}.
+    # A_BRAKE_CABLE_CLR — swept spool-chamber keep-out ------------------------
+    cable_clr = None
+    for x, y, z in pad_band_corners:
+        for i in range(0, int(brake_travel_deg * 4) + 1):
+            t = min(i / 4.0, brake_travel_deg)
+            nx, nz = _rotate_xz_about(x, z, brake_pivot_x, brake_pivot_z, -t)
+            if nz > chamber_z0 + _EPS:
+                c = math.hypot(nx, y) - chamber_r_min
+                if cable_clr is None or c < cable_clr:
+                    cable_clr = c
+    if cable_clr is not None:
+        assert cable_clr >= -_EPS, (
+            f"A_BRAKE_CABLE_CLR: a swept pad corner dips {-cable_clr:.2f} mm "
+            f"inside the spool-chamber keep-out (r < {chamber_r_min:.2f} "
+            f"above z {chamber_z0}). Lower the pad top or add top margin.")
+
+    # full-pull compression — REPORTED only (the compression regime carries
+    # no geometric assertions under the contact-pose contract)
+    max_overlap = max(
+        R_BAND - math.hypot(
+            _rotate_xz_about(x, z, brake_pivot_x, brake_pivot_z,
+                             -brake_travel_deg)[0], y)
+        for x, y, z in pad_band_corners)
+
+    # A_BRAKE_RATCHET_CLR -----------------------------------------------------
     pad_z_sorted = sorted(pad_band_corners, key=lambda c: c[2])
     bottom_pad_corners = [c for c in pad_band_corners
                           if abs(c[2] - pad_z_sorted[0][2]) < _EPS]
@@ -148,13 +146,14 @@ def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_travel_deg,
                                   -brake_travel_deg)
         r = math.hypot(nx, y)
         r_gap = max(0.0, R_BAND - r, r - R_RATCHET_TIP)
-        z_gap = max(0.0, -nz, nz - ratchet_band_h)
+        z_gap = max(0.0, ratchet_band_z0 - nz, nz - ratchet_band_z1)
         return math.hypot(r_gap, z_gap), nx, nz, r
 
     worst = None
     for label, corners in (
         ("arm bottom-inner edge", arm_bottom_corners),
         ("pad band-side bottom",  bottom_pad_corners),
+        ("pad flange bottom",     flange_bottom_corners),
     ):
         for x, y, z in corners:
             d, nx, nz, r = _box_dist(x, y, z)
@@ -166,17 +165,16 @@ def assert_kinematics(*, ratchet_pivot_x, ratchet_pivot_z, ratchet_travel_deg,
         import sys
         print(
             f"WARN  A_BRAKE_RATCHET_CLR: {label} (y={y_check:.2f}) ends at "
-            f"(x={nx:.2f}, z={nz:.2f}) → r={r:.2f}; 3-D distance to ratchet "
-            f"tooth box = {worst_d:.2f} mm, want ≥ {BRAKE_RATCHET_CLR_MM}.",
+            f"(x={nx:.2f}, z={nz:.2f}) -> r={r:.2f}; distance to ratchet "
+            f"tooth box = {worst_d:.2f} mm, want >= {BRAKE_RATCHET_CLR_MM}.",
             file=sys.stderr, flush=True)
 
-    r_pad = R_BAND - max_overlap
     return {
         "pawl_full_pull_r": r_pawl,
         "pawl_clearance_mm": r_pawl - R_RATCHET_TIP,
         "pad_min_rest_gap_mm": min_rest_gap,
+        "contact_flush_gap_mm": max(contact_gaps),
         "pad_max_overlap_mm": max_overlap,
-        "pad_full_pull_r": r_pad,
+        "cable_clearance_mm": cable_clr,
         "brake_ratchet_clr_mm": worst_d,
-        "brake_ratchet_clr_label": label,
     }
