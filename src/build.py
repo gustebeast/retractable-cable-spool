@@ -1,388 +1,296 @@
-"""Retractable Cable Spool - main build script.
+"""Build — THE retractable cable spool.
+Assembles the modular design and shows it in the shared FreeCAD hub as
+`retractable_cable_spool` — the repo-root STEP, the project's main tab.
 
-Run from the repo root:
-  py -3.12 -m src.build              # build all parts + assembly
-  py -3.12 -m src.build --part NAME  # build only one part (faster iteration)
-  py -3.12 -m src.build --list       # list available part names
+Run:  py -3.12 -m src.build   (from the project root)
 
-Produces all printed-part STEPs and an assembled assembly.step in cwd.
-
-Build order:
-  spool             → main_body (initial)
-  caps              → bearing_cap_top + cap-key grooves
-  axle              → axle_top, axle_bottom
-  housing           → housing (L-bracket; carries both lever pivots)
-  levers            → ratchet_lever, brake_lever
-  mount_bracket     → mount_bracket
-  viz               → ratchet_spring, brake_spring, brake_pad_rubber,
-                      dummy 608 bearings (assembly-only — not exported)
-
-Then this module composes the final main_body by applying caps' cap-key
-groove cuts and levers' ratchet-teeth + drum-cable-hole cuts. The
-per-module ``apply_to_main_body(body)`` functions are pure — no side
-effects on imported modules.
+Parts so far: spring chamber (center) + top bearing cap + the 12 mm middle
+brake/ratchet rim seated at half height + the 4-beam housing with its spool/tray
+wall ring. The rest of the sliding stack (spool ceiling/wall, tray floor) follows.
 """
 
-import argparse
 import pathlib
-import sys
 
 import cadquery as cq
 
-# Shared helpers from the Archive/3D cadkit/ folder: color() (cq.Color from hex
-# strings, 0..255 tuples, and SVG/X11 names), export_step() (names each STEP
-# product after its file), and show() (opens/refreshes the FreeCAD viewer hub).
-# See cadkit/README.md.
-from cadkit.cq_colors import color
 from cadkit.step_export import export_step
+from cadkit.cq_colors import color
 from cadkit.freecad import show
 
-from .helpers import heal, cyl
-from .dimensions import SPOOL_H
+from .spring_housing import (
+    spring_housing, spring_housing_cap, spring_gate_insert, spring_strip_end,
+    spring_gate_coupon,
+)
+from .separator import separator
+from .frame import frame_bottom, frame_top
+from .wall import wall_bottom, wall_top
+from .chambers import cable_ceiling, cable_floor, height_clamp
+from .axle import axle_bottom, axle_top, axle_pin, pin_in_place, winding_tool
+from .mount import mount_bracket, mount_lock_tpu, lock_in_place
+from .lever_rig import lever_test_rig, lever_test_wall
+from .t_coupon import t_test_mortise, t_test_tenon
+from .levers import (
+    ratchet_lever, brake_lever, brake_pad_tpu,
+    lever_pin, lever_pin_in_place, KIN, brake_pad_tall_demo,
+    BRAKE_CONTACT_DEG,
+)
+from .params import (
+    ROD_Z_BOT, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HEX_DRIVE_Z0, LEVER_PIVOT_X,
+    LEVER_TRAVEL_DEG,
+)
+
+# ── Viewer pose (revertable) ─────────────────────────────────────────────────
+# Both levers at REST (canonical pose). Set BRAKE_POSE_DEG = BRAKE_CONTACT_DEG
+# to preview the brake flush on the band; RATCHET_POSE_DEG likewise for a
+# pulled ratchet (its wall stop is at 15°). The TEST RIG group below poses
+# its own copies independently (ratchet meshed, brake at contact).
+# BRAKE_PAD_DEMO_H forces an oversized viewer-only pad (None = the real one).
+BRAKE_PAD_DEMO_H = None
+BRAKE_POSE_DEG = 0.0
+RATCHET_POSE_DEG = 0.0
 
 
-# ── Dark-mode-friendly assembly palette ────────────────────────────────────
-# Picked to sit on a dark FreeCAD background (~#1e1e1e) without disappearing
-# and to keep functionally-related parts colour-coordinated:
-#   • spool body family (the rotating drum that wraps the cable) — warm tans
-#   • housing family (stationary L-bracket) — slate blues
-#   • brake parts (lever + its pin chunk) — muted teal-green
-#   • ratchet parts (lever + its pin chunk) — warm coral
-#   • bearings — silvery
-#   • axle halves — bronze
-#   • viz-only (springs, rubber pad) — muted utility colours
-COLOR = {
-    "main_body":         "#C4A56B",  # warm tan — spool body
-    "cable_top_rim":     "#D6BC8C",  # lighter tan — top of spool
-    "cable_retainer":    "#C7A55C",  # gold — retention cage
-    "cable_stop":        "#C7A55C",  # gold — cable C-clamp stop
-
-    "housing":           "#6B8AAB",  # slate blue — main structural
-    "mount_bracket":     "#4F6478",  # deep slate — wood-mount L
-
-    "axle_top":          "#B97D43",  # bronze — pancake half
-    "axle_bottom":       "#B97D43",  # bronze — lever half (matches)
-    "bearing_cap_top":   "#8FA8C0",  # lighter slate — removable cap
-
-    "bearing_bottom":    "#B4BAC1",  # silver — 608
-    "bearing_top":       "#B4BAC1",  # silver — 608
-
-    "ratchet_lever":     "#DC7A6E",
-    "brake_pin_chunk":   "#6DAB94",  # teal-green — brake group
-    "brake_lever":       "#6DAB94",
-
-    "guide_wheel":       "#E1C75D",  # yellow accent — small/visible
-
-    "ratchet_spring":    "#95A4B4",  # steel — wire viz
-    "brake_spring":      "#95A4B4",
-    "brake_pad_rubber":  "#3A3A3A",  # charcoal — rubber
-
-    "build_counter":     "#F0A878",  # salmon — accent
-}
-
-from . import spool
-from . import caps
-from . import axle as _axle_mod
-from . import housing as _housing_mod
-from . import levers as _lev_mod
-from . import mount_bracket as _bracket_mod
-from . import cable_rim as _cable_rim_mod
-from . import cable_retainer as _cable_retainer_mod
-from . import cable_stop as _cable_stop_mod
-from . import viz as _viz_mod
-
-# Compose the final main_body by applying the cap-key grooves and the
-# lever-dependent cuts (ratchet teeth, drum cable hole) explicitly.
-main_body = caps.apply_to_main_body(spool.main_body)
-main_body = _lev_mod.apply_to_main_body(main_body)
-# (Helical V-groove cut removed — pancake rewrite has no drum/helix.)
-
-# Re-bind module-level part variables for export.
-bearing_cap_top        = caps.bearing_cap_top
-cable_top_rim          = _cable_rim_mod.cable_top_rim
-cable_retainer         = _cable_retainer_mod.cable_retainer
-cable_stop             = _cable_stop_mod.cable_stop
-axle_top               = _axle_mod.axle_top
-axle_bottom            = _axle_mod.axle_bottom
-housing                = _housing_mod.housing
-brake_pin_chunk        = _housing_mod.brake_pin_chunk
-guide_wheel            = _housing_mod.guide_wheel
-guide_wheel_plus       = _housing_mod.guide_wheel_plus
-mount_bracket            = _bracket_mod.mount_bracket
-ratchet_lever          = _lev_mod.ratchet_lever
-brake_lever            = _lev_mod.brake_lever
-ratchet_spring         = _viz_mod.ratchet_spring
-brake_spring           = _viz_mod.brake_spring
-brake_pad_rubber       = _viz_mod.brake_pad_rubber
-bearing_top            = _viz_mod.bearing_top
-bearing_bottom         = _viz_mod.bearing_bottom
-
-# Drill the M2 guide-wheel-axle clearance hole through the cable retainer's
-# tenon — on BOTH the -X and +X sides (one hole per guide wheel). The axle
-# screws pass through the housing along the line the retainer's tenon TIP now
-# reaches (RETAIN_TENON_DEPTH lands the tip on the screw axis). The screw sits
-# HALF in the tenon (this groove) and half in the housing, pinning the joint —
-# so the bore is the SNUG axle-thread Ø (GUIDE_AXLE_SHAFT_D, the same the screw
-# self-taps in the housing), NOT a loose clearance Ø. The cut is a full
-# cylinder at the screw axis, but since the tenon tip ends at that axis only
-# its inner half is removed, leaving the half-round pin groove. Done here (not
-# in cable_retainer.py) to avoid a housing → retainer circular import.
-def _guide_axle_clr_hole(x_center, z_head):
-    """Snug Ø GUIDE_AXLE_SHAFT_D axle bore starting at z_head, at the given X.
-    Each side's z_head matches the housing's own axle bore: the -X head seats
-    on the back-leg floor (GUIDE_AXLE_HEAD_Z), the +X head at the bottom of
-    its Ø4.1 access bore (GUIDE_AXLE_HEAD_Z_PLUS)."""
-    return (
-        cyl(_housing_mod.GUIDE_AXLE_SHAFT_D, _housing_mod.GUIDE_AXLE_HOLE_LEN,
-            z=z_head)
-        .translate((x_center, 0, 0))
-    )
-cable_retainer = (cable_retainer
-                  .cut(_guide_axle_clr_hole(_housing_mod.GUIDE_WHEEL_CX,
-                                             _housing_mod.GUIDE_AXLE_HEAD_Z))
-                  .cut(_guide_axle_clr_hole(-_housing_mod.GUIDE_WHEEL_CX,
-                                             _housing_mod.GUIDE_AXLE_HEAD_Z_PLUS)))
-
-# ────────────────────────────────────────────────────────────────────────────
-# Export — individual parts for printing, + a combined assembly STEP for
-# dimensional verification (bearings & spring not modelled, since they're
-# purchased parts).
-# ────────────────────────────────────────────────────────────────────────────
-
-
-main_body = heal(main_body)
-housing = heal(housing)
-brake_pin_chunk = heal(brake_pin_chunk)
-cable_stop = heal(cable_stop)
-guide_wheel = heal(guide_wheel)
-guide_wheel_plus = heal(guide_wheel_plus)
-ratchet_lever = heal(ratchet_lever)
-brake_lever   = heal(brake_lever)
-# Springs accumulate near-tangent boolean fuses between rings/legs/spheres
-# — heal them too so strict STEP importers accept the resulting compound
-# without face-tolerance complaints.
-ratchet_spring = heal(ratchet_spring)
-brake_spring   = heal(brake_spring)
-brake_pad_rubber = heal(brake_pad_rubber)
-
-# Bearing cap is built in its assembled position (top cap seat,
-# z=PANCAKE_CAP_SEAT_Z0..SPOOL_H). Exported as-is.
-bearing_cap_top_export = bearing_cap_top
-
-# Map of part name → (workplane, output filename, optional note).
-PARTS = {
-    "main_body":              (main_body,                  "spool_main_body.step",        None),
-    "bearing_cap_top":        (bearing_cap_top_export,     "bearing_cap_top.step",        None),
-    "cable_top_rim":          (cable_top_rim,              "cable_top_rim.step",          None),
-    "cable_retainer":         (cable_retainer,             "cable_retainer.step",         None),
-    "cable_stop":             (cable_stop,                 "cable_stop.step",             "C-clamp cable stop -- pinches onto the cable at the wood plate so it can't pull back through (M2 + heat-set insert; Ø5 bore / Ø15 body at full clamp)"),
-    "axle_top":               (axle_top,                   "axle_top.step",               "pancake-side half — mortise"),
-    "axle_bottom":            (axle_bottom,                "axle_bottom.step",            "lever-side half — tenon"),
-    "housing":                (housing,                    "housing.step",                None),
-    "brake_pin_chunk":        (brake_pin_chunk,            "brake_pin_chunk.step",        "glue-on -Y corner carrying the brake pivot + stop pins"),
-    # Single STEP for the guide wheel — print TWO of these. guide_wheel_plus
-    # is the +X mirror used in the assembly view only (an XZ flip of the same
-    # part), so it doesn't need its own STEP file.
-    "guide_wheel":            (guide_wheel,                "guide_wheel.step",            "Ø14 Z-axle wheel — print TWO; one bears on the brake rim opposite the brake lever, the other rides in the +X (lever-side) guide pocket"),
-    "ratchet_lever":          (ratchet_lever,              "ratchet_lever.step",          None),
-    "brake_lever":            (brake_lever,                "brake_lever.step",            None),
-    # Springs and the rubber pad are purchased/applied parts — they're
-    # included in assembly.step for visualization only, no need to export
-    # them as individual STEP files for printing.
-    "mount_bracket":             (mount_bracket,            "mount_bracket.step",             "L-shaped wood-screw mount; housing M2-clamps to it"),
-}
-
-
-def _export(name):
-    obj, path, note = PARTS[name]
-    export_step(obj, path)
-    suffix = f"  ({note})" if note else ""
-    print(f"Wrote {path}{suffix}")
-
-
-# Visualization aid — selects which lever pose to render in assembly.step:
-#   "rest"        : both levers at their printed/rest pose (ratchet pawl
-#                   seated in the teeth = engaged; brake pad lifted off
-#                   the band).
-#   "engaged"     : both levers fully pulled (handles toward +X) — ratchet
-#                   pawl swung clear of the teeth (disengaged), brake pad
-#                   pressed onto the band (engaged). θ_pull = full travel.
-#   "brake_midway": brake at the midpoint between first-contact and full
-#                   engagement (= BRAKE_PAD_MOUNT_TILT_DEG of pull), so
-#                   the pad's mount face sweeps to vertical → parallel to
-#                   the band. For visual validation of the tilt geometry.
-#                   Ratchet stays at rest.
-LEVERS_POSE = "rest"
-
-
-def _ratchet_theta_pull_deg():
-    if LEVERS_POSE in ("rest", "brake_midway"):
-        return 0.0
-    if LEVERS_POSE == "engaged":
-        from .housing import RATCHET_OUTER_TRAVEL_DEG
-        return RATCHET_OUTER_TRAVEL_DEG
-    raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
-
-
-def _brake_theta_pull_deg():
-    if LEVERS_POSE == "rest":
-        return 0.0
-    if LEVERS_POSE == "engaged":
-        from .housing import BRAKE_INNER_TRAVEL_DEG
-        return BRAKE_INNER_TRAVEL_DEG
-    if LEVERS_POSE == "brake_midway":
-        from .levers import BRAKE_PAD_MOUNT_TILT_DEG
-        return BRAKE_PAD_MOUNT_TILT_DEG
-    raise ValueError(f"Unknown LEVERS_POSE: {LEVERS_POSE!r}")
-
-
-def _pulled(part, pivot_x, pivot_z, theta):
-    """Assembly rotation: -θ_pull about +Y at the lever's pivot."""
-    if theta == 0.0:
+def _brake_pose(part):
+    if not BRAKE_POSE_DEG:
         return part
-    return (part
-            .translate((-pivot_x, 0, -pivot_z))
-            .rotate((0, 0, 0), (0, 1, 0), -theta)
-            .translate((pivot_x, 0, pivot_z)))
+    return part.rotate((LEVER_PIVOT_X, 0, BRAKE_PIVOT_Z),
+                       (LEVER_PIVOT_X, 1, BRAKE_PIVOT_Z), -BRAKE_POSE_DEG)
 
 
-def _ratchet_lever_for_assembly():
-    from .housing import RATCHET_PIVOT_X, RATCHET_PIVOT_Z
-    return _pulled(ratchet_lever, RATCHET_PIVOT_X, RATCHET_PIVOT_Z,
-                   _ratchet_theta_pull_deg())
+def _ratchet_pose(part):
+    if not RATCHET_POSE_DEG:
+        return part
+    return part.rotate((LEVER_PIVOT_X, 0, RATCHET_PIVOT_Z),
+                       (LEVER_PIVOT_X, 1, RATCHET_PIVOT_Z), -RATCHET_POSE_DEG)
 
 
-def _brake_lever_for_assembly():
-    from .housing import BRAKE_PIVOT_X, BRAKE_PIVOT_Z
-    return _pulled(brake_lever, BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                   _brake_theta_pull_deg())
+# The RIG's brake pose, independent of the main viewer's flags — 0.0 = rest
+# (pad off the band on its rest tab); BRAKE_CONTACT_DEG shows the flush mate.
+RIG_BRAKE_POSE_DEG = 0.0
 
 
-def _brake_pad_rubber_for_assembly():
-    from .housing import BRAKE_PIVOT_X, BRAKE_PIVOT_Z
-    return _pulled(brake_pad_rubber, BRAKE_PIVOT_X, BRAKE_PIVOT_Z,
-                   _brake_theta_pull_deg())
+def _rig_contact(part):
+    if not RIG_BRAKE_POSE_DEG:
+        return part
+    return part.rotate((LEVER_PIVOT_X, 0, BRAKE_PIVOT_Z),
+                       (LEVER_PIVOT_X, 1, BRAKE_PIVOT_Z), -RIG_BRAKE_POSE_DEG)
+from .params import (
+    RIM_SEAT_Z, CEIL_Z0, FLOOR_Z0, CEIL_CLAMP_Z0, FLOOR_CLAMP_Z0,
+)
+
+OUT = pathlib.Path(__file__).resolve().parent
+# The main viewer STEP lives at the REPO ROOT under the project's own name —
+# its FreeCAD tab reads "retractable_cable_spool" (the project's main tab).
+VIEWER = OUT.parent / "retractable_cable_spool.step"
+
+COLOR = {
+    "spring_housing":     "#C4A56B",  # warm tan — spring housing (the backbone)
+    "spring_housing_cap": "#8FA88F",  # sage — removable cap (now at −Z)
+    "separator":          "#B0654B",  # rust — brake/ratchet separator
+    "cable_ceiling":      "#7FA37F",  # green — spool-side cable cap (+Z)
+    "cable_floor":        "#5F8F6F",  # deeper green — tray-side cable cap (−Z)
+    "height_clamp":       "#E0A040",  # amber — C-clamp height lock
+    "frame_bottom":       "#6B8AAB",  # slate — bottom plus + beams (wall mortises, tenons)
+    "frame_top":          "#4F6D8F",  # deeper slate — top plus (slide-on mortise channels)
+    "wall_bottom":        "#9B8AA6",  # muted violet — containment ring, lower half (−Z→+Z)
+    "wall_top":           "#7E6E8F",  # deeper violet — upper half (prints INVERTED, +Z→−Z)
+    "axle_top":           "#A6786B",  # clay — axle top half (mirrored base collar half)
+    "axle_bottom":        "#8B5E52",  # deeper clay — axle bottom half (mirrored base lip half)
+    "axle_pin":           "#D9C55F",  # brass — diagonal plastic rod pin
+    "winding_tool":       "#708090",  # steel grey — pre-wind bar tool (on the hex drive)
+    "mount_bracket":      "#96A48B",  # olive grey — desk/wall mount bar (tenons down)
+    "test_rig":           "#7FA3AD",  # slate teal — TPU-lever test stand (below)
+    "test_wall":          "#A87C68",  # clay — the rig's slide-in toothed spool stand-in
+    "ratchet_lever":      "#C9825F",  # copper — ratchet lever (+y side)
+    "brake_lever":        "#B45A5A",  # brick — brake lever (−y side)
+    "tpu":                "#141414",  # black — 95A TPU parts (brake pad + torsion pins;
+                                      # colour reserved for TPU)
+    "build_num":          "#F0A878",  # salmon — floating build number
+}
+
+# One STEP per printed part (viewer-toggleable, slicer-ready).
+PARTS = [
+    ("spring_housing",     spring_housing,     "spring_housing.step"),
+    ("spring_housing_cap", spring_housing_cap, "spring_housing_cap.step"),
+    ("spring_gate_insert", spring_gate_insert, "spring_gate_insert.step"),
+    ("test_spring_gate",   spring_gate_coupon, "test_spring_gate.step"),
+    ("separator",          separator,          "separator.step"),
+    ("cable_ceiling",      cable_ceiling,      "cable_ceiling.step"),
+    ("cable_floor",        cable_floor,        "cable_floor.step"),
+    ("height_clamp",       height_clamp,       "height_clamp.step"),
+    ("frame_bottom",       frame_bottom,       "frame_bottom.step"),
+    ("frame_top",          frame_top,          "frame_top.step"),
+    ("wall_bottom",        wall_bottom,        "wall_bottom.step"),
+    ("wall_top",           wall_top,           "wall_top.step"),
+    ("axle_top",           axle_top,           "axle_top.step"),
+    ("axle_bottom",        axle_bottom,        "axle_bottom.step"),
+    ("axle_pin",           axle_pin,           "axle_pin.step"),
+    ("winding_tool",       winding_tool,       "winding_tool.step"),
+    ("mount_bracket",      mount_bracket,      "mount_bracket.step"),
+    ("mount_lock_tpu",     mount_lock_tpu,     "mount_lock_tpu.step"),
+    ("ratchet_lever",      ratchet_lever,      "ratchet_lever.step"),
+    ("brake_lever",        brake_lever,        "brake_lever.step"),
+    ("lever_pin_tpu",      lever_pin,          "lever_pin_tpu.step"),
+    ("brake_pad_tpu",      brake_pad_tpu,      "brake_pad_tpu.step"),
+    ("test_lever_rig",     lever_test_rig,     "test_lever_rig.step"),
+    ("test_lever_wall",    lever_test_wall,    "test_lever_wall.step"),
+    ("test_t_mortise",     t_test_mortise,     "test_t_mortise.step"),
+    ("test_t_tenon",       t_test_tenon,       "test_t_tenon.step"),
+]
+
+# Show the TPU-lever test rig BELOW the main assembly (with posed
+# lever/pin/pad copies mounted, so fit reads at a glance) — flip to False
+# to hide it once the TPU validation is done.
+SHOW_LEVER_RIG = True
+RIG_OFF = (0.0, 0.0, -110.0)          # rig top ≈ −56, well under the hex drive
+# T-joint print-fit coupon (production wall↔beam joint at full lengths),
+# shown seated, rotated to the −X side at the rig's level
+SHOW_T_COUPON = True
+COUPON_OFF = (0.0, 0.0, -110.0)
+# The steel spring strip's end posed in the anchor (viewer model only)
+SHOW_SPRING_STRIP = True
+# Spring-gate print-fit coupon at the test-part level
+SHOW_SPRING_GATE_COUPON = True
 
 
-# ── Build counter — a 3D number floating well above the assembly, bumped
-# on every full build. Lets you see at a glance in the viewer that a fresh
-# build landed (the number ticks up), without poking at any real part.
-# Stored in tools/build_counter.txt (gitignored); starts at 1 if missing.
-_BUILD_COUNTER_FILE = pathlib.Path(__file__).resolve().parent.parent / "tools" / "build_counter.txt"
-
-
-def _bump_build_counter() -> int:
+def _bump_build_counter():
+    f = OUT / "build_n.txt"
+    n = 1
     try:
-        n = int(_BUILD_COUNTER_FILE.read_text().strip()) + 1
+        n = int(f.read_text().strip()) + 1
     except (OSError, ValueError):
         n = 1
     try:
-        _BUILD_COUNTER_FILE.write_text(f"{n}\n")
-    except OSError:                                         # noqa: BLE001 — counter is best-effort
+        f.write_text(str(n))
+    except OSError:
         pass
     return n
 
 
-def _build_counter_model(n: int):
-    """Upright extruded number, centred at X=0 and floating ~50 mm above
-    the top of the spool (well clear of the housing). Returns None if the
-    text engine isn't available — a font hiccup must not break the build."""
+def _build_number_model(n):
+    """Floating build number ABOVE the assembly, upright so it reads from the
+    front. The counter was seeded with the old spool's 583 builds (this design continues
+    the same running total), so this is the true all-time build count."""
     try:
-        return (
-            cq.Workplane("XZ")
-            .center(0, SPOOL_H + 50)
-            .text(str(n), 30, 6)
-        )
+        return (cq.Workplane("XZ").text(str(n), 12, 2)
+                .translate((0.0, 0.0, 80.0)))
     except Exception:                                       # noqa: BLE001
         return None
 
 
-def _export_assembly():
+def main():
+    for _name, part, fname in PARTS:
+        export_step(part, str(OUT / fname))
+
     build_n = _bump_build_counter()
-    assembly = (
-        cq.Assembly(name="retractable_cable_spool")
-        .add(main_body,     name="main_body",     color=color(COLOR["main_body"]))
-        .add(bearing_cap_top,    name="bearing_cap_top",    color=color(COLOR["bearing_cap_top"]),
-             loc=cq.Location((0, 0, 0)))
-        # Cable top rim placed CABLE_RIM_AIR_GAP above the TOP of the bottom rim
-        # (= spool.CABLE_TOP_RIM_BASE_Z). This is its max realistic spacing for a
-        # thick cable; the spring-strip screw hole tracks the lid's top off this.
-        # Translation baked into the geometry (not via the assembly loc) so the
-        # STEP export unambiguously shows it at height. Slides freely on the hub.
-        .add(cable_top_rim.translate((0, 0, spool.CABLE_TOP_RIM_BASE_Z)),
-             name="cable_top_rim", color=color(COLOR["cable_top_rim"]),
-             loc=cq.Location((0, 0, 0)))
-        # Fixed (housing-attached) cable-retention cage — already modelled at
-        # its working position (cable-channel Z-band), floating for now.
-        .add(cable_retainer, name="cable_retainer", color=color(COLOR["cable_retainer"]),
-             loc=cq.Location((0, 0, 0)))
-        # Cable stop C-clamp — a loose accessory (clamps onto the cable at
-        # the wood plate), shown floating 100 mm below the assembly.
-        .add(cable_stop, name="cable_stop", color=color(COLOR["cable_stop"]),
-             loc=cq.Location((0, 0, -100)))
-        .add(bearing_bottom,     name="bearing_bottom",     color=color(COLOR["bearing_bottom"]),
-             loc=cq.Location((0, 0, 0)))
-        .add(bearing_top,        name="bearing_top",        color=color(COLOR["bearing_top"]),
-             loc=cq.Location((0, 0, 0)))
-        .add(mount_bracket,          name="mount_bracket",          color=color(COLOR["mount_bracket"]),
-             loc=cq.Location((0, 0, 0)))
-        .add(axle_top,      name="axle_top",      color=color(COLOR["axle_top"]))
-        .add(axle_bottom,   name="axle_bottom",   color=color(COLOR["axle_bottom"]))
-        .add(housing, name="housing", color=color(COLOR["housing"]))
-        .add(brake_pin_chunk, name="brake_pin_chunk", color=color(COLOR["brake_pin_chunk"]))
-        .add(guide_wheel, name="guide_wheel", color=color(COLOR["guide_wheel"]))
-        .add(guide_wheel_plus, name="guide_wheel_plus",
-             color=color(COLOR["guide_wheel"]))
-        .add(_ratchet_lever_for_assembly(), name="ratchet_lever",
-             color=color(COLOR["ratchet_lever"]))
-        .add(_brake_lever_for_assembly(),   name="brake_lever",
-             color=color(COLOR["brake_lever"]))
-        # Lever pivot spacers: glued to each lever's outer Y face at the M2
-        # pivot screw axis. Placed at the housing's pivot X/Z, offset outward
-        # in Y by HOUSING_W/2 + lever thickness so the spacer's inner face
-        # sits flush on the lever's outer face. Rotated to point along Y.
-        .add(ratchet_spring, name="ratchet_spring", color=color(COLOR["ratchet_spring"]))
-        .add(brake_spring,   name="brake_spring",   color=color(COLOR["brake_spring"]))
-        .add(_brake_pad_rubber_for_assembly(), name="brake_pad_rubber",
-             color=color(COLOR["brake_pad_rubber"]))
-    )
-    counter = _build_counter_model(build_n)
-    if counter is not None:
-        assembly.add(counter, name="build_counter", color=color(COLOR["build_counter"]))
-    assembly.save("assembly.step")
-    print(f"Wrote assembly.step  [build #{build_n}]"
-          + (f"  [levers {LEVERS_POSE.upper()}]" if LEVERS_POSE != "rest" else ""),
-          flush=True)
-    show("assembly.step")
 
+    asm = (cq.Assembly(name="retractable_cable_spool")
+           .add(spring_housing,     name="spring_housing",
+                color=color(COLOR["spring_housing"]))
+           .add(spring_housing_cap, name="spring_housing_cap",
+                color=color(COLOR["spring_housing_cap"]))
+           # spring-gate insert SEATED through both gate blocks (hardware-
+           # free spring retention; modelled in place inside the cavity)
+           .add(spring_gate_insert, name="spring_gate_insert",
+                color=color(COLOR["axle_pin"]))
+           # separator seats on the spring-housing cone notch at half height
+           .add(separator.translate((0, 0, RIM_SEAT_Z)),
+                name="separator",    color=color(COLOR["separator"]))
+           # cable caps either side of the separator (empty/collapsed nominal)
+           .add(cable_ceiling.translate((0, 0, CEIL_Z0)),
+                name="cable_ceiling", color=color(COLOR["cable_ceiling"]))
+           .add(cable_floor.translate((0, 0, FLOOR_Z0)),
+                name="cable_floor",   color=color(COLOR["cable_floor"]))
+           # a height_clamp on the far face of each cap (locks it against the cable)
+           .add(height_clamp.translate((0, 0, CEIL_CLAMP_Z0)),
+                name="ceiling_clamp", color=color(COLOR["height_clamp"]))
+           .add(height_clamp.translate((0, 0, FLOOR_CLAMP_Z0)),
+                name="floor_clamp",   color=color(COLOR["height_clamp"]))
+           .add(frame_bottom,    name="frame_bottom",   color=color(COLOR["frame_bottom"]))
+           # top plus seated on the beam tenons (slid on −x→+x, modelled seated)
+           .add(frame_top,       name="frame_top",      color=color(COLOR["frame_top"]))
+           # wall halves seated in the beams' dovetail mortises (modelled in
+           # place, stacked at the split plane; top half prints inverted)
+           .add(wall_bottom,     name="wall_bottom",    color=color(COLOR["wall_bottom"]))
+           .add(wall_top,        name="wall_top",       color=color(COLOR["wall_top"]))
+           # axle halves (modelled in place, glue joint engaged) + the two
+           # diagonal pins (one per plus crossing; same printed part twice)
+           .add(axle_top,        name="axle_top",       color=color(COLOR["axle_top"]))
+           .add(axle_bottom,     name="axle_bottom",    color=color(COLOR["axle_bottom"]))
+           .add(pin_in_place(),  name="axle_pin_top",   color=color(COLOR["axle_pin"]))
+           .add(pin_in_place(ROD_Z_BOT),
+                name="axle_pin_bottom",                 color=color(COLOR["axle_pin"]))
+           # winding tool shown ENGAGED on the hex drive below the frame
+           # (bottom-aligned with the hex tip)
+           .add(winding_tool.translate((0, 0, HEX_DRIVE_Z0)),
+                name="winding_tool",  color=color(COLOR["winding_tool"]))
+           # mount bracket SEATED (X-install shown: tenons butting the
+           # mortise stops) + the TPU lock in the +Y cross-arm end mortise
+           .add(mount_bracket,   name="mount_bracket",  color=color(COLOR["mount_bracket"]))
+           .add(lock_in_place(), name="mount_lock_tpu", color=color(COLOR["tpu"]))
+           # levers (modelled at REST: pawl meshed, brake pad off the band)
+           # + the 95A TPU parts (black): torsion-bar pivot pins + brake pad
+           .add(_ratchet_pose(ratchet_lever),
+                name="ratchet_lever",  color=color(COLOR["ratchet_lever"]))
+           .add(_brake_pose(brake_lever),
+                name="brake_lever",    color=color(COLOR["brake_lever"]))
+           .add(lever_pin_in_place(RATCHET_PIVOT_Z, +1, pull_deg=RATCHET_POSE_DEG),
+                name="ratchet_pin_tpu",                 color=color(COLOR["tpu"]))
+           .add(lever_pin_in_place(BRAKE_PIVOT_Z, -1, pull_deg=BRAKE_POSE_DEG),
+                name="brake_pin_tpu",                   color=color(COLOR["tpu"]))
+           .add(_brake_pose(brake_pad_tall_demo(BRAKE_PAD_DEMO_H)
+                            if BRAKE_PAD_DEMO_H else brake_pad_tpu),
+                name="brake_pad_tpu",  color=color(COLOR["tpu"])))
+    if SHOW_SPRING_GATE_COUPON:
+        # spring-gate print-fit coupon (standing wall slice + both gate
+        # blocks), parked at the +Y side of the test-part level
+        asm.add(spring_gate_coupon.rotate((0, 0, 0), (0, 0, 1), 90.0)
+                                  .translate((0.0, 0.0, -110.0)),
+                name="spring_gate_coupon", color=color(COLOR["test_rig"]))
 
-def main() -> None:
-    p = argparse.ArgumentParser(prog="src.build", description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--part", help="Build only this part (skips assembly).")
-    p.add_argument("--list", action="store_true", help="List part names and exit.")
-    args = p.parse_args()
+    if SHOW_SPRING_STRIP:
+        # the STEEL STRIP's end shown installed (viewer model only, not a
+        # printed part): neck in the key's slit under the stop, head
+        # bearing on the block, taper + body wrapping CW toward the coil
+        asm.add(spring_strip_end, name="spring_strip_end",
+                color=color("#8A8F99"))
 
-    if args.list:
-        print("assembly")
-        for name in PARTS:
-            print(name)
-        return
+    if SHOW_T_COUPON:
+        # T-joint print-fit coupon (PRODUCTION wall↔beam joint, full
+        # lengths), shown SEATED on the −X side of the rig level
+        for nm, part, ck in (
+            ("t_coupon_mortise", t_test_mortise, "test_rig"),
+            ("t_coupon_tenon",   t_test_tenon,   "test_wall"),
+        ):
+            asm.add(part.rotate((0, 0, 0), (0, 0, 1), 180.0)
+                        .translate(COUPON_OFF),
+                    name=nm, color=color(COLOR[ck]))
 
-    if args.part:
-        if args.part == "assembly":
-            _export_assembly()
-            return
-        if args.part not in PARTS:
-            print(f"unknown part: {args.part!r}. Use --list to see options.",
-                  file=sys.stderr)
-            sys.exit(2)
-        _export(args.part)
-        return
+    if SHOW_LEVER_RIG:
+        # rig poses are independent of the main viewer's: the RATCHET copy
+        # sits at REST, MESHED into the rig's teeth (that engagement is what
+        # the rig exists to show); the brake copy stays at contact
+        for nm, part, ck in (
+            ("rig_stand",       lever_test_rig,                    "test_rig"),
+            ("rig_wall",        lever_test_wall,                   "test_wall"),
+            ("rig_ratchet",     ratchet_lever,                     "ratchet_lever"),
+            ("rig_brake",       _rig_contact(brake_lever),         "brake_lever"),
+            ("rig_ratchet_pin", lever_pin_in_place(RATCHET_PIVOT_Z, +1),
+                                                                   "tpu"),
+            ("rig_brake_pin",   lever_pin_in_place(
+                BRAKE_PIVOT_Z, -1, pull_deg=RIG_BRAKE_POSE_DEG),   "tpu"),
+            ("rig_brake_pad",   _rig_contact(brake_pad_tpu),       "tpu"),
+        ):
+            asm.add(part.translate(RIG_OFF), name=nm,
+                    color=color(COLOR[ck]))
 
-    for name in PARTS:
-        _export(name)
-    _export_assembly()
+    num = _build_number_model(build_n)
+    if num is not None:
+        asm.add(num, name="build_number", color=color(COLOR["build_num"]))
+
+    asm.save(str(VIEWER), mode="default")
+    print(f"Wrote {VIEWER.name}  [build #{build_n}]", flush=True)
+    show(str(VIEWER))
 
 
 main()

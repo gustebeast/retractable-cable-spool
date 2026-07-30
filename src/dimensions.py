@@ -147,6 +147,15 @@ HOUSING_GAP_PANCAKE = 2.5    # pancake side (above the spool, z > SPOOL_H).
 # bearing cap's outer face.
 AXLE_EXTRA_LEVER    = 2.0                              # short stub past bearing-cap outer face
 AXLE_EXTRA_PANCAKE  = HOUSING_GAP_PANCAKE + PLATE_T    # axle past spool, pancake end
+# The axle continues DOWN past the lever-side stub as the SERVICE-LOOP TRAY
+# JOURNAL: a bare Ø AXLE_PRINT_D column the fixed tray floor slides on and
+# pinch-clamps to, setting the tray height (= chamber gap) to the cable Ø. The
+# centre below z=0 is otherwise empty (only the ±X levers/housing live down here),
+# so the column is collision-free. Length covers a floor surface from ~z=-2 (thin
+# cable) down to ~z=-10 (thick cable) plus clamp-collar grip.
+TRAY_JOURNAL_H      = 15.0                             # axle extension below the lever stub
+                                                      # (long enough that the platen clamp
+                                                      # collar, bottoming ~z=-16.7, stays gripped)
 
 # Axle-to-housing cross-pin Z positions: centered in each housing axle
 # column. Shared by the axle (cross-hole through axle) and the housing
@@ -257,7 +266,7 @@ RATCHET_DEPTH  = 1.5     # tooth depth (mm) into the flange top surface
 #   WINDING_OUTER_R = drum_OD/2 − RIM_WALL  →  63.4 gives a 130 mm drum OD.
 # (90 mm ≈ 11 ft of 6.6 mm cable single-layer at ~90% pack; capacity scales
 # with WINDING_OUTER_R² − hub_r², so 63.4 holds roughly half as much.)
-WINDING_OUTER_R = 63.4
+WINDING_OUTER_R = 74.0
 
 # Angular offset applied to the tooth pattern. Chosen so a tooth's radial
 # CATCH FACE aligns with the ratchet lever's pawl-bump (see levers.py): the
@@ -364,7 +373,7 @@ CAP_H          = BEARING_W + BEARING_LIP_H                 #  8 mm — lip (1) +
 SPRING_CAVITY_H = SPRING_H + SPRING_AXIAL_CLR              # 34 — target spring-cavity height
 DRUM_H         = SPRING_CAVITY_H + 2 * CAP_H + CAP_STOP_LIP_H - 2 * FLANGE_H  # 37
 SPOOL_H        = 2 * FLANGE_H + DRUM_H                     # overall spool height (51)
-AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE  # 64 mm
+AXLE_H         = SPOOL_H + AXLE_EXTRA_LEVER + AXLE_EXTRA_PANCAKE + TRAY_JOURNAL_H  # 74 mm (incl. tray journal)
 BEARING_BORE   = BEARING_OD + BEARING_CLR                  # 22.3 mm
 TOP_BEARING_BORE = BEARING_BORE                            # standardized — same as bottom
                                                             # (the 0.15 mm/side standard is loose
