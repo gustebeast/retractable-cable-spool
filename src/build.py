@@ -17,6 +17,7 @@ from cadkit.cq_colors import color
 from cadkit.freecad import show
 
 from .frame import frame_top, frame_bottom
+from .mount import mount_bracket
 from .wall import wall_top, wall_lock
 from .axle import axle_top, axle_separator
 from .lid import lid
@@ -58,6 +59,7 @@ COLOR = {
                                # spoked floor + lever forks (one print)
     "wall_top":    "#7E6E8F",  # deeper violet — middle piece (prints inverted)
     "wall_lock":   "#B4A5C2",  # pale violet — channel lock strip (×4, one part)
+    "mount_bracket": "#7D8F69", # sage — desk-mount bracket (×2, one part)
     "axle_top":    "#A6786B",  # clay — axle top half (lip + tenon)
     "axle_separator": "#B0654B",  # rust — bottom axle + separator disk, one
                                   # printed part (v2's separator colour)
@@ -75,6 +77,7 @@ COLOR = {
 PARTS = [
     ("frame_top",   frame_top,   "frame_top.step"),
     ("frame_bottom", frame_bottom, "frame_bottom.step"),
+    ("mount_bracket", mount_bracket, "mount_bracket.step"),
     ("wall_top",    wall_top,    "wall_top.step"),
     ("wall_lock",   wall_lock,   "wall_lock.step"),
     ("axle_top",    axle_top,    "axle_top.step"),
@@ -127,6 +130,11 @@ def main():
     for a in (90, 180, 270):
         asm.add(wall_lock.rotate((0, 0, 0), (0, 0, 1), a),
                 name=f"wall_lock_{a}", color=color(COLOR["wall_lock"]))
+    # the desk-mount brackets (ONE printed part, 2 rotated copies) SEATED
+    # flush in the ±Y arms' channels
+    for a in (90, 270):
+        asm.add(mount_bracket.rotate((0, 0, 0), (0, 0, 1), a),
+                name=f"mount_bracket_{a}", color=color(COLOR["mount_bracket"]))
     asm = (asm
            .add(axle_top,    name="axle_top",    color=color(COLOR["axle_top"]))
            .add(axle_separator, name="axle_separator", color=color(COLOR["axle_separator"]))

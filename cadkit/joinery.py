@@ -386,6 +386,14 @@ def _octagon_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
 # TENON host builds 'up': stem, 45° flare out (self-supporting), flat top
 # as a plain last layer. Same slide-along-X + hard-stop conventions.
 # Retention: ±Z (flare/lip + flat top), ±Y (stem + waist walls); X free.
+#
+# A SECOND site also lands here: BOTH hosts 'up' with a THROUGH mortise
+# (joint(..., through=True) — the host's far face is open/cuttable). The
+# up+up octagon exists to CLOSE its cavity printably; when the cavity may
+# simply EXIT the far face there is nothing to close, so the shorter
+# mushroom wins — `height` runs the cavity's waist walls straight out
+# past the far face (no flat end is ever printed; the tenon keeps the
+# minimal profile and its flat top prints as a plain last layer).
 
 
 def _mushroom_width_min(nozzle=0.8, clearance=0.1):
@@ -395,7 +403,8 @@ def _mushroom_width_min(nozzle=0.8, clearance=0.1):
     return max(n / _STEM_FRAC, 2.0 * math.sqrt(2.0) * n)
 
 
-def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False):
+def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False,
+                      height=None):
     """Closed (y, z) points for the TENON (nominal — the mortise is this
     dilated): stem = width/2 (the octagon's strength parity), 45° flares,
     a 2-nozzle vertical waist, flat top at `width`. The stem standoff
@@ -403,6 +412,10 @@ def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False):
     lands on the tier (the octagon's mitred-offset lesson — the reflex
     stem→flare corner shortens it). pocket=True: the flare/neck retention
     is dropped — full-width straight walls down to the opening (z-entry).
+    `height` (optional, the octagon's rule): total profile height above
+    the mating plane — the 45° flare and tier neck are printability-
+    locked, so ALL extra rides the WAIST verticals. A THROUGH cavity
+    passes height beyond the host's far face and no flat end is printed.
     Returns (points, z_top)."""
     wmin = _mushroom_width_min(nozzle, clearance)
     if width < wmin - 1e-9:
@@ -417,6 +430,13 @@ def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False):
     z_neck = pv + grow                          # stem standoff (pre-grown)
     z_wb = z_neck + flare                       # flare top = waist bottom
     z_top = z_wb + pv                           # short waist, then the flat
+    if height is not None:
+        if height < z_top - 1e-9:
+            raise ValueError(f"height {height:.3f} is below this width's "
+                             f"minimum {z_top:.3f} mm (45° flare + tier "
+                             "verticals are incompressible) — raise height "
+                             "or shrink width")
+        z_top = height                          # extra rides the waist walls
     if pocket:
         return [(hw, base_z), (hw, z_top), (-hw, z_top), (-hw, base_z)], z_top
     pts = [(stem / 2.0, base_z), (stem / 2.0, z_neck),
@@ -426,22 +446,25 @@ def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False):
     return pts, z_top
 
 
-def _mushroom_height(width, nozzle=0.8, clearance=0.1):
+def _mushroom_height(width, nozzle=0.8, clearance=0.1, height=None):
     """Tenon height above the mating plane (what the mortise host must
-    swallow, before the cavity's own +clearance dilation)."""
-    _, h = _mushroom_profile(width, nozzle, 0.0, clearance)
+    swallow, before the cavity's own +clearance dilation). With `height`
+    given, echoes it back (after validating the width's minimum)."""
+    _, h = _mushroom_profile(width, nozzle, 0.0, clearance, height=height)
     return h
 
 
-def _mushroom_tenon(width, length, nozzle=0.8, clearance=0.1, root=1.0):
-    pts, _ = _mushroom_profile(width, nozzle, -abs(root), clearance)
+def _mushroom_tenon(width, length, nozzle=0.8, clearance=0.1, root=1.0,
+                    height=None):
+    pts, _ = _mushroom_profile(width, nozzle, -abs(root), clearance,
+                               height=height)
     return cq.Workplane("YZ").polyline(pts).close().extrude(length)
 
 
 def _mushroom_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
-                      pocket=False):
+                      pocket=False, height=None):
     pts, _ = _mushroom_profile(width, nozzle, -abs(drop), clearance,
-                               pocket=pocket)
+                               pocket=pocket, height=height)
     return (cq.Workplane("YZ").polyline(pts).close()
             .offset2D(abs(clearance), "intersection")
             .extrude(length))
@@ -938,9 +961,10 @@ class Joint:
     it is never an input and callers must not branch on it to change
     geometry."""
     def __init__(self, width, length, tenon, mortise, clearance, install, depth,
-                 bounded=False, back_clearance=None):
+                 bounded=False, back_clearance=None, through=False):
         self.back_clearance = (clearance if back_clearance is None
                                else back_clearance)
+        self.through = through
         if install not in ("+x", "-x", "+z", "-z"):
             raise ValueError(
                 "install must be a SIGNED axis: '+x', '-x', '+z' or '-z' "
@@ -958,6 +982,11 @@ class Joint:
         self.width, self.length, self.clearance = width, length, clearance
         self.nozzle = max(tenon.nozzle, mortise.nozzle)   # coarser drives the min feature
         kind = (tenon.facing, mortise.facing)
+        if through and (self.install_axis != "x" or kind != ("up", "up")):
+            raise NotImplementedError(
+                "through=True (the mortise cavity may exit the host's far "
+                "face) is modelled for install ±x up+up sites — got tenon "
+                "'%s' + mortise '%s', install '%s'" % (kind + (install,)))
         if self.install_axis == "z":
             # Slide axis ∥ print-Z: the profile lies in the plan plane, so its
             # faces are vertical printed walls — but ONLY for hosts printing
@@ -1022,7 +1051,11 @@ class Joint:
             self.width_min = _tee_width_min(self.nozzle)
             return
         if kind == ("up", "up"):
-            self.family = "octagon"
+            # with a THROUGH mortise there is nothing to close printably —
+            # the shorter flat-top mushroom beats the octagon (see the
+            # mushroom section note); `depth` = how far the cavity must run
+            # past the mating plane to exit the host's far face
+            self.family = "mushroom" if through else "octagon"
         elif kind == ("side", "up"):
             self.family = "arrow"
         elif kind == ("up", "down"):
@@ -1032,12 +1065,21 @@ class Joint:
                 "no joint for tenon '%s' + mortise '%s' yet (have up+up, "
                 "side+up, up+down) — add the variant the way threads.py "
                 "grew" % kind)
-        if depth is not None and self.family != "octagon":
+        if depth is not None and not (self.family == "octagon"
+                                      or (self.family == "mushroom"
+                                          and through)):
             raise ValueError("depth on install='x' applies only to the up+up "
                              "octagon site (profile HEIGHT past the mating "
-                             "plane); the other x-profiles are width-locked")
+                             "plane) and the THROUGH mushroom (cavity run to "
+                             "the exit); the other x-profiles are width-locked")
+        if through and depth is None:
+            raise ValueError("a THROUGH mortise needs depth = the host's "
+                             "thickness past the mating plane (+ exit "
+                             "margin) — the cavity must know how far to run")
         self.depth = depth
         if self.family == "mushroom":
+            # tenon swallow: the MINIMAL profile — a through cavity runs
+            # deeper (self.depth), but the tenon itself never grows for it
             self.height = _mushroom_height(self.width, self.nozzle,
                                            self.clearance)
             self.width_min = _mushroom_width_min(self.nozzle, self.clearance)
@@ -1106,7 +1148,9 @@ class Joint:
         if pocket:
             if self.family == "mushroom":
                 return _mushroom_mortise(self.width, L, self.nozzle,
-                                         self.clearance, drop, pocket=True)
+                                         self.clearance, drop, pocket=True,
+                                         height=(self.depth if self.through
+                                                 else None))
             if self.family != "octagon":
                 raise NotImplementedError(
                     "pocket mortises are modelled for the install='x' up+up "
@@ -1118,7 +1162,9 @@ class Joint:
                                     height=self.depth)
         if self.family == "mushroom":
             return _mushroom_mortise(self.width, L, self.nozzle,
-                                     self.clearance, drop)
+                                     self.clearance, drop,
+                                     height=(self.depth if self.through
+                                             else None))
         if self.family == "hook":
             return _hook_mortise(self.width, L, self.nozzle,
                                  self.clearance, drop)
@@ -1157,7 +1203,7 @@ class Joint:
 
 
 def joint(width, length, tenon, mortise, clearance=None, install="+x",
-          depth=None, bounded=False, fit="normal"):
+          depth=None, bounded=False, fit="normal", through=False):
     """THE joinery entrypoint. Names name the HALVES (`tenon`, `mortise`) —
     never the shape: describe the SITE and the library builds the optimal
     printable geometry for it. A site is:
@@ -1181,7 +1227,11 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
         `bounded=True` (install='z') declares the width EDGE-BOUNDED: the
         face's FULL extent between free edges, walls included — the library
         then picks whichever internal profile reaches the higher wall tier
-        in that room.
+        in that room. `through=True` (install ±x, up+up) declares the
+        MORTISE host's far face open/cuttable: the cavity may exit it, so
+        no closure bridge is needed — the site takes the flat-top mushroom
+        (shorter swallow) instead of the octagon, with `depth` = the
+        host's thickness past the mating plane plus an exit margin.
 
     MATERIALS pick the clearances (policy: joint_clearances — fiber-filled
     halves get a doubled depth-face gap; override the base with
@@ -1194,11 +1244,11 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
     here" before committing geometry."""
     c, bc = joint_clearances(tenon, mortise, fit, clearance)
     return Joint(width, length, tenon, mortise, c, install, depth,
-                 bounded, back_clearance=bc)
+                 bounded, back_clearance=bc, through=through)
 
 
 def joint_box_min(tenon, mortise, install="+x", bounded=False, quality=False,
-                  fit="normal", clearance=None):
+                  fit="normal", clearance=None, through=False):
     """The smallest (width, depth) BOUNDING BOX a joint needs at this site —
     the sizing counterpart of `joint` (same site inputs, no geometry).
     quality=False → the one-nozzle hard floor; quality=True → the width at
@@ -1215,6 +1265,8 @@ def joint_box_min(tenon, mortise, install="+x", bounded=False, quality=False,
         return _tee_box_min(nz, c, quality, bc)
     kind = (tenon.facing, mortise.facing)
     if kind == ("up", "up"):
+        if through:
+            return _mushroom_width_min(nz, c), None
         return _octagon_width_min(nz, c), None
     if kind == ("side", "up"):
         return _arrow_width_min(nz), None
@@ -1805,6 +1857,27 @@ if __name__ == "__main__":
         print("  width floor           did NOT raise  <-- FAIL")
     except ValueError:
         print("  width floor           raises (ok)")
+    # THROUGH variant (up+up site, thin host): `height` runs the waist
+    # walls out past the far face — the cavity exits, no flat end is ever
+    # printed, and the flare retention is unchanged
+    MTH = 9.0
+    mthru = _mushroom_mortise(MW, 22, nozzle=NZ5, clearance=CLR5, drop=3,
+                              height=MTH)
+    mtz = mthru.val().BoundingBox().zmax
+    ok = abs(mtz - (MTH + CLR5)) < 1e-6            # cutter = profile dilated
+    print(f"  through cavity top    {mtz:.3f} (must be height+clr "
+          f"{MTH + CLR5}){'' if ok else '  <-- FAIL'}")
+    if not ok:
+        fails.append(f"mushroom: through height {mtz:.3f} != {MTH + CLR5}")
+    thost = (cq.Workplane("XY").box(20, MW + 8, 8, centered=(False, True, False))
+             .translate((0, 0, -3.0))                     # host z -3..5 < 9
+             .cut(mthru.translate((-1, 0, 0))))           # → cavity EXITS
+    v = vol(thost.translate((0, 0, g)), mten)
+    ok = v > 0.0
+    print(f"  through +z lift locked {v:>8.3f} mm3 (must be >0)"
+          f"{'' if ok else '  <-- FAIL'}")
+    if not ok:
+        fails.append("mushroom: through lift not locked")
 
     # ── unified joint dispatch ──
     print("-- joint --")
@@ -1840,6 +1913,23 @@ if __name__ == "__main__":
     print(f"  box_min up+down       {'ok' if ok else 'FAIL'}")
     if not ok:
         fails.append("joint_box_min: up+down")
+    # up+up + THROUGH → mushroom, cavity run = depth; tenon stays minimal
+    jt = joint(6.4, 12, tenon=up, mortise=up, install="-x", depth=9.0,
+               through=True)
+    ok = (jt.family == "mushroom"
+          and abs(jt.mortise(drop=2.0).val().BoundingBox().zmax
+                  - (9.0 + jt.clearance)) < 1e-6
+          and abs(jt.tenon().val().BoundingBox().zmax
+                  - _mushroom_height(6.4, 0.8, CGF)) < 1e-6)
+    print(f"  up+up through -> mushroom  {'ok' if ok else 'FAIL'}")
+    if not ok:
+        fails.append("joint: up+up through mushroom")
+    try:
+        joint(6.4, 12, tenon=up, mortise=up, install="-x", through=True)
+        fails.append("joint: through without depth did not raise")
+        print("  through needs depth   did NOT raise  <-- FAIL")
+    except ValueError:
+        print("  through needs depth   raises (ok)")
     # install='z' with a side-printed host must raise (plan profile would overhang)
     try:
         joint(6, 12, side, up, install="-z")
