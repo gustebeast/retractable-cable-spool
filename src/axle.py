@@ -33,7 +33,7 @@ import math
 import cadquery as cq
 
 from .helpers import cone_solid, cyl, heal
-from .lid_joint import wall_channel_cut
+from .lid_joint import sep_tenon
 from .params import (
     AXLE_PRINT_D, AXLE_LIP_OD, AXLE_LIP_H, AXLE_Z_BOT, AXLE_Z_TOP,
     BRG_Z1,
@@ -166,8 +166,10 @@ def _build_axle_separator():
     b = b.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=JOINT_Z0))
     b = b.cut(_slit(JOINT_Z0, JOINT_Z1 - SLIT_END_CAP,
                     peak="top"))                      # solid mortise-mouth band
-    for i in range(LIDJ_SITES):                # lid-bayonet pockets + cavities
-        b = b.cut(wall_channel_cut(i * 360.0 / LIDJ_SITES))
+    for i in range(LIDJ_SITES):                # lid-bayonet tenons STANDING on
+        b = b.union(sep_tenon(i * 360.0 / LIDJ_SITES))   # the wall top (user:
+                                               # sides swapped — the upright
+                                               # print grows them native)
     b = b.cut(_cable_pass())
     # BOTTOM-BEARING SEAT in the disk's underside (user's design): the
     # bearing sits FLUSH with the disk face; the 45° cone rising off the

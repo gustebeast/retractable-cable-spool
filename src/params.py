@@ -87,6 +87,23 @@ BRG_LIP_ID    = BRG_BORE - 2 * STRUCT_WALL     # 19.0 — retention lip bore (la
 BRG_BOSS_WALL = 4 * NOZZLE                     # 3.2 — hoop wall around the pocket
 BRG_BOSS_OD   = BRG_BORE + 2 * BRG_BOSS_WALL   # 28.6 — central boss Ø
 
+# frame_top print FLIPPED to UPRIGHT, −z→+z (user's call): the flat
+# lip-top seat would put a 1.6-wide ring overhang over the lip bore, so
+# the seat is a 45° FUNNEL cone (the bottom-608 lesson: the cone IS the
+# seat): it flares from the lip bore up-and-out to the pocket bore, and
+# the outer race's factory 0.3 bottom-OD chamfer lands face-on-face on
+# it, 0.1 deeper than nominal (the bottom seat's exact allowance — the
+# dummy sits at nominal, the real bearing 0.1 low, which only GROWS the
+# axle-lip↔frame-face margin).
+BRG_SEAT_CONE_Z0 = (BRG_POCKET_Z0 - 0.1
+                    - (BEARING_OD / 2.0 - BEARING_INNER_CH
+                       - BRG_LIP_ID / 2.0))    # 0.3 — funnel base at the lip bore
+BRG_SEAT_CONE_Z1 = (BRG_SEAT_CONE_Z0
+                    + (BRG_BORE - BRG_LIP_ID) / 2.0)   # 1.9 — funnel rim at the
+                                               # pocket bore (45° by construction)
+assert BRG_SEAT_CONE_Z0 >= FRAME_Z0 + 0.2 - 1e-9, \
+    "funnel seat undercuts the lip bore's root ring"
+
 # ── Z stack below the frame ──────────────────────────────────────────────────
 # The spring body will be FIXED to the frame later — modelled touching.
 SPRING_Z1 = FRAME_Z0                   # top flange against the frame underside
@@ -163,13 +180,12 @@ AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
 # ── Spring-strip TENSION-TRAP anchor (user's v3 design — retires the ported
 # v2 two-block gate + drop-in insert; zero extra parts) ──────────────────────
 # A short wall hangs under the +X arm (running up THROUGH the frame as an
-# arm rib — the gate wall's proven inverted-print bed seat) with one
-# WINDOW at the strip's z: the T-head pushes straight through the tall
-# +y end FLAT-ON (no twist), then the spring's one-signed pull drags the
-# strip to the −y bay, too short for the head to escape — the spring's
-# own tension is the latch (user's insight: the pull direction never
-# reverses, and the install's 1.5–2 pre-wraps mean it never goes slack
-# in service).
+# arm rib tying it into the plate) with one WINDOW at the strip's z: the
+# T-head pushes straight through the tall +y end FLAT-ON (no twist),
+# then the spring's one-signed pull drags the strip to the −y bay, too
+# short for the head to escape — the spring's own tension is the latch
+# (user's insight: the pull direction never reverses, and the install's
+# 1.5–2 pre-wraps mean it never goes slack in service).
 # Strip tip, user-measured (same spring as v2; hardware = absolute dims):
 # 0.2 thick; 22-wide body, 13-long taper to the 9-wide × 8-long neck, then
 # the 7-long × 16-wide round T-head (4 root notch, unused here).
@@ -180,90 +196,82 @@ STRIP_NECK_L  = 8.0                # neck length (along the strip)
 STRIP_HEAD_W  = 16.0               # T-head width (across = z)
 STRIP_HEAD_L  = 7.0                # T-head length (along the strip)
 
-ANCH_FLANGE_CLR = 1.8              # wall face off the Ø78.3 flange edges
-                                   # (fit clearance; it also lands the wall
-                                   # on the gate wall's proven 40.95 face,
-                                   # so the drum chain below is unmoved)
-ANCH_IR = SPRING_FLANGE_OD / 2.0 + ANCH_FLANGE_CLR   # 40.95 — wall inner face
-ANCH_T  = 2 * NOZZLE               # 1.6 — wall thickness (the gate wall's)
-ANCH_OR = ANCH_IR + ANCH_T                           # 42.55
+ANCH_FLANGE_CLR = 1.0              # wall face off the Ø78.3 flange edges
+                                   # (was 1.8 — user gave 0.8 of it to the
+                                   # wall; the OUTER face stays on the
+                                   # proven 42.55, drum chain unmoved)
+ANCH_IR = SPRING_FLANGE_OD / 2.0 + ANCH_FLANGE_CLR   # 40.15 — wall inner face
+ANCH_T  = 3 * NOZZLE               # 2.4 — wall thickness (user: up from the
+                                   # gate wall's 1.6)
+ANCH_OR = ANCH_IR + ANCH_T                           # 42.55 — same as before
 
-# WINDOW — a right-trapezoid TENSION TRAP (print-driven, user's
-# no-overhang call: frame_top prints +z→−z, so the opening's −z boundary
-# is the ROOF of the hole as printed — here that roof is one 45° floor;
-# the flat +z edge prints as a plain floor face; nothing is flatter than
-# 45°). CHIRALITY (user): pull-out spins the axle CW (viewed +z) and the
+# WINDOW — the right-trapezoid TENSION TRAP, Z-MIRRORED for the FLIPPED
+# print (user: frame_top now prints UPRIGHT, −z→+z, so the opening's +z
+# boundary is the ROOF of the hole as printed): ONE 45° roof climbs
+# from the −y holding bay to the +y entry, dulled to a one-bead flat at
+# its top; every bottom edge prints as an upward face, so the bottom
+# contour is FREE — it steps, deep only in the entry pocket.
+# CHIRALITY (user): pull-out spins the axle CW (viewed +z) and the
 # spring TIGHTENS; strip winding onto the arbor CW means the strip runs
 # CCW going outward, so it arrives at the +X anchor travelling toward
 # +y — its tension drags the free end toward −Y. So: the tall ENTRY
-# wall sits at +y (PASS — the head enters flat-on, no twist, hugging
-# that wall over a 2.0-wide zone), the floor climbs at 45° toward −y,
-# and the HOLDING BAY at −y (HOLD — the 16 head cannot pass 12; escape
-# means travelling back AGAINST the spring's pull into the entry zone).
-# The width is FORCED at PASS − HOLD: the 45° floor must climb the full
-# entry-to-bay height difference.
-# The ENTRY (the tall half) is centred on the strip line (user's call —
-# bay-centred put the entry 3.2 low, and the head, riding the strip
-# line, would have had to dive under the top edge to thread). The BAY
-# therefore sits HIGH of the strip line, sharing the flat top edge: at
-# rest the neck rides UP into it within the spring's own z-float
-# (asserted below). Retention is by SIZE (16 vs 12), wherever the bites
-# land.
+# pocket sits at +y (the head enters flat-on, no twist, at its natural
+# z), and the HOLDING BAY at −y is too short for the 16 head — escape
+# means 4.0 of travel back AGAINST the pull. The bay's RAISED floor
+# (the bottom step) stops the seated strip riding low enough for its
+# protruding head to meet the rotating lid below (asserted at the lid
+# block); the descending roof cams the sliding neck down into the bay.
 _SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
-ANCH_ZC     = _SPRING_ZC           # ENTRY wall centred on the strip line
-ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — bay height (head-blocking)
-ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing:
-                                   # 1.2 around the head at its natural z)
-ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_PASS / 2.0         # −6.8 — flat top edge
-ANCH_WIN_Z0  = ANCH_ZC - ANCH_WIN_PASS / 2.0         # −25.2 — the VIRTUAL
-                                   # apex at the +y entry wall: the 45°
-                                   # floor aims here, but the tip is
-                                   # DULLED (user's call) —
-ANCH_TIP_Z   = ANCH_WIN_Z0 + NOZZLE                  # −24.4 — a 0.8 flat
-                                   # truncates the corner: no knife-edge
-                                   # void where the roof closes on the
-                                   # entry wall in print; one bead
-                                   # bridges the flat
-ANCH_HOLD_Z0 = ANCH_WIN_Z1 - ANCH_WIN_HOLD           # −18.8 — bay bottom (−y)
-ANCH_WIN_W   = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — width: 45° floor
-                                                     # bay-corner → virtual apex
-ANCH_Z0      = ANCH_TIP_Z - 4 * NOZZLE               # −27.6 — wall bottom
-                                   # (3.2 sill under the dulled tip)
+ANCH_ZC     = _SPRING_ZC           # entry threading centred on the strip line
+ANCH_WIN_W   = 8 * NOZZLE          # 6.4 — window width
+ANCH_ENT_W   = 3 * NOZZLE          # 2.4 — entry pocket width at the +y wall
+ANCH_ENT_Z0  = ANCH_ZC - STRIP_HEAD_W / 2.0 - NOZZLE # −24.8 — entry floor: the
+                                   # head at its natural z, one bead under
+ANCH_BAY_Z0  = ANCH_ZC - 5 * NOZZLE                  # −20.0 — bay floor (the
+                                                     # bottom step's top)
+ANCH_WIN_HOLD = 12 * NOZZLE        # 9.6 — bay height (blocks the 16 head,
+                                   # rides the 9 neck)
+ANCH_BAY_Z1  = ANCH_BAY_Z0 + ANCH_WIN_HOLD           # −10.4 — bay top = the
+                                                     # roof's low end
+ANCH_TIP_Z   = ANCH_BAY_Z1 + (ANCH_WIN_W - NOZZLE)   # −4.8 — roof top at the
+                                   # dulled one-bead tip flat (45° by
+                                   # construction: rise = run)
+ANCH_APEX_Z  = ANCH_TIP_Z + NOZZLE                   # −4.0 — virtual apex the
+                                                     # roof aims at
+ANCH_Z0      = ANCH_ENT_Z0 - 4 * NOZZLE              # −28.0 — wall bottom
+                                   # (3.2 sill under the entry floor)
 # the strip's feasible z-band inside the spring (22 body between the
-# flange inner faces) must reach far enough UP to seat the neck in the
-# bay, and the head must thread the entry somewhere in the same band:
+# flange inner faces) must both seat the neck in the bay and thread the
+# head through the entry pocket:
 _STRIP_C_LO = SPRING_Z0 + SPRING_FLANGE_T + STRIP_BODY_W / 2.0   # −18.6
 _STRIP_C_HI = SPRING_Z1 - SPRING_FLANGE_T - STRIP_BODY_W / 2.0   # −13.4
-assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_NECK_W / 2.0)
-        - max(_STRIP_C_LO, ANCH_HOLD_Z0 + STRIP_NECK_W / 2.0)
+assert (min(_STRIP_C_HI, ANCH_BAY_Z1 - STRIP_NECK_W / 2.0)
+        - max(_STRIP_C_LO, ANCH_BAY_Z0 + STRIP_NECK_W / 2.0)
         >= 0.5 - 1e-9), \
     "no feasible strip z seats the neck in the holding bay"
-assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_HEAD_W / 2.0)
-        - max(_STRIP_C_LO, ANCH_TIP_Z + STRIP_HEAD_W / 2.0)
+assert (min(_STRIP_C_HI, ANCH_TIP_Z - STRIP_HEAD_W / 2.0 - 0.2)
+        - max(_STRIP_C_LO, ANCH_ENT_Z0 + STRIP_HEAD_W / 2.0 + 0.2)
         >= 0.5 - 1e-9), \
     "no feasible strip z threads the head through the entry"
 # SWEEP: centred on the +X arm — window + a 6-bead pier each side (the
-# 16 chord still overhangs the 10.4 arm a touch; in the inverted print
-# the outboard blades root on the BED like the old gate wall's open
-# span did).
+# wall chord still overhangs the 10.4 arm a touch each side).
 ANCH_HALF_A = math.degrees(math.asin(
-    (ANCH_WIN_W / 2.0 + 6 * NOZZLE) / ANCH_IR))      # ≈ 11.3°
+    (ANCH_WIN_W / 2.0 + 6 * NOZZLE) / ANCH_IR))      # ≈ 11.5°
 
 # The pass/block mechanism IS these inequalities:
-assert ANCH_WIN_Z1 - ANCH_TIP_Z >= STRIP_HEAD_W + 0.4 - 1e-9, \
-    "head doesn't pass flat-on at the entry wall (tip flat included)"
-assert (NOZZLE + (ANCH_WIN_Z1 - ANCH_TIP_Z) - (STRIP_HEAD_W + 0.4)
-        >= 2 * NOZZLE - 1e-9), \
-    "entry zone too narrow to thread the head by hand"
+assert ANCH_TIP_Z - ANCH_ENT_Z0 >= STRIP_HEAD_W + 0.4 - 1e-9, \
+    "head doesn't pass flat-on in the entry pocket"
+assert ANCH_ENT_W >= 2 * NOZZLE - 1e-9, \
+    "entry pocket too narrow to thread the head by hand"
 assert ANCH_WIN_HOLD <= STRIP_HEAD_W - 3.0 + 1e-9, \
     "head escapes the holding bay"
 assert ANCH_WIN_HOLD >= STRIP_NECK_W + 0.4 - 1e-9, \
     "neck binds in the holding bay"
 assert STRIP_NECK_L >= ANCH_T + 1.0 - 1e-9, \
     "neck too short — the head can't fully clear the wall"
-assert ANCH_WIN_Z1 <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \
+assert ANCH_APEX_Z <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \
     "window reaches the spring's top flange"
-assert ANCH_WIN_Z0 >= SPRING_Z0 + SPRING_FLANGE_T + 0.5 - 1e-9, \
+assert ANCH_ENT_Z0 >= SPRING_Z0 + SPRING_FLANGE_T + 0.5 - 1e-9, \
     "window reaches the spring's bottom flange"
 assert ANCH_Z0 - SEP_Z1 >= 3 * NOZZLE - 1e-9, \
     "anchor wall bottom reaches the separator disk"
@@ -271,15 +279,14 @@ assert ANCH_Z0 - SEP_Z1 >= 3 * NOZZLE - 1e-9, \
 # ── Drum wall + lid — the cable-wrap core and the spool chamber's ceiling ────
 # The DRUM WALL rises from the separator disk, wrapping the anchor wall's
 # radius with DRUM_ANCH_CLR (user's 0.8); the cable wraps IT. The LID seats on the
-# wall's top rim via a ROTATIONAL bayonet (user's design): v2's print-
-# proven half-arrowhead arc profile, MOUNT-FLIPPED — the lid carries
-# HANGING tenons (it prints INVERTED, so they stand library-native), the
-# wall top carries per site an entry POCKET (the tenon's full silhouette
-# passes straight down) + the retained cavity arc CW-adjacent; rotate the
-# lid CW and the flare slides under the wall's lip to the cavity's end-
-# wall stop. In the axle_separator's upright print every cavity face is a
-# floor, a vertical, or a 45° (the mount lesson: flipping kills the
-# mortise's bridge roof).
+# wall's top rim via a ROTATIONAL bayonet (user's design; sides SWAPPED
+# to the frame-joint arrangement): the WALL TOP carries STANDING
+# flat-top arc tenons (the separator's upright print grows them
+# library-native, flare underside at 45°), and the LID carries per site
+# a THROUGH cavity slot + entry pocket (lid_joint.py — the 4.8 plate
+# can't cap the tenon with a printable ceiling, and the slots sit over
+# the drum wall, inboard of the cable). Drop the lid over the tenons,
+# rotate CW to the end-wall stops.
 DRUM_ANCH_CLR = NOZZLE             # 0.8 — drum bore off the anchor wall (user)
 DRUM_IR = ANCH_OR + DRUM_ANCH_CLR              # 43.35 — wall bore = lid bore
 DRUM_T  = 8 * NOZZLE               # 6.4 — X = 8: the smallest bead multiple
@@ -312,10 +319,15 @@ LID_T   = 6 * NOZZLE               # 4.8 — user's stated minimum; it can stay
                                    # WALL, not the lid
 LID_Z0  = SEP_Z1 + LID_SEP_GAP                 # −30.4 — lid underside
 LID_Z1  = LID_Z0 + LID_T                       # −25.6 — lid top
-# the anchored strip's T-head pokes past the wall to r ≈ 56, over the
+# the anchored strip's T-head pokes past the wall to r ≈ 55, over the
 # rotating lid's rim — its bottom edge must clear the lid's top face
-assert (_SPRING_ZC - STRIP_HEAD_W / 2.0) - LID_Z1 >= 2 * NOZZLE - 1e-9, \
-    "the anchored strip's protruding head reaches the rotating lid"
+# both SEATED (the bay floor sets the lowest ride) and mid-THREAD (the
+# entry floor sets the lowest transient dip):
+assert ((ANCH_BAY_Z0 + STRIP_NECK_W / 2.0 - STRIP_HEAD_W / 2.0)
+        - LID_Z1 >= 2 * NOZZLE - 1e-9), \
+    "the seated strip's protruding head reaches the rotating lid"
+assert (ANCH_ENT_Z0 + 0.2) - LID_Z1 >= 0.5 - 1e-9, \
+    "threading the strip head would scrape the rotating lid"
 DRUM_Z1 = LID_Z0                   # wall top — the seated lid rests on it;
                                    # the wall is a short 4-tall collar now,
                                    # and the joint cavities burrow on
@@ -324,11 +336,15 @@ DRUM_Z1 = LID_Z0                   # wall top — the seated lid rests on it;
                                    # depth assert)
 LID_OD  = RIM_OD                   # lid rim tracks the separator
 
-# the half-arrowhead profile (v2 frame.py's TOPJ_*, carried verbatim)
+# the FLAT-TOP arc profile (v2's TOPJ_* dims kept; the arrowhead's
+# angled top DROPPED — user's call at the frame_top flip: with both
+# host plates printing their cavities as short flat ceilings or through
+# slots, a flat tenon top prints fine on every side)
 TOPJ_STEM  = 3 * NOZZLE            # 2.4 — stem width (radial, off the flat)
 TOPJ_FLARE = 2 * NOZZLE            # 1.6 — the single outboard 45° flare
 TOPJ_NECK  = 2 * NOZZLE            # 1.6 — neck height under the flare
-TOPJ_TIP   = NOZZLE                # 0.8 — dull tip at the flat
+TOPJ_TIP   = NOZZLE                # 0.8 — vertical tip face above the flare
+                                   # (then the FLAT top)
 LIDJ_SITES      = 4                # joint sites (90° pitch)
 LIDJ_TEN_SWEEP  = 20.0             # tenon arc sweep (deg)
 LIDJ_SEAT_CLR   = 0.15             # seating clearance at each stop (arc mm)
