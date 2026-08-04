@@ -46,7 +46,7 @@ from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_WIN_W, ANCH_WIN_Z0, ANCH_WIN_Z1, ANCH_HOLD_Z0,
+    ANCH_WIN_W, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_POCKET_Z0, BRG_LIP_ID, BRG_BOSS_OD,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
@@ -398,9 +398,10 @@ def _anchor_wall():
     the gate wall's proven pattern). The right-trapezoid window is
     overhang-free in the inverted print: its −z boundary — the roof of
     the hole as printed — is the single 45° floor climbing from the +y
-    entry corner to the −y holding bay; the flat +z edge prints as a
-    plain floor face. The closing polyline edge (deep corner → bay
-    corner) is the 45° by construction: Δy = Δz = ANCH_WIN_W."""
+    entry tip to the −y holding bay; the flat +z edge prints as a plain
+    floor face. The closing polyline edge (tip flat → bay corner) is the
+    45° by construction (it aims at the virtual apex), and the DULLED
+    0.8 tip flat is a one-bead bridge, not a knife-edge void."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
@@ -411,7 +412,8 @@ def _anchor_wall():
            .polyline([(-hw, ANCH_HOLD_Z0),      # −y bay bottom corner
                       (-hw, ANCH_WIN_Z1),
                       (hw, ANCH_WIN_Z1),
-                      (hw, ANCH_WIN_Z0)])       # +y deep entry corner
+                      (hw, ANCH_TIP_Z),         # +y entry wall down to...
+                      (hw - NOZZLE, ANCH_TIP_Z)])   # ...the dulled tip flat
            .close().extrude(ANCH_T + 2.0))
     return w.cut(win)
 

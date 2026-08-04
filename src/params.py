@@ -198,25 +198,50 @@ ANCH_OR = ANCH_IR + ANCH_T                           # 42.55
 # +y — its tension drags the free end toward −Y. So: the tall ENTRY
 # wall sits at +y (PASS — the head enters flat-on, no twist, hugging
 # that wall over a 2.0-wide zone), the floor climbs at 45° toward −y,
-# and the HOLDING BAY at −y (HOLD — blocks the 16 head with 2.0 bite
-# top and bottom while the 9 neck rides with ±1.5 float; the rising
-# floor stays 1.5 under the sliding neck the whole way). Escape means
-# 4.4 of travel back AGAINST the spring's pull. The width is FORCED at
-# PASS − HOLD: the 45° floor must climb the full entry-to-bay height
-# difference, and 23 beads of PASS is already the most the
-# bottom-flange keep-out allows.
+# and the HOLDING BAY at −y (HOLD — the 16 head cannot pass 12; escape
+# means travelling back AGAINST the spring's pull into the entry zone).
+# The width is FORCED at PASS − HOLD: the 45° floor must climb the full
+# entry-to-bay height difference.
+# The ENTRY (the tall half) is centred on the strip line (user's call —
+# bay-centred put the entry 3.2 low, and the head, riding the strip
+# line, would have had to dive under the top edge to thread). The BAY
+# therefore sits HIGH of the strip line, sharing the flat top edge: at
+# rest the neck rides UP into it within the spring's own z-float
+# (asserted below). Retention is by SIZE (16 vs 12), wherever the bites
+# land.
 _SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
-ANCH_ZC     = _SPRING_ZC           # holding bay centred on the strip line
+ANCH_ZC     = _SPRING_ZC           # ENTRY wall centred on the strip line
 ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — bay height (head-blocking)
-ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing)
-ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_HOLD / 2.0         # −10 — flat top edge
-ANCH_HOLD_Z0 = ANCH_ZC - ANCH_WIN_HOLD / 2.0         # −22 — bay bottom (−y)
-ANCH_WIN_Z0  = ANCH_WIN_Z1 - ANCH_WIN_PASS           # −28.4 — the deep corner
-                                                     # at the +y entry wall
+ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing:
+                                   # 1.2 around the head at its natural z)
+ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_PASS / 2.0         # −6.8 — flat top edge
+ANCH_WIN_Z0  = ANCH_ZC - ANCH_WIN_PASS / 2.0         # −25.2 — the VIRTUAL
+                                   # apex at the +y entry wall: the 45°
+                                   # floor aims here, but the tip is
+                                   # DULLED (user's call) —
+ANCH_TIP_Z   = ANCH_WIN_Z0 + NOZZLE                  # −24.4 — a 0.8 flat
+                                   # truncates the corner: no knife-edge
+                                   # void where the roof closes on the
+                                   # entry wall in print; one bead
+                                   # bridges the flat
+ANCH_HOLD_Z0 = ANCH_WIN_Z1 - ANCH_WIN_HOLD           # −18.8 — bay bottom (−y)
 ANCH_WIN_W   = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — width: 45° floor
-                                                     # bay-corner → deep corner
-ANCH_Z0      = ANCH_WIN_Z0 - 4 * NOZZLE              # −31.6 — wall bottom
-                                   # (3.2 sill under the deep corner)
+                                                     # bay-corner → virtual apex
+ANCH_Z0      = ANCH_TIP_Z - 4 * NOZZLE               # −27.6 — wall bottom
+                                   # (3.2 sill under the dulled tip)
+# the strip's feasible z-band inside the spring (22 body between the
+# flange inner faces) must reach far enough UP to seat the neck in the
+# bay, and the head must thread the entry somewhere in the same band:
+_STRIP_C_LO = SPRING_Z0 + SPRING_FLANGE_T + STRIP_BODY_W / 2.0   # −18.6
+_STRIP_C_HI = SPRING_Z1 - SPRING_FLANGE_T - STRIP_BODY_W / 2.0   # −13.4
+assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_NECK_W / 2.0)
+        - max(_STRIP_C_LO, ANCH_HOLD_Z0 + STRIP_NECK_W / 2.0)
+        >= 0.5 - 1e-9), \
+    "no feasible strip z seats the neck in the holding bay"
+assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_HEAD_W / 2.0)
+        - max(_STRIP_C_LO, ANCH_TIP_Z + STRIP_HEAD_W / 2.0)
+        >= 0.5 - 1e-9), \
+    "no feasible strip z threads the head through the entry"
 # SWEEP: centred on the +X arm — window + a 6-bead pier each side (the
 # 16 chord still overhangs the 10.4 arm a touch; in the inverted print
 # the outboard blades root on the BED like the old gate wall's open
@@ -225,9 +250,10 @@ ANCH_HALF_A = math.degrees(math.asin(
     (ANCH_WIN_W / 2.0 + 6 * NOZZLE) / ANCH_IR))      # ≈ 11.3°
 
 # The pass/block mechanism IS these inequalities:
-assert ANCH_WIN_PASS >= STRIP_HEAD_W + 0.4 - 1e-9, \
-    "head doesn't pass flat-on at the entry wall"
-assert ANCH_WIN_PASS - (STRIP_HEAD_W + 0.4) >= 2 * NOZZLE - 1e-9, \
+assert ANCH_WIN_Z1 - ANCH_TIP_Z >= STRIP_HEAD_W + 0.4 - 1e-9, \
+    "head doesn't pass flat-on at the entry wall (tip flat included)"
+assert (NOZZLE + (ANCH_WIN_Z1 - ANCH_TIP_Z) - (STRIP_HEAD_W + 0.4)
+        >= 2 * NOZZLE - 1e-9), \
     "entry zone too narrow to thread the head by hand"
 assert ANCH_WIN_HOLD <= STRIP_HEAD_W - 3.0 + 1e-9, \
     "head escapes the holding bay"
