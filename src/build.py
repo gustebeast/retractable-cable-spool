@@ -125,9 +125,9 @@ def main():
                 color=color(COLOR["frame_bottom"]))
            # wall pieces seated in the beams' T channels (modelled in place)
            .add(wall_top,    name="wall_top",    color=color(COLOR["wall_top"])))
-    # the channel lock strips (ONE printed part, 3 rotated copies — the +X
-    # channel has no wall_top tenon since the open lever sector, #834)
-    for a in (90, 180, 270):
+    # the channel lock strips (ONE printed part, 4 rotated copies — the
+    # wall_top ring and its +X tenon are back, user's call)
+    for a in (0, 90, 180, 270):
         asm.add(wall_lock.rotate((0, 0, 0), (0, 0, 1), a),
                 name=f"wall_lock_{a}", color=color(COLOR["wall_lock"]))
     # the desk-mount brackets (ONE printed part, 2 rotated copies) SEATED

@@ -2,12 +2,13 @@
 their OD, user's 1.6 / 2.4 thick). The BOTTOM band is no longer a part: it
 exports as a solid that frame.py FUSES into frame_bottom (user's call — it
 replaces the bottom plus as the beams' structural tie). The lever bays
-open from the COIL CHAMBER's ceiling (CH_TOP_Z — below it the band runs a
-CLOSED RING, the bottom rim + coil containment, user's call) up through
-the split and the wall_top sector — the former derived sill (the
-over-pull stop) is still gone; RATCHET_WIN_Z0 stays in params as the
-lever's future stop-tab reference. Above the split, v2's sliding pieces
-remain:
+are FULL-HEIGHT below the split (user's outline: no band −z of the
+levers — hand access to the handles wins over closing the chamber at
+the bays), while wall_top above the split is a FULL CLOSED RING riding
+all four tenons (user's call — it clears both levers' swept envelopes).
+The former derived sill (the over-pull stop) is still gone;
+RATCHET_WIN_Z0 stays in params as the lever's future stop-tab
+reference. Above the split, v2's sliding pieces remain:
 
   wall_top  — prints +Z→−Z (INVERTED). The upper part of the ratchet
       window and the exit port — their world-CEILINGS are bed-side on its
@@ -170,29 +171,17 @@ def _build_wall_full():
     w = _ring(2 * WALL_IR, 2 * WALL_OR, WALL_ZB, WALL_Z1 - WALL_ZB)
     for a in (0.0, 90.0, 180.0, 270.0):
         w = w.union(_tenon(a))
-    # lever bays: from the COIL CHAMBER's ceiling up through the split
-    # (user's call — the old floor-up cut severed the band's bottom rim
-    # AND opened the chamber at both bays, where the loose coil could
-    # bulge out; below CH_TOP_Z the band now runs a CLOSED RING again.
-    # Every lever working part crosses the wall ABOVE it: the pawl band
-    # bottom at −38.4, the brake contact frame above the −44.4 band —
-    # posed-lever probes at the gate)…
+    # lever bays: FULL-HEIGHT below the split (user's outline — every band
+    # arc −z of the levers is EXCLUDED: it blocked the hand reaching the
+    # handles from below; the coil-containment closure tried at #844 is
+    # deliberately traded away). ABOVE the split, wall_top stays a FULL
+    # CLOSED RING (user's call — the ring band [WALL_SPLIT_Z, WALL_Z1]
+    # sits above both levers' swept envelopes, asserted in levers.py, so
+    # it crosses the bays for free and keeps its +X tenon).
     w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
-                            CH_TOP_Z, WALL_SPLIT_Z + 0.5))
+                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
     w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
-                            CH_TOP_Z, WALL_SPLIT_Z + 0.5))
-    # …and the whole +x SECTOR of wall_top above them (user #834: the top
-    # band over the bays deleted; the beam-strip between the bays would be
-    # an island, so it goes too — wall_top is a C-ring on THREE tenons and
-    # the +X channel carries no lock strip). The cutter reaches past the
-    # +X tenon's HEAD (deeper than the window boxes — a WALL_OR+3 cutter
-    # truncated it and stranded a floating sliver, probe-caught).
-    w = w.cut(cq.Workplane("XY").workplane(offset=WALL_SPLIT_Z)
-              .polyline([(WALL_IR - 3.0, -LEVER_WIN_Y1),
-                         (WALL_OR + 8.0, -LEVER_WIN_Y1),
-                         (WALL_OR + 8.0, LEVER_WIN_Y1),
-                         (WALL_IR - 3.0, LEVER_WIN_Y1)])
-              .close().extrude((WALL_Z1 + 5.0) - WALL_SPLIT_Z))
+                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
     if WALL_PERF:                  # revertable — see the flag above
@@ -215,9 +204,7 @@ def _split(w):
 wall_bottom_band, wall_top = _split(_build_wall_full())
 
 
-# ── wall_lock — ONE part, printed 3× (90/180/270; replaces v2's collar,
-# user's call — the +X channel lost its wall_top tenon with the open
-# sector, so it carries no lock) ─────────────────────────────────────────────
+# ── wall_lock — ONE part, printed 4× (replaces v2's collar, user's call) ─────
 _LOCK_T = 2 * NOZZLE                              # 1.6 — plate thickness
 _LOCK_H = BEAM_Z1 - WALL_Z1                       # 20.2 — wall_top top → the
                                                   # frame_top underside plane

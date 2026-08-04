@@ -29,7 +29,7 @@ def collect_components():
         ("wall_top",    wall_top),
         *[(f"wall_lock_{a}",
            wall_lock.rotate((0, 0, 0), (0, 0, 1), a))
-          for a in (90, 180, 270)],
+          for a in (0, 90, 180, 270)],
         *[(f"mount_bracket_{a}",
            mount_bracket.rotate((0, 0, 0), (0, 0, 1), a))
           for a in (90, 270)],
@@ -74,7 +74,7 @@ _INTENDED = {
 }
 # each lock strip: in its beam channel, resting on wall_top, capped by
 # frame_top's underside
-for _a in (90, 180, 270):
+for _a in (0, 90, 180, 270):
     for _p in ("frame_bottom", "wall_top", "frame_top"):
         _INTENDED.add(frozenset((f"wall_lock_{_a}", _p)))
 # each mount bracket: seated in its arm's channel (tenon butting the
