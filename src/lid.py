@@ -1,7 +1,9 @@
 """LID — the spool chamber's ceiling, locked onto the drum wall's top rim
-by the rotational bayonet (lid_joint.py): four hanging half-arrowhead arc
-tenons drop through the wall-top entry pockets in z, then the lid rotates
-CW to seat them in the retained cavities.
+by the rotational bayonet (lid_joint.py, SWAPPED sides — user's call, the
+frame-joint arrangement): the separator's drum wall carries four STANDING
+flat-top arc tenons; the lid carries per site a THROUGH cavity slot + an
+entry pocket. Drop the lid so the tenons pass the pockets, rotate CW to
+seat them in the cavities.
 
 BODY: v2 cable_ceiling's pattern — an annulus (bore = the drum/wall bore,
 rim at the separator OD) with graded solid rings tied by radial spokes,
@@ -12,16 +14,16 @@ web a bead multiple):
   · LID_MID_W tie band centered mid-span;
   · 6-bead solid outer rim to the OD (unbacked, v2's grade).
 
-PRINTS INVERTED (top face on the bed): the hanging tenons then stand in
-v2's library-native orientation — flare rising 45°, taper to the dull
-tip, support-free.
+PRINTS +z→−z (top face on the bed, user's call): with the tenons gone to
+the separator, the lid is a flat plate whose slots have only vertical or
+45° walls — support-free either way up.
 
 INSTALL: thread the lid up from below EARLY (its Ø86.7 bore passes the
-gate wall and insert, but NOT the Ø99.5 drum wall — and the Ø145.8 rim
-can't pass the frame from above): bearing → axle_top → LID parked around
-the gate wall → spring → strip → gate insert → axle_separator rises from
-below (glue joint engages, wall top stops just under the parked lid) →
-lower the lid, tenons through the pockets, rotate CW to the stops.
+anchor wall, but NOT the Ø99.5 drum wall — and the Ø145.8 rim can't pass
+the frame from above): bearing → axle_top → LID parked around the anchor
+wall → spring → strip through the anchor window → axle_separator rises
+from below (glue joint engages, wall top stops just under the parked
+lid) → lower the lid, tenons through the pockets, rotate CW to the stops.
 """
 
 import math
@@ -29,7 +31,7 @@ import math
 import cadquery as cq
 
 from .helpers import cyl, heal
-from .lid_joint import lid_tenon
+from .lid_joint import lid_channel_cut
 from .params import (
     LID_OD, LID_T, LID_Z0, LID_Z1, DRUM_IR,
     LID_SPOKE_N, LID_SPOKE_W, LID_RING_IN_R1, LID_RIM_R0,
@@ -66,9 +68,9 @@ def _build_lid():
     for r0, r1 in rows:
         for i in range(LID_SPOKE_N):
             body = body.cut(_win_slot(r0, r1, i * pitch, (i + 1) * pitch))
-    # the four hanging bayonet tenons (modelled SEATED)
+    # the four bayonet cavity+pocket slots, THROUGH the plate (seated pose)
     for i in range(LIDJ_SITES):
-        body = body.union(lid_tenon(i * 360.0 / LIDJ_SITES))
+        body = body.cut(lid_channel_cut(i * 360.0 / LIDJ_SITES))
     return heal(body)
 
 

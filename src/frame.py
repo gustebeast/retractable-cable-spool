@@ -1,15 +1,17 @@
 """FRAME — split frame_top / frame_bottom, v2's architecture ported to v3.
 
-frame_top — plus spider carrying the 608 IN its own thickness (recessed on
-    a quality-tier lip → flat assembly top), the spring-strip TENSION-TRAP
-    anchor wall under the +X arm (trapezoid window: the strip's T-head
-    enters flat-on at the tall +y end, spring tension parks it in the −y
-    bay, too short to escape — params block), and the arc-joint MORTISE
-    channels in its underside. PRINTS INVERTED (+Z→−Z, top face on the
-    bed — the anchor wall rises rooted on its rib band): the arc cavities
-    open at the print TOP, so they close with plain floors — no bridges
-    at all (the mount lesson; v2 printed this part upright and needed the
-    no-roof-bridge profile).
+frame_top — plus spider carrying the 608 IN its own thickness (recessed
+    onto a 45° FUNNEL cone seat — the flipped print's answer to the old
+    flat lip, params block), the spring-strip TENSION-TRAP anchor wall
+    under the +X arm (trapezoid window: the strip's T-head enters flat-on
+    in the +y entry pocket, spring tension parks it in the −y bay, too
+    short to escape — params block), and the arc-joint MORTISE channels
+    in its underside. PRINTS UPRIGHT now (−z→+z — user's flip): the
+    bearing seat and the anchor window are shaped for it (funnel cone,
+    45°-roofed window), the flat-top arc cavities close with short
+    ~4-wide ceiling bridges (user-accepted), and the anchor wall HANGS
+    below the plate — the plate prints on supports, the user's call with
+    the orientation.
 
 frame_bottom — NO bottom plus anymore (user's call, #815): the WALL's
     lower band is FUSED in as the beams' structural tie, closed by a
@@ -40,14 +42,16 @@ from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import cone_solid, cyl, heal
-from .lid_joint import arrowhead_solid, TOPJ_TOP, TOPJ_RD
+from .lid_joint import flat_arc_solid, TOPJ_TOP, TOPJ_RD
 from .wall import wall_bottom_band
 from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_WIN_W, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
-    BRG_BORE, BRG_POCKET_Z0, BRG_LIP_ID, BRG_BOSS_OD,
+    ANCH_WIN_W, ANCH_ENT_W, ANCH_ENT_Z0,
+    ANCH_BAY_Z0, ANCH_BAY_Z1, ANCH_TIP_Z,
+    BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
+    BRG_SEAT_CONE_Z0, BRG_SEAT_CONE_Z1,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
     FLOOR_HUB_R, FLOOR_RING_RC,
@@ -67,12 +71,12 @@ from .params import (
 _WALL_JOINT = joint(JOINT_WIDTH, MORTISE_L, tenon=JOINT_SPEC,
                     mortise=JOINT_SPEC, install="-z", depth=JOINT_DEPTH)
 
-# ── frame_top ↔ frame_bottom arc joints (shared arrowhead profile at the
+# ── frame_top ↔ frame_bottom arc joints (shared FLAT-TOP profile at the
 # beam-face radius — radially just outside the wall channels' keep-out) ──────
 _TOPJ_R0 = BEAM_IR + _WALL_JOINT.height + JOINT_CLR
 
 assert (BEAM_IR + BEAM_SIZE) - (_TOPJ_R0 + TOPJ_RD) >= 2 * NOZZLE - 1e-9, \
-    "half-arrowhead cavity's outer wall under 1.6 at the flush arm end"
+    "arc-joint cavity's outer wall under 1.6 at the flush arm end"
 assert FRAME_RIB - (TOPJ_TOP + JOINT_BACK_CLR) >= 2 * NOZZLE - 1e-9, \
     "arc-joint cavity ceiling under 1.6 in the top plus"
 
@@ -116,7 +120,7 @@ def _wall_mortise(angle_deg):
 
 def _arc_tenon(site_deg):
     """Arc tenon on a beam top, seated CENTERED on its arm, root sunk 1.0."""
-    return (arrowhead_solid(True, 2.0 * _TEN_HALF_A, -1.0, _TOPJ_R0)
+    return (flat_arc_solid(True, 2.0 * _TEN_HALF_A, -1.0, _TOPJ_R0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A)
             .translate((0, 0, BEAM_Z1)))
 
@@ -125,9 +129,11 @@ def _arc_mortise(site_deg):
     """Matching arc channel in frame_top's underside: the CW end wall (the
     STOP) sits TOP_STOP_WALL inside the arm's CW face; the CCW end sweeps
     open past the arm's CCW face (the entry — the tenon rotates in CW from
-    the open quadrant)."""
+    the open quadrant). In the flipped UPRIGHT print the cavity's flat
+    ceiling is a ~4-wide bridge over the channel — user-accepted with the
+    flat-top profile."""
     sweep = (_TEN_HALF_A + _SEAT_A) + (_ARM_HALF_A + _OVER_A)
-    return (arrowhead_solid(False, sweep, -2.0, _TOPJ_R0)
+    return (flat_arc_solid(False, sweep, -2.0, _TOPJ_R0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A - _SEAT_A)
             .translate((0, 0, BEAM_Z1)))
 
@@ -394,14 +400,12 @@ def _build_frame_bottom():
 def _anchor_wall():
     """Spring-strip TENSION-TRAP anchor (params block): a short wall
     sector centred under the +X arm, ANCH_Z0 up THROUGH the frame (the
-    over-frame band is the arm rib and the wall's bed-rooted print seat —
-    the gate wall's proven pattern). The right-trapezoid window is
-    overhang-free in the inverted print: its −z boundary — the roof of
-    the hole as printed — is the single 45° floor climbing from the +y
-    entry tip to the −y holding bay; the flat +z edge prints as a plain
-    floor face. The closing polyline edge (tip flat → bay corner) is the
-    45° by construction (it aims at the virtual apex), and the DULLED
-    0.8 tip flat is a one-bead bridge, not a knife-edge void."""
+    over-frame band is the arm rib tying the wall into the plate). The
+    trapezoid window is overhang-free in the flipped UPRIGHT print: its
+    +z boundary — the roof of the hole as printed — is the single 45°
+    roof climbing from the −y bay top to the dulled one-bead tip flat
+    at +y; every bottom edge faces up (a print floor), so the bottom
+    contour steps freely — deep only in the entry pocket."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
@@ -409,11 +413,13 @@ def _anchor_wall():
          .rotate((0, 0, 0), (0, 0, 1), -ANCH_HALF_A))
     hw = ANCH_WIN_W / 2.0
     win = (cq.Workplane("YZ").workplane(offset=ANCH_IR - 1.0)
-           .polyline([(-hw, ANCH_HOLD_Z0),      # −y bay bottom corner
-                      (-hw, ANCH_WIN_Z1),
-                      (hw, ANCH_WIN_Z1),
-                      (hw, ANCH_TIP_Z),         # +y entry wall down to...
-                      (hw - NOZZLE, ANCH_TIP_Z)])   # ...the dulled tip flat
+           .polyline([(-hw, ANCH_BAY_Z0),           # bay floor, −y wall up
+                      (-hw, ANCH_BAY_Z1),           # roof's low end
+                      (hw - NOZZLE, ANCH_TIP_Z),    # 45° roof to the tip flat
+                      (hw, ANCH_TIP_Z),             # one-bead dulled tip
+                      (hw, ANCH_ENT_Z0),            # +y entry wall down
+                      (hw - ANCH_ENT_W, ANCH_ENT_Z0),   # entry pocket floor
+                      (hw - ANCH_ENT_W, ANCH_BAY_Z0)])  # step up to the bay
            .close().extrude(ANCH_T + 2.0))
     return w.cut(win)
 
@@ -424,9 +430,15 @@ def _build_frame_top():
     ft = ft.union(_anchor_wall())   # twist-lock strip anchor + arm rib
     for a in (0.0, 90.0, 180.0, 270.0):
         ft = ft.cut(_arc_mortise(a))
-    # lip bore through, then the pocket from the frame top down to the lip
+    # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
+    # outer race's chamfer lands face-on-face on it, params block), then
+    # the pocket from the funnel rim to the frame top
     ft = ft.cut(cyl(BRG_LIP_ID, (FRAME_Z1 - FRAME_Z0) + 1.0, z=FRAME_Z0 - 0.5))
-    ft = ft.cut(cyl(BRG_BORE, (FRAME_Z1 - BRG_POCKET_Z0) + 0.5, z=BRG_POCKET_Z0))
+    ft = ft.cut(cone_solid(d_bottom=BRG_LIP_ID, d_top=BRG_BORE,
+                           h=BRG_SEAT_CONE_Z1 - BRG_SEAT_CONE_Z0,
+                           z_base=BRG_SEAT_CONE_Z0))
+    ft = ft.cut(cyl(BRG_BORE, (FRAME_Z1 - BRG_SEAT_CONE_Z1) + 0.5,
+                    z=BRG_SEAT_CONE_Z1))
     return heal(ft)
 
 
