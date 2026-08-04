@@ -20,7 +20,7 @@ import sys
 from cadkit.fasteners import M2, measured_bite  # noqa: E402
 from src import housing as H  # noqa: E402
 from src import mount_bracket as MB
-from src.dimensions import PANCAKE_CROSS_PIN_Z
+from v2.dimensions import PANCAKE_CROSS_PIN_Z
 
 # (label, part, mouth_pt, direction, short_bite_reason or None)
 SITES = [

@@ -1,622 +1,662 @@
-"""(from-scratch modular redesign) — shared parameters.
+"""v3 — shared parameters (fresh start; v2 archived in v2/).
 
-ARCHITECTURE (the reason for the rewrite): the working center assembly — the
-spring chamber + bearing caps — is a proven, rigid backbone. Everything else
-becomes a stack of parts that SLIDE onto that backbone, so each can be placed at
-any Z rather than being forced to the print bed for support:
+WHY v3: v2's flat cable-storage tray FAILED its physical wind test and the
+redesign around an AXIAL cable storage chamber costs a lot of Z height — so
+v3 rebuilds the stack looking for Z savings everywhere else.
 
-    spool ceiling   (rides the spring chamber)
-    spool wall      (rides the housing)
-    MIDDLE piece    (spring chamber) — spool floor + tray ceiling + the brake &
-                    ratchet lever-contact rims
-    tray wall       (rides the housing)
-    tray floor      (rides the spring chamber)
+ARCHITECTURE CHANGE vs v2: the 608 bearing moves INTO the top frame's own
+thickness (v2 spent a separate spring-housing pocket on it); the AXLE is now
+the part that ROTATES (it is the spring arbor), hanging on a top lip that
+rests on the bearing's inner race; the SPRING BODY will be fixed to the
+frame (tackled later). The spring is used UNMODIFIED — flanges on (v2 ran
+it with the flange rims cut off).
 
-This first cut builds only: the spring chamber (copied from src), the middle
-brake/ratchet RIM that seats at mid-height, and a minimal 4-beam housing whose
-connecting ring is both the spool and tray wall. The rest follows.
+First cut: frame_top (plus spider + bearing pocket), the two-half axle, and
+the 608 bearing + spring as assembly-only dummies.
 
-Center (spring-chamber) dims are REUSED from the working design (src.dimensions);
-only the new outer parts get fresh numbers here.
+Sizing policy (user's rule): every printed width/thickness is a multiple of
+the 0.8 nozzle bead or referenced off an existing object; hardware dims and
+small fit clearances stay absolute.
 """
 
 import math
 
-from src.dimensions import HUB_OD, SPOOL_H, STRUCT_WALL, FIT_CLR, AXLE_PRINT_D
+from cadkit.joinery import PrintSpec, joint_clearances, joint_box_min
 from cadkit.contact import contact_rib_size
-from cadkit.joinery import PrintSpec, joint_clearances, hook_width_min
 
-NOZZLE = 0.8                          # the project prints at a 0.8 nozzle (user's
-                                      # call, 2026-07-22; was 0.4) — bead-multiple
-                                      # sizing keys off this
+NOZZLE      = 0.8            # THE print-width unit (0.8 nozzle, v2's call)
+STRUCT_WALL = 2 * NOZZLE     # 1.6 — the two-bead quality tier
+FIT_CLR     = 0.15           # per-side slip-fit clearance (v2's proven value)
 
-# ── Cable ────────────────────────────────────────────────────────────────────
-CABLE_D = 3.8                         # source-cable Ø (the larger of the two cables)
+# ── 608 bearing (purchased part — dummy in the assembly, no STEP) ────────────
+BEARING_OD = 22.0            # outer race Ø
+BEARING_ID = 8.0             # inner race bore
+BEARING_W  = 7.0             # axial width
+BEARING_CLR = 0.2            # diametral pocket clearance (0.1/side, v2-proven)
+BEARING_ORACE_ID = 19.4      # outer-race face annulus ID (seal line, v2-measured)
+BEARING_IRACE_OD = 12.1      # inner-race face annulus OD (v2-measured)
+BEARING_INNER_CH = 0.3       # 608 ring-edge chamfer (spec r_s min ≈ 0.3, both
+                             # rings) — v2's cone-seat trick face-mates it
 
-# ── Capacity → the ONE knob that sets every OD (copied from the original design service_loop) ──
-# The tray must clear the reverse-wound source-cable coil out to R_OUT_COIL; the
-# floor caps that coil just inside the chamber. FLOOR_OD derives from it, and the
-# separator/brake OD, the cap ODs, and the wall all derive from FLOOR_OD — so
-# changing R_OUT_COIL (capacity) re-sizes the whole part.
-R_IN_COIL   = 15.0                              # inner coil radius (arbor / bend limit)
-R_OUT_COIL  = 71.0                              # outer coil radius (original value)
-CHAMBER_R   = R_OUT_COIL + CABLE_D / 2 + 1.0    # 73.9 — coil clearance radius (the original design)
-FLOOR_OD    = 2 * (CHAMBER_R - 1.0)             # 145.8 — floor caps the coil (original platen OD)
+# ── Spring (purchased part, UNMODIFIED — dummy in the assembly, no STEP) ─────
+SPRING_FLANGE_OD = 78.3      # flange Ø, top and bottom
+SPRING_FLANGE_T  = 2.4       # flange thickness, each
+SPRING_BODY_OD   = 56.3      # coil body Ø between the flanges
+SPRING_H         = 32.0      # TOTAL height, flanges included
+SPRING_BORE_TOP_D = 8.7      # top-flange arbor hole (user-measured 2026-08-03) —
+                             # only the bare shaft passes; the joint collar CAN'T
+SPRING_BORE_BOT_D = 13.4     # bottom-flange hole — the mortise collar enters here
+SPRING_STRIP_T   = 0.2       # strip steel thickness (v2-measured)
+SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 
-# ── Middle brake/ratchet RIM — a cylinder sliding on the spring chamber ──────
-# Split top-half BRAKE / bottom-half RATCHET, with a 45° cone between (ratchet →
-# cone chamfer → brake), copied from the working lever rim. Slides down the hub
-# OD and seats on the spring chamber's cone notch at mid-height.
-# RIM_H is now DERIVED (was fixed 12): the BRAKE band sizes itself from the
-# pad's hook joint — the joint drives the stack, not the other way round.
-RIM_BORE_CLR  = FIT_CLR + 0.10        # slide fit over the hub OD
-RIM_ID        = HUB_OD + 2 * RIM_BORE_CLR         # ~66.9 — bore (rides the hub)
-RIM_OD        = FLOOR_OD               # separator/brake OD = floor OD (derived from capacity)
-RATCHET_DEPTH = 2.4                   # tooth tip→valley (also the 45° cone radial
-                                      # step): three full 0.8-nozzle perimeters
-                                      # (user's call — deeper bite; was 1.6)
+# ── Cable (hardware) ─────────────────────────────────────────────────────────
+CABLE_D        = 3.0         # working-cable Ø (user's measurement)
+CABLE_CAPACITY = 6.0 * 304.8 # 1828.8 — 6 ft of wrapped cable (user's call)
+
+# ── Axle (rotating arbor) ────────────────────────────────────────────────────
+AXLE_D       = 8.0                   # nominal — the 608's bore
+AXLE_PRINT_D = AXLE_D - 0.05         # 7.95 — 0.025/side under the bore (v2-proven)
+AXLE_LIP_W   = 2 * NOZZLE            # retention lip radial protrusion
+AXLE_LIP_OD  = AXLE_PRINT_D + 2 * AXLE_LIP_W   # 11.15 — rests on the inner race
+AXLE_LIP_H   = 2 * NOZZLE            # lip axial height (tops out under the
+                                     # frame face — flat assembly top)
+
+# ── Frame top — v2's plus spider, now hosting the bearing ────────────────────
+FRAME_RIB   = 13 * NOZZLE    # 10.4 — plus-arm section (was v2's 10.0 even;
+                             # user's call: onto the bead grid)
+# (FRAME_R_OUT is DERIVED in the wall/beam block below: arm tips flush
+# with the beams' outer faces, v2's pattern.)
+FRAME_Z0 = 0.0               # frame underside — the v3 z datum
+FRAME_Z1 = FRAME_Z0 + FRAME_RIB
+
+# Bearing pocket: drops in from the TOP onto a lip UNDER the outer race —
+# the hanging load (axle + spring + future drum) pulls the bearing DOWN
+# onto it. The lip is the quality tier, which RECESSES the bearing 1.8
+# below the frame top so the axle's lip tops out UNDER the frame face:
+# the assembly's top is FLAT (user's call — was lip 3.4 / bearing flush /
+# axle lip 1.6 proud).
+BRG_BORE      = BEARING_OD + BEARING_CLR       # 22.2 — pocket bore
+BRG_LIP_H     = 2 * NOZZLE                     # 1.6 — retention lip height
+BRG_POCKET_Z0 = FRAME_Z0 + BRG_LIP_H           # 1.6 — pocket floor (lip top)
+BRG_Z1        = BRG_POCKET_Z0 + BEARING_W      # 8.6 — bearing top (recessed)
+BRG_LIP_ID    = BRG_BORE - 2 * STRUCT_WALL     # 19.0 — retention lip bore (laps
+                                               # the outer race; grazes the seal
+                                               # annulus by 0.2 — v2-accepted: the
+                                               # seal sits on the outer ring, no
+                                               # relative motion at that contact)
+BRG_BOSS_WALL = 4 * NOZZLE                     # 3.2 — hoop wall around the pocket
+BRG_BOSS_OD   = BRG_BORE + 2 * BRG_BOSS_WALL   # 28.6 — central boss Ø
+
+# ── Z stack below the frame ──────────────────────────────────────────────────
+# The spring body will be FIXED to the frame later — modelled touching.
+SPRING_Z1 = FRAME_Z0                   # top flange against the frame underside
+SPRING_Z0 = SPRING_Z1 - SPRING_H       # −32
+
+# ── Axle two-half glue joint + spring-strip slit (v1/v2-proven design:
+# the joint must pass through the spring's Ø13.4 flange holes, so the axle
+# splits and each half slides onto the strip from its own end) ───────────────
+MORTISE_TOP_GAP      = 5 * NOZZLE                  # 4.0 — collar top below the spring top
+JOINT_H              = 23.0                        # bore depth = engagement = slit
+                                                   # length (v1 print-proven)
+JOINT_Z1             = SPRING_Z1 - MORTISE_TOP_GAP # −4 — mortise opening
+JOINT_Z0             = JOINT_Z1 - JOINT_H          # −27 — bore bottom = tenon tip
+JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR  # 8.25 — female bore
+JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — collar,
+                                                   # AND the bottom half's one
+                                                   # constant section end to end
+                                                   # (user's call — no narrowing
+                                                   # below the collar)
+SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
+SLIT_END_CAP         = 7 * NOZZLE                  # 5.6 — solid band between each
+                                                   # half's slit and its joint-side
+                                                   # face (user's call): the slits
+                                                   # are closed WINDOWS now, not
+                                                   # open-ended slots — the strip's
+                                                   # end tongue threads the window
+
+# ── Separator (brake + ratchet rims), FUSED to the bottom axle ───────────────
+# v2's standalone sliding rim, ported: now a SOLID disk (no bore, no key
+# slots — it turns with the axle it's fused to), same two rims. Band ORDER
+# flipped vs v2 (brake bottom / ratchet top): the fused part prints UPRIGHT
+# (disk on the bed, column rising), so the bed-side band must be the full
+# ring — exactly v2's proven print stack (v2 printed inverted, brake band
+# on the bed, teeth growing on the knurl ring).
+# (RIM_OD — the separator/lid OD — is DERIVED in the capacity block after
+# the drum wall below: it must cap 6 ft of flat-wound cable.)
+RATCHET_DEPTH = 3 * NOZZLE         # 2.4 — tooth tip→valley (v2 print-proven)
 RATCHET_TEETH = 60
-CONE_H        = RATCHET_DEPTH         # 45° ratchet→brake transition (tracks depth)
-# Brake pad ↔ arm joint (cadkit hook, single-flank — the joint face is
-# edge-bounded) + the pad's z margins inside the band. The pad is an
-# L-SECTION now (user's design): a band-contact SLAB sized by the band's
-# margins, plus a taller back FLANGE carrying the hook joint at its QUALITY
-# width — the joint no longer sizes the band (an 8.5 band once grew the rim
-# to 15 and ate 3.0 of spool-chamber headroom, user-caught). The flange
-# nests into a recessed, taller arm end: at that radius (behind the old arm
-# face) it clears the coil keep-out above and the cone/teeth below.
-PAD_JOINT_CLR        = 0.1            # TPU in PETG — snug
-BRAKE_PAD_TOP_MARGIN = 0.8            # contact-pose z margins inside the band
-                                      # (0.8 protects cable_clearance — the 2.4
-                                      # teeth raised the contact angle)
-BRAKE_PAD_BOT_MARGIN = 1.1            # keeps the full-pull drop ≥ 1 off the teeth
-PAD_FLANGE_H  = hook_width_min(NOZZLE, PAD_JOINT_CLR, quality=True)
-                                      # 6.6 — the flange face: all-1.6 hook
-                                      # segments on both halves
-PAD_FLANGE_T  = 1.6                   # flange depth — the arm face recesses by
-                                      # this so the flange never protrudes past
-                                      # the old face radius
-BRAKE_H       = 5.0                   # top brake band height (user's call —
-                                      # 5 / 5 / 2.4 bands)
-RATCHET_H     = 5.0                   # bottom ratchet band height (back to the
-                                      # original engagement height)
-RIM_H         = RATCHET_H + CONE_H + BRAKE_H      # 12.4 — recovers 2.6 of the
-                                                  # spool-chamber headroom
-# 45° cable PASS-THROUGH tunnel (ported from the original design): lets
-# the working cable cross from the spool chamber (above the separator) to the
-# tray chamber (below), connector included. Tilted tangentially, so it prints
-# support-free in the separator's flat print; placed between two key slots.
-SEP_PASS_W         = 13.0             # square tunnel section (connector passes)
-SEP_PASS_ANGLE_DEG = 30.0             # azimuth (mid-way between key slots at 0/60°)
-SEP_PASS_WALL      = 1.6              # web left between the tunnel and the bore
+# (RATCHET_PHASE_DEG — the tooth/knurl phase — is DERIVED in the lever
+# block below: one catch face lands at the pawl's y-midline, v2's rule.)
+BRAKE_H       = 6 * NOZZLE         # 4.8 — knurled brake band height (was
+                                   # v2's 5.0 even; user: onto the bead grid)
+RATCHET_H     = 6 * NOZZLE         # 4.8 — tooth band height (ditto)
+RIM_H         = BRAKE_H + RATCHET_H            # 10.0
+KNURL_N       = 5 * RATCHET_TEETH  # 300 — knurl lobes, phase-locked 5 per
+                                   # tooth so a peak supports every tip
+KNURL_DEPTH   = 0.4                # half a nozzle (v2 print-proven ridge field)
 
-CLAMP_HW_ANGLE_DEG = 30.0             # height-clamp pinch hardware azimuth: halfway
-                                      # between two key slots (60° pitch), so the
-                                      # C-slit doesn't run through a key groove
+# 45° cable PASS-THROUGH tunnel (v2's, kept by user's call): lets the
+# working cable (connector included) cross from above the separator to
+# below it. Tilted tangentially at 45°, so it prints support-free either
+# way up; tilt sense follows the CW wind (v2's finding — a CCW climb
+# kinked the wrap against the ratchet's freewheel sense).
+SEP_PASS_W         = 13.0          # square tunnel section (connector passes)
+SEP_PASS_ANGLE_DEG = 30.0          # azimuth (v2's spot; arbitrary now — the
+                                   # key slots it dodged are gone)
+# (SEP_PASS_R is derived in the drum block below — the mouth sits just
+# outside the drum wall, where the innermost wrap dives.)
 
-# ── Rim seat: a 45° cone-supported notch on the spring chamber ───────────────
-# Holds the rim at HALF height (equal spring-chamber length above and below).
-RIM_SEAT_Z    = (SPOOL_H - RIM_H) / 2             # 19.5 — rim bottom rests here
-SEAT_SHOULDER_OD = RIM_ID + 3.0                   # >rim bore, so the rim stops on it
-SEAT_CONE_H   = (SEAT_SHOULDER_OD - HUB_OD) / 2   # 45°: radial step == axial rise
+SEP_SPRING_CLR = 3 * NOZZLE        # 2.4 — separator↔spring gap (was v2's 3.2
+                                   # static↔moving standard; user: overkill)
+AXLE_ROOT_CONE_H = 3 * NOZZLE      # 2.4 — 45° column→disk root cone height =
+                                   # the FULL gap (user's call): the cone top
+                                   # lands exactly on the spring's face plane,
+                                   # where it is still only the column Ø —
+                                   # inside the Ø13.4 flange hole, no contact
+SEP_Z1 = SPRING_Z0 - SEP_SPRING_CLR    # −34.4 — disk top, right under the
+                                       # (frame-fixed, static) spring
+SEP_Z0 = SEP_Z1 - RIM_H                # −44.4 — disk bottom = the bed face
 
-# ── Minimal housing: 4 vertical beams + a connecting wall ring ───────────────
-# Beams at ±X/±Y only (no levers/guide wheels yet); the ring they carry is BOTH
-# the spool wall (upper 1.5·D) and the tray wall (lower 1.5·D), bracketing the
-# 12 mm middle rim. Beam height = wall height for now (extended +Z later).
-BEAM_SIZE     = 10.0                              # 10 × 10 mm square section
-STATIC_MOVE_CLR = 3.2                             # the project's standard clearance between
-                                                  # STATIC and MOVING parts
-RIM_TO_WALL   = 3.2                               # radial gap: wall inner face ↔ brake rim
-WALL_IR       = RIM_OD / 2 + RIM_TO_WALL          # wall inner radius (keeps the 3.2 rim gap)
-WALL_T        = STRUCT_WALL                       # 1.6 — wall ring radial thickness
-WALL_OR       = WALL_IR + WALL_T                  # wall outer radius = the joint mating plane
-BEAM_IR       = WALL_OR                           # beams sit just outside the separate wall
-                                                  # ring (wall OD = beam inner face; the
-                                                  # embedded-wall variant was tried and
-                                                  # reverted by user call)
-WALL_Z0       = 12.0                              # wall/beam bottom (tray side) — reaches
-                                                  # the cable floor's TOP at its lowest
-                                                  # (clamp bottomed): FLOOR_MIN_BOT_Z +
-                                                  # CAP_H (both defined below; asserted at
-                                                  # EOF), so the tray stays walled at any
-                                                  # clamp setting
-WALL_TOP_BAND = 1.6                               # unbroken top ring above every window
-# WALL_H / WALL_Z1 are DERIVED in the wall-windows block below (they need the
-# lever constants): wall top = ratchet-window ceiling + WALL_TOP_BAND.
+AXLE_Z_BOT = SEP_Z0                    # the column runs flush through the disk
+AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
 
-# ── Wall ↔ frame joinery (cadkit slide_joint, install="z" → plain dovetail) ──
-# The WALL is a separate part carrying 4 dovetail TENONS (it's thin) on its
-# outer face; each beam's inner face hosts the matching MORTISE channel. Both
-# parts print −Z→+Z and the joint INSTALLS along Z (the library's install="z"
-# family): the plan profile prints as vertical walls, so the classic dovetail
-# applies with no arrow/octagon print compromises.
-# INSTALL: the wall slides DOWN from the BEAM TOPS (the beams now root in the
-# bottom plus, so there is no bottom entry) — each channel runs open from the
-# beam top down to a stop just BELOW the seated wall tenon; the wall rests on
-# those stops. Sequence: wall → frame_bottom, then frame_bottom → frame_top
-# (the top then caps the open channel ends).
-# Joint size = AVAILABLE room (the library optimizes the profile inside it and
-# may use less): width along the beam face, depth into the 10 mm beam (leave
-# ≥ 4 mm backing behind the cavity end).
-JOINT_WIDTH    = 5.2                              # available width on the beam face —
-                                                  # the SMALLEST room whose tenon has
-                                                  # EVERY wall segment ≥ 1.6 (user
-                                                  # measured 1.5s at the old box): neck
-                                                  # 1.92, shoulders 1.6, head 5.12. The
-                                                  # pin bores move out with it (see
-                                                  # PIN_TIP_END_Y) to keep ≥ 1.6 of beam
-                                                  # beside the cavity (EOF-asserted)
-# Clearances come from CADKIT'S POLICY (user's call — callsites stop
-# hardcoding them): the material table picks the lateral base, and the
-# GF-filled filament DOUBLES the T's depth-face gap (only the mortise back
-# wall deepens — print finding: the GF wall joint slid fine laterally at
-# 0.15 but bound in the depth sandwich until that face reached 0.3).
-JOINT_SPEC     = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
-JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)
-                                                  # 0.15 lateral / 0.30 back wall
-JOINT_DEPTH    = 2 * 1.6 + JOINT_BACK_CLR         # 3.5 — a 1.6 head bar + a 1.6 MORTISE
-                                                  # lip + the DEPTH-FACE gap (the tenon
-                                                  # lip is pre-grown by JOINT_BACK_CLR in
-                                                  # the library so both depth pairs run
-                                                  # at 0.3 — GF print finding — while
-                                                  # every wall keeps 1.6; the depth box
-                                                  # absorbs it); neck lands 1.92; keeps
-                                                  # the frame_top arc-joint ring (r_T
-                                                  # tracks the swallow) inside the arms
-JOINT_SEAT_CLR = 0.15                             # z seating clearance at the bottom stop
-# (MORTISE_L is derived below the frame section — it runs to the beam tops.)
+# ── Spring-strip TWIST-LOCK anchor (user's v3 design — retires the ported
+# v2 two-block gate + drop-in insert; zero extra parts) ──────────────────────
+# A short wall hangs under the +X arm (running up THROUGH the frame as an
+# arm rib — the gate wall's proven inverted-print bed seat) with one
+# WINDOW at the strip's z that passes the T-head ONLY twisted ~45° about
+# the strip axis: twist, push through, let the strip relax parallel with
+# the spring — pulled back, the head grabs the wall around the window,
+# and winding tension (mostly tangential) bears on the window's edge in
+# shear. The window's exact shape is print-driven (below).
+# Strip tip, user-measured (same spring as v2; hardware = absolute dims):
+# 0.2 thick; 22-wide body, 13-long taper to the 9-wide × 8-long neck, then
+# the 7-long × 16-wide round T-head (4 root notch, unused here).
+STRIP_BODY_W  = 22.0               # full strip width (across = z)
+STRIP_TAPER_L = 13.0               # body → neck taper length
+STRIP_NECK_W  = 9.0                # neck width (across = z)
+STRIP_NECK_L  = 8.0                # neck length (along the strip)
+STRIP_HEAD_W  = 16.0               # T-head width (across = z)
+STRIP_HEAD_L  = 7.0                # T-head length (along the strip)
 
-# ── Frame split: frame_bottom (bottom plus + beams) / frame_top (top plus) ───
-# frame_bottom: a plus-shaped spider BELOW the spring housing (same 3.2 mm
-# clearance as the top side) + the four vertical beams (carrying the wall
-# mortises) rising from it, + octagon TENONS on the beam tops. frame_top: just
-# the top plus spider with the matching mortise channels in its underside.
-# BOTH parts print −Z→+Z: frame_top gets its mounting hardware on a flat build,
-# frame_bottom prints beams-up (the old monolithic frame had to print +Z→−Z to
-# put the top spider on the bed). NOTE: the bottom plus blocks the removable
-# spring_housing_cap's −Z exit — install the cap before the frame.
-HOUSING_TOP_CLR = 3.2                             # top-plus underside ↔ housing top
-HOUSING_BOT_CLR = 3.2                             # bottom-plus top ↔ housing/cap bottom
-TOP_RIB_SIZE    = 10.0                            # plus-arm section (10 × 10, matches beams)
-TOP_RIB_Z0      = SPOOL_H + HOUSING_TOP_CLR       # 54.2 — top plus underside
-TOP_RIB_Z1      = TOP_RIB_Z0 + TOP_RIB_SIZE       # 64.2 — top plus top
-BOT_RIB_Z1      = -HOUSING_BOT_CLR                # −3.2 — bottom plus top
-BOT_RIB_Z0      = BOT_RIB_Z1 - TOP_RIB_SIZE       # −13.2 — bottom plus underside
-BEAM_Z0         = BOT_RIB_Z0                      # beams fuse down through the bottom plus
-BEAM_Z1         = TOP_RIB_Z0                      # beams end at the top plus underside
-# Wall-mortise channel: open at the beam TOP (wall enters there, slides down),
-# hard stop JOINT_SEAT_CLR below the seated tenon bottom.
-MORTISE_L       = (BEAM_Z1 + 1.0) - (WALL_Z0 - JOINT_SEAT_CLR)   # 41.55 — stop → past beam top
+ANCH_FLANGE_CLR = 1.8              # wall face off the Ø78.3 flange edges
+                                   # (fit clearance; it also lands the wall
+                                   # on the gate wall's proven 40.95 face,
+                                   # so the drum chain below is unmoved)
+ANCH_IR = SPRING_FLANGE_OD / 2.0 + ANCH_FLANGE_CLR   # 40.95 — wall inner face
+ANCH_T  = 2 * NOZZLE               # 1.6 — wall thickness (the gate wall's)
+ANCH_OR = ANCH_IR + ANCH_T                           # 42.55
 
-# ── frame_top ↔ frame_bottom joinery (ROTATIONAL octagon arc joints) ─────────
-# The AXLE locks both frames coaxially — no straight slide direction exists;
-# the one free motion is ROTATION about the axle. So the joints are the
-# library's octagon-ARC variant (the octagon profile revolved about the Z axis
-# at the site radius; both parts still print −Z→+Z, roof-bridge print rules
-# unchanged).
-# INSTALL (CW to seat): rotate frame_bottom CCW off its seat by
-# ~TOP_ROT_INSTALL_DEG, mate ALONG Z (all four tenons rise through the open
-# quadrants between the top's arms), then rotate CW until the tenons seat
-# against ANGULAR stops at each arm's CW face. RETRACTION TORQUE IS CW (the
-# spool tightens the spring), so operation PRELOADS the joints against their
-# stops; uninstall = CCW, against the load — it can't shake free in service.
-# Radially the tenons sit just outside the wall channels' keep-out (they'd
-# otherwise block the wall sliding down); angular extents are DERIVED in
-# frame.py: tenon half-angle = arm half-angle − stop − seat.
-TOP_JOINT_W         = 5.0                         # octagon width (radial; leaves a 1.15 mm
-                                                  # outer cavity wall in the arm)
-TOP_JOINT_SEAT_CLR  = 0.15                        # seating clearance at each stop (arc mm)
-TOP_ENTRY_OVER      = 1.0                         # channel overshoot past the CCW entry
-                                                  # faces (arc mm)
-TOP_WALL_CLEAR      = 0.1                         # tenon radial gap off the wall channel —
-                                                  # right at the wall-install limit
-TOP_STOP_WALL       = 1.2                         # stop-wall thickness at each arm's CW
-                                                  # face (arc mm)
-TOP_ROT_INSTALL_DEG = 20.0                        # suggested CCW install offset (anything
-                                                  # ≥ ~7° clears the arms on z-mate)
+# WINDOW — OVERHANG-FREE (user's call: frame_top prints +z→−z, print-up =
+# assembly −z, so every opening edge must be vertical, 45°, or
+# teardropped; a plain square window would leave its −z edge a flat
+# bridge, and gabling that edge would lengthen the vertical diagonal
+# until the untwisted head slips out). Instead: a round NECK HOLE
+# (cadkit teardrop, apex toward −z) crossed by a 45° INSERTION SLOT
+# through its centre — the slot's long sides AND square end caps all lie
+# at 45°. The head threads the slot at its ~45° twist (slot > head), the
+# neck relaxes and TURNS freely in the round hole (Ø12 beats the 9 neck
+# at every angle — a bare crossed-slots window would trap it mid-turn),
+# and once parallel the head stays: the hole bites it 2.0 per side, the
+# slot's vertical cross-chord is only 4.5, and the hole+apex vertical
+# run is 14.5 < the 16 head — whose ROUND end can't even enter the 45°
+# apex wedge. Escape = re-aligning the head with the slot by hand.
+_SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
+ANCH_ZC     = _SPRING_ZC           # window centre rides the strip line
+ANCH_HOLE_D = 15 * NOZZLE          # 12.0 — neck seat (±1.5 z-float on the 9)
+ANCH_SLOT_L = 24 * NOZZLE          # 19.2 — 45° slot: 16 head + hand slack
+ANCH_SLOT_W = 4 * NOZZLE           # 3.2 — slot gap for the 0.2 strip
+# the slot's bounding half-span in y AND z (45° axis, square end caps):
+_ANCH_SLOT_HALF = (ANCH_SLOT_L + ANCH_SLOT_W) / (2.0 * math.sqrt(2.0))  # ≈ 7.9
+ANCH_WIN_Z0 = ANCH_ZC - _ANCH_SLOT_HALF              # ≈ −23.9 — lowest opening
+ANCH_WIN_Z1 = ANCH_ZC + _ANCH_SLOT_HALF              # ≈ −8.1 — highest opening
+ANCH_Z0     = ANCH_WIN_Z0 - 4 * NOZZLE               # ≈ −27.1 — wall bottom
+                                   # (3.2 sill under the slot's low corner)
+# SWEEP: centred on the +X arm — opening + a 6-bead pier each side. The
+# opening is WIDER than the 10.4 arm, so the piers stand past the arm's
+# edges; in the inverted print they root on the BED like the old gate
+# wall's open span did.
+ANCH_HALF_A = math.degrees(math.asin(
+    (_ANCH_SLOT_HALF + 6 * NOZZLE) / ANCH_IR))       # ≈ 18.1°
 
-# ── Axle (original two-half axle, mirrored + extended) + diagonal rod pin ──────────
-# The axle spans the frame: bottom end flush with the bottom plus underside,
-# top end flush with the top plus top; both plus centres carry slip bores.
-# Fixing hardware = a printed PLASTIC ROD through a horizontal plan-45° bore
-# (+xy → −xy) through the frame_top crossing AND the axle — inserted from the
-# open quadrant between arms; the spring's constant radial load on the axle
-# friction-locks it (no thread). Replaces the original design's M2 cross-pin.
-AXLE_BORE_D = AXLE_PRINT_D + 2 * FIT_CLR          # 8.25 — plus-centre slip bores
-ROD_D       = 4.0                                 # printed rod Ø
-ROD_HOLE_D  = ROD_D + 0.3                         # rod bore (slip fit)
-ROD_L       = 20.0                                # rod length (crossing diagonal + grip ends)
-ROD_Z       = TOP_RIB_Z0 + TOP_RIB_SIZE / 2.0     # 59.2 — top rod axis (top crossing mid)
-ROD_Z_BOT   = BOT_RIB_Z0 + TOP_RIB_SIZE / 2.0     # −8.2 — bottom rod axis (bottom crossing mid)
+# The pass/block mechanism IS these inequalities:
+assert ANCH_SLOT_L >= STRIP_HEAD_W + 0.4 - 1e-9, \
+    "twisted head doesn't fit the 45° slot"
+assert ANCH_HOLE_D <= STRIP_HEAD_W - 3.0 + 1e-9, \
+    "head passes the neck hole untwisted"
+assert ANCH_HOLE_D >= STRIP_NECK_W + 0.4 - 1e-9, \
+    "neck binds in the hole (it must ride AND rotate there untwisted)"
+assert ANCH_SLOT_W * math.sqrt(2.0) <= STRIP_NECK_W - 1.0 + 1e-9, \
+    "slot's vertical cross-chord lets the seated neck wander off the hole"
+assert (ANCH_HOLE_D / 2.0) * (1.0 + math.sqrt(2.0)) \
+        <= STRIP_HEAD_W - 1.4 + 1e-9, \
+    "head could slide down past the teardrop apex (flat-edge bound)"
+assert STRIP_NECK_L >= ANCH_T + 1.0 - 1e-9, \
+    "neck too short — the head can't fully clear the wall"
+assert ANCH_WIN_Z1 <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \
+    "window reaches the spring's top flange"
+assert ANCH_WIN_Z0 >= SPRING_Z0 + SPRING_FLANGE_T + 0.5 - 1e-9, \
+    "window reaches the spring's bottom flange"
+assert ANCH_Z0 - SEP_Z1 >= 3 * NOZZLE - 1e-9, \
+    "anchor wall bottom reaches the separator disk"
 
-# ── Pre-wind hex drive + printed winding tool ────────────────────────────────
-# INSTALL UNTENSIONED, wind LAST: the bottom axle ends in a male hex sticking
-# out below the frame; with the rod pins still out, turn it to pre-wind the
-# spring, then lock the torque in with the bottom rod pin. The hex is
-# INSCRIBED in the axle's shaft profile (across-corners = AXLE_PRINT_D), so
-# the cap's 608 bearing still slides over it at install; that makes the
-# across-flats ≈ 6.89 — a standard 7 mm female hex bit/socket drives it. For
-# users without a bit: a printed flat BAR tool with a female hex socket
-# through its middle (turn by the two handle ends).
-HEX_DRIVE_AC    = AXLE_PRINT_D                    # 7.95 — hex across-CORNERS
-HEX_DRIVE_AF    = HEX_DRIVE_AC * math.cos(math.radians(30.0))   # ≈ 6.89 across-flats
-HEX_DRIVE_L     = 15.0                            # male hex length below the frame
-HEX_DRIVE_Z0    = BOT_RIB_Z0 - HEX_DRIVE_L        # −33.2 — hex tip
-WIND_TOOL_CLR   = 0.35                            # socket clearance (across-corners)
-WIND_TOOL_L     = 110.0                           # bar length (two ~50 mm handle arms)
-WIND_TOOL_W     = 16.0                            # bar width (≥3.8 wall around the socket)
-WIND_TOOL_T     = 5.0                             # handle-arm thickness (prints flat −Z→+Z)
-WIND_TOOL_BOSS_OD = 16.0                          # centre boss around the socket
-WIND_TOOL_BOSS_H  = HEX_DRIVE_L                   # 15 — socket grips the FULL hex length
+# ── Drum wall + lid — the cable-wrap core and the spool chamber's ceiling ────
+# The DRUM WALL rises from the separator disk, wrapping the anchor wall's
+# radius with DRUM_ANCH_CLR (user's 0.8); the cable wraps IT. The LID seats on the
+# wall's top rim via a ROTATIONAL bayonet (user's design): v2's print-
+# proven half-arrowhead arc profile, MOUNT-FLIPPED — the lid carries
+# HANGING tenons (it prints INVERTED, so they stand library-native), the
+# wall top carries per site an entry POCKET (the tenon's full silhouette
+# passes straight down) + the retained cavity arc CW-adjacent; rotate the
+# lid CW and the flare slides under the wall's lip to the cavity's end-
+# wall stop. In the axle_separator's upright print every cavity face is a
+# floor, a vertical, or a 45° (the mount lesson: flipping kills the
+# mortise's bridge roof).
+DRUM_ANCH_CLR = NOZZLE             # 0.8 — drum bore off the anchor wall (user)
+DRUM_IR = ANCH_OR + DRUM_ANCH_CLR              # 43.35 — wall bore = lid bore
+DRUM_T  = 8 * NOZZLE               # 6.4 — X = 8: the smallest bead multiple
+                                   # that swallows the joint cavity (4.3 with
+                                   # clearances) and keeps ≥ 1.6 outboard of
+                                   # it (asserted in lid_joint.py; 7 beads
+                                   # would leave 1.3)
+DRUM_OR = DRUM_IR + DRUM_T                     # 49.75
 
-# ── Cable-chamber caps — cable_ceiling (+Z) and cable_floor (−Z) ─────────────
-# Plain 10 mm cylinders sliding on the hub, one each side of the separator, key-
-# slotted so they turn with it. No self-clamp: the wound CABLE stops them moving
-# toward the separator; a separate height_clamp locks the other direction.
-SEP_Z0        = RIM_SEAT_Z                        # 19.5 — separator bottom
-SEP_Z1        = RIM_SEAT_Z + RIM_H                # 31.5 — separator top
-CAP_H         = 8.0                               # cap height
-CAP_OD        = FLOOR_OD                           # ceiling + floor OD = floor OD (master)
-CABLE_GAP     = CABLE_D + 0.4                     # 4.2 — separator↔cap gap: one cable layer + clr
-# Cap WINDOWS (cable_ceiling + cable_floor): arc slots to SEE the wound
-# cable at install (and save some material). Slicer-aware (0.8 nozzle, 2
-# loops, 3×0.4 skins): FEW LARGE openings (each slot's wall loops are the
-# cost; its removed floor/ceiling skin is the win), and every web is 3.2
-# wide = exactly 4 perimeter beads → prints as solid wall, no infill core.
-# the original design's lesson: spoke EDGES flexed and lost cable retention → heavy solid
-# OUTER RIM at the OD, a MID band tying the spokes at half-span, spokes
-# CONTINUOUS root→rim (straight radial beams), one on every key azimuth.
-CAP_SPOKE_N      = 24                             # spoke count (user's call — tighter
-                                                  # cable-pressure spacing; still lands a
-                                                  # spoke on every 60°-pitch key azimuth)
-CAP_SPOKE_W      = 3.2                            # web width = 4 beads at the 0.8 nozzle
-# Ring widths — all 0.8-bead multiples, graded by how much backing each ring
-# has (user's call): the INNER collar rides the spring-housing hub (fully
-# backed → thinnest); the MID band ties the spokes at half-span; the OUTER
-# rim is unbacked and carries the retention pressure (thickest).
-CAP_RING_W_IN    = 1.6                            # 2 beads
-CAP_RING_W_MID   = 3.2                            # 4 beads
-CAP_RING_W_OUT   = 4.8                            # 6 beads
-CAP_HUB_COLLAR_R = RIM_ID / 2.0 + CAP_RING_W_IN   # ≈ 35.05 — collar around the bore
-CAP_MID_R0       = 53.0 - CAP_RING_W_MID / 2.0    # 51.4 — mid band centred on the
-CAP_MID_R1       = 53.0 + CAP_RING_W_MID / 2.0    # 54.6   coil span's middle (~53)
-CAP_RIM_R0       = CAP_OD / 2.0 - CAP_RING_W_OUT  # 68.1 — rim solid to the OD
-CEIL_Z0       = SEP_Z1 + CABLE_GAP                # ceiling a cable-gap above the separator
-FLOOR_Z0      = SEP_Z0 - CABLE_GAP - CAP_H        # floor a cable-gap below the separator
+# ── Capacity → separator/lid OD (v2's one-knob pattern) ─────────────────────
+# The cable winds ONE FLAT LAYER (the 4.0 chamber) spiralling out from the
+# drum wall; CABLE_CAPACITY sets how far out, and the disk/lid must cap
+# the coil. Archimedean turns solved from L = 2π·n·r0 + π·p·n·(n−1).
+WRAP_R0    = DRUM_OR + CABLE_D / 2.0           # 51.25 — innermost wrap centre
+COIL_PITCH = CABLE_D + 0.1                     # 3.1 — wrap-on-wrap pitch
+_B = 2.0 * math.pi * WRAP_R0 - math.pi * COIL_PITCH
+N_WRAPS = ((-_B + math.sqrt(_B ** 2 + 4.0 * math.pi * COIL_PITCH
+                            * CABLE_CAPACITY))
+           / (2.0 * math.pi * COIL_PITCH))     # ≈ 5.06 turns for 6 ft
+R_OUT_COIL = WRAP_R0 + N_WRAPS * COIL_PITCH    # ≈ 66.9 — outermost wrap centre
+RIM_OD = 2.0 * (R_OUT_COIL + CABLE_D / 2.0 + 1.0)   # ≈ 138.9 — separator/lid
+                                               # OD: coil + 1.0 cover margin
+                                               # (replaces v2's 145.8 carry)
 
-# ── height_clamp — a 4 mm C-clamp pinching the hub to lock a cap in Z ────────
-CLAMP_H       = 4.0
-CLAMP_OD      = HUB_OD + 8.0                      # 74.4 — collar OD (room for the pinch boss)
-CLAMP_SLIT_W  = 1.4                               # C-slit gap; the M2 screw closes it onto the hub
-CEIL_CLAMP_Z0  = CEIL_Z0 + CAP_H                  # clamp ABOVE the ceiling (locks it down)
-FLOOR_CLAMP_Z0 = FLOOR_Z0 - CLAMP_H              # clamp BELOW the floor (locks it up)
+LID_SEP_GAP = 4.0                  # FIXED separator↔lid gap (user's call) —
+                                   # the spool chamber height: one flat
+                                   # layer of the Ø3.0 cable + 1.0 play
+LID_T   = 6 * NOZZLE               # 4.8 — user's stated minimum; it can stay
+                                   # there because the cavities live in the
+                                   # WALL, not the lid
+LID_Z0  = SEP_Z1 + LID_SEP_GAP                 # −30.4 — lid underside
+LID_Z1  = LID_Z0 + LID_T                       # −25.6 — lid top
+# the anchored strip's T-head pokes past the wall to r ≈ 56, over the
+# rotating lid's rim — its bottom edge must clear the lid's top face
+assert (_SPRING_ZC - STRIP_HEAD_W / 2.0) - LID_Z1 >= 2 * NOZZLE - 1e-9, \
+    "the anchored strip's protruding head reaches the rotating lid"
+DRUM_Z1 = LID_Z0                   # wall top — the seated lid rests on it;
+                                   # the wall is a short 4-tall collar now,
+                                   # and the joint cavities burrow on
+                                   # through it into the disk's thickness
+                                   # (one solid — backed by lid_joint's
+                                   # depth assert)
+LID_OD  = RIM_OD                   # lid rim tracks the separator
 
-# ── Wall SPLIT + cable exit port ─────────────────────────────────────────────
-# The wall prints as TWO stacked halves — bottom −Z→+Z, top +Z→−Z (inverted)
-# — so every window/port CEILING is bed-side geometry in its own print: no
-# overhangs, no supports. The split plane passes through the cable exit port
-# (floor in the bottom half, ceiling in the top half); the brake window stays
-# an open-top notch in the bottom half, capped by the top half's underside.
-CABLE_EXIT_ANGLE_DEG = 45.0                       # port arc CENTER azimuth (+x,+y — the original design-style)
-# The cable leaves the wall TANGENT to the coil's current outer wrap, so its
-# wall-crossing point sweeps as the spool fills/empties: the angular offset
-# from the cable's travel direction is asin(r_wrap / WALL_IR) (the original design's
-# cable_retainer math). Spanning wraps from the bare hub out to design
-# capacity (R_OUT_COIL) covers any 6 ft payout window no matter what total
-# cable length ends up wound. Margin = cable radius + clearance at each end.
-CABLE_EXIT_R_LO       = HUB_OD / 2                # innermost tangency (spool empty)
-CABLE_EXIT_R_HI       = R_OUT_COIL                # outermost tangency (spool full)
-CABLE_EXIT_MARGIN_DEG = math.degrees((CABLE_D / 2 + 1.0) / WALL_IR)      # ≈ 2.2°
+# the half-arrowhead profile (v2 frame.py's TOPJ_*, carried verbatim)
+TOPJ_STEM  = 3 * NOZZLE            # 2.4 — stem width (radial, off the flat)
+TOPJ_FLARE = 2 * NOZZLE            # 1.6 — the single outboard 45° flare
+TOPJ_NECK  = 2 * NOZZLE            # 1.6 — neck height under the flare
+TOPJ_TIP   = NOZZLE                # 0.8 — dull tip at the flat
+LIDJ_SITES      = 4                # joint sites (90° pitch)
+LIDJ_TEN_SWEEP  = 20.0             # tenon arc sweep (deg)
+LIDJ_SEAT_CLR   = 0.15             # seating clearance at each stop (arc mm)
+LIDJ_ENTRY_OVER = 1.0              # pocket overshoot past the tenon, each
+                                   # side (arc mm) — drop-in ease
+
+# 45° pass tunnel, RE-DERIVED for the drum (the separator block's comment
+# promised this): mouth just outside the wall, one bead of web to its root
+SEP_PASS_R = DRUM_OR + NOZZLE + SEP_PASS_W / 2.0    # 57.05
+
+# lid body: v2 cable_ceiling's pattern — spokes + graded concentric rings
+LID_SPOKE_N   = 24                 # spoke count (v2's call)
+LID_SPOKE_W   = 4 * NOZZLE         # 3.2 — web width, 4 beads (v2)
+LID_RING_IN_R1 = DRUM_OR           # inner solid band: bore → wall OR (covers
+                                   # the tenon ring + its root, sits exactly
+                                   # over the wall)
+LID_RIM_R0    = LID_OD / 2.0 - 6 * NOZZLE      # 68.1 — solid outer rim (v2's
+                                               # unbacked-rim width)
+LID_MID_W     = 4 * NOZZLE         # 3.2 — mid tie band (v2)
+LID_MID_RC    = (LID_RING_IN_R1 + LID_RIM_R0) / 2.0    # 58.925 — span middle
+
+assert SEP_PASS_R - SEP_PASS_W / 2.0 - DRUM_OR >= NOZZLE - 1e-9, \
+    "pass tunnel undercuts the drum wall's root"
+assert SEP_PASS_R + SEP_PASS_W / 2.0 <= RIM_OD / 2.0 - RATCHET_DEPTH - 2 * NOZZLE + 1e-9, \
+    "pass tunnel reaches the ratchet tooth band"
+assert DRUM_IR - SPRING_FLANGE_OD / 2.0 >= 2.0, \
+    "drum bore too close to the spring flanges (install slide-past)"
+
+# ── Containment WALL + frame BEAMS (v2's stack, v3-anchored) ─────────────────
+WALL_SEP_CLR = 2 * NOZZLE          # 1.6 — wall bore off the separator/lid OD
+                                   # (user's call)
+WALL_IR = RIM_OD / 2.0 + WALL_SEP_CLR          # 71.03 — wall inner face
+WALL_T  = 3 * NOZZLE               # 2.4 — ring thickness (user's call)
+WALL_OR = WALL_IR + WALL_T                     # 73.43
+BEAM_SIZE = FRAME_RIB              # beams match the plus arms (10.4 sq)
+BEAM_IR   = WALL_OR                # beams sit just outside the wall ring (v2)
+FRAME_R_OUT = BEAM_IR + BEAM_SIZE              # 83.83 — the frame extent,
+                                   # DERIVED now (replaces the v2 87.7 carry)
+
+# ── AXIAL service-loop chamber DEPTH (v2's floating torsion coil, re-derived
+# for v3: NO AXLE below the separator — only the cable's bend radius floors
+# the tight coil; the wall bore is the loose bound). Drum rotation changes
+# the coil's diameter; the chamber must hold the worst-case wrap stack. ─────
+CABLE_BEND_R_MIN = 15.0            # HARDWARE: safe bend radius (v2's value —
+                                   # remeasure for the Ø3.0 cable, it can
+                                   # only shrink the chamber)
+LOOP_D_TIGHT = 2.0 * (CABLE_BEND_R_MIN + 1.0)  # 32 — extended (tight) centreline
+LOOP_D_LOOSE = 2.0 * WALL_IR - CABLE_D - 1.4   # 137.66 — retracted: 0.7/side
+                                               # off the wall bore
+N_MIGRATE    = N_WRAPS             # drum turns over full payout (same spiral)
+LOOP_K_TIGHT = N_MIGRATE * LOOP_D_LOOSE / (LOOP_D_LOOSE - LOOP_D_TIGHT)  # ≈ 6.59
+AXIAL_STACK  = (LOOP_K_TIGHT + 1.0) * COIL_PITCH   # ≈ 23.5 — worst-case stack
+CH_TOP_Z = SEP_Z0 - 3 * NOZZLE     # −46.4 — coil ceiling under the rotating disk
+CH_BOT_Z = CH_TOP_Z - AXIAL_STACK - 1.0        # ≈ −70.9 — chamber floor plane
+# SPOKED FLOOR (user's call, replacing BOTH v2's separate coil cup AND
+# the bottom plus: the fused wall band + floor + beams ARE the bottom
+# frame now — and the stack got ~11 shorter for it)
+FLOOR_T   = 2 * NOZZLE             # 1.6 — floor plate thickness (user)
+FLOOR_Z1  = CH_BOT_Z               # ≈ −70.9 — floor top = the chamber floor
+FLOOR_Z0  = FLOOR_Z1 - FLOOR_T     # ≈ −72.5 — the part's bed plane
+FLOOR_SPOKE_N = 16                 # doubled from 8 (user's call): the hub
+                                   # carries the whole rotating stack now
+                                   # (stub → bottom 608 → separator), so
+                                   # the floor is weight-bearing, not just
+                                   # anti-tangle webbing
+FLOOR_SPOKE_W = 2 * NOZZLE         # 1.6 — spoke width (user)
+FLOOR_HUB_R   = 22 * NOZZLE        # 17.6 — centre disc tying the spokes AND
+                                   # landing the sleeve's flared root (was
+                                   # 9.6 before the sleeve arrived)
+FLOOR_RING_RC = (33.6, 56.0)       # two 1.6-wide tie rings under the coil
+                                   # span (42 / 70 beads)
+BEAM_Z0 = FLOOR_Z0                 # beams stand on the bed with the floor
+BEAM_Z1 = FRAME_Z0                 # beams end at the top plus underside
+
+# CENTRE GUIDE SLEEVE (user's call): the tight coil winds against it, so
+# it can never be yanked under the cable's bend radius, and it keeps the
+# breathing helix round and centred (v2's cup sleeve, reborn on the floor).
+SLEEVE_OD    = 35 * NOZZLE         # 28.0 — the tight coil's ID (LOOP_D_TIGHT
+                                   # − CABLE_D = 29) keeps 0.5/side off it
+                                   # (v2's guard clearance)
+SLEEVE_T     = 2 * NOZZLE          # 1.6 — tube wall
+SLEEVE_FLARE = 4 * NOZZLE          # 3.2 — 45° root flare (strength, user's
+                                   # call; widens toward the bed — support-
+                                   # free, and the hub disc lands it)
+SLEEVE_Z1    = CH_TOP_Z            # sleeve top — 2.4 under the rotating disk
+SLEEVE_TOP_CH = NOZZLE             # 0.8 — 45° chamfer easing the top rim:
+                                   # the tight-state feed drop crosses the
+                                   # sleeve's upper region on its way from
+                                   # the pass tunnel to the coil top — a
+                                   # sharp rim there is a snag (leaves a
+                                   # one-bead flat on the 1.6 wall)
+
+# HOUSE-shaped cable ENTRY port (v2's size — 13 wide, 45° gable roof,
+# prints support-free in the upright band): the SOURCE cable enters the
+# chamber here — the axial coil's stationary end — at its bottom edge.
+# The user wants it at −x, but the 180° BEAM is exactly there and the
+# 13-wide house would sever it — so the azimuth DERIVES to hug the
+# beam's edge as close to −x as the geometry allows (≈ 191°, v2's spot
+# for the same reason).
+ENTRY_PORT_W    = SEP_PASS_W       # 13 — the connector passes (v2)
+ENTRY_PORT_SILL = FLOOR_Z1 + 0.5   # just off the chamber floor (v2)
+_A_BEAM_EDGE    = math.degrees(math.asin((BEAM_SIZE / 2.0) / WALL_IR))  # 4.2°
+_A_ENTRY_HALF   = math.degrees(math.asin((ENTRY_PORT_W / 2.0) / WALL_IR))
+ENTRY_PORT_AZ_DEG = 180.0 + _A_BEAM_EDGE + _A_ENTRY_HALF + 2.0   # ≈ 191.5
+
+assert (LOOP_D_TIGHT - CABLE_D) - SLEEVE_OD >= 1.0 - 1e-9, \
+    "tight coil pinches the guide sleeve"
+assert FLOOR_HUB_R >= SLEEVE_OD / 2.0 + SLEEVE_FLARE - 1e-9, \
+    "floor hub disc too small to land the sleeve's flared root"
+assert ENTRY_PORT_SILL + 1.5 * ENTRY_PORT_W <= CH_TOP_Z - 2 * NOZZLE + 1e-9, \
+    "entry port's gable peak reaches the chamber ceiling"
+
+# Diamond PERFORATION of the fused wall band (user's call — material/time
+# saving): squares rotated 45° print support-free at any size, and present
+# only 45° ramp edges to the circumferentially-sliding coil (the knurl
+# lesson inverted). Width is sag-safe: a Ø3 cable at its R15 bend spans a
+# 6.4 hole dipping w²/8R ≈ 0.34 — under the loose coil's 0.7 standoff, so
+# a resting wrap can't hook a far edge. Perforated: the coil-chamber band
+# + the disk band. SOLID: the spool-chamber band (the working coil loads
+# that wall outward), the tenon/bay/entry-port sectors, floor/ceiling
+# margins.
+PERF_D   = 8 * NOZZLE              # 6.4 — diamond size across both diagonals
+PERF_WEB = 3 * NOZZLE              # 2.4 — min web between holes (= wall tier)
+
+# ── BOTTOM BEARING (user's redesign — REPLACES the 45° rest lip): a second
+# 608 seated in the separator disk's UNDERSIDE (outer race co-rotates with
+# the disk) over a static STUB AXLE printed on the frame_bottom floor
+# (inner race seats on its shoulder) — a real spindle: axial rest AND a
+# second radial constraint, no rubbing plastic. Printability in the
+# axle_separator's upright print: the pocket closes with a flat SEAT RING
+# (the outer-race thrust seat — an accepted bridge ring), then a 45° CONE
+# to a small apex bridge (user's cone) — no flat overhang.
+BOT_BRG_Z0 = SEP_Z0                            # −44 — bearing FLUSH with the
+                                               # disk's face (user's call —
+                                               # the proud variant reverted)
+BOT_BRG_Z1 = BOT_BRG_Z0 + BEARING_W            # −37 — bearing top face
+# The CONE IS THE SEAT (user's call): v2's chamfer-mates-cone trick,
+# outer-ring edition — the 45° cone rises straight off the pocket bore,
+# and the race's factory OD-edge chamfer (BEARING_INNER_CH — same r_s
+# spec both rings) face-mates it, landing the race top at BOT_BRG_Z1.
+# The cone is then CAPPED FLAT wherever walls demand (user's call): the
+# 1.6 web to the disk's TOP face caps it at Ø19.4 — a deliberate,
+# accepted ceiling bridge: only empty space sits above the bearing, so
+# print sag there breaks nothing.
+BOT_SEAT_CONE_Z0 = (BOT_BRG_Z1 - BEARING_INNER_CH
+                    - (BRG_BORE - BEARING_OD) / 2.0)   # −37.4 — cone base
+                                                       # (Ø = the pocket bore)
+BOT_CONE_CAP_Z = SEP_Z1 - 2 * NOZZLE           # −36.0 — flat cap: exactly the
+                                               # quality web under the disk top
+BOT_CONE_CAP_D = BRG_BORE - 2.0 * (BOT_CONE_CAP_Z - BOT_SEAT_CONE_Z0)  # 19.4
+STUB_D       = AXLE_PRINT_D        # 7.95 — the proven 608 slip fit
+STUB_BOSS_D  = AXLE_LIP_OD         # 11.15 — inner-race seat shoulder (lands
+                                   # on the face annulus, same as the top)
+STUB_BOSS_Z1 = BOT_BRG_Z0          # boss shoulder top = inner race bottom
+STUB_Z1      = BOT_BRG_Z1          # stub tip flush with the bearing top
+STUB_FLARE   = 3 * NOZZLE          # 2.4 — 45° base flare (strength)
+STUB_TIP_CH  = NOZZLE              # 0.8 — 45° entry chamfer at the tip
+
+assert BOT_CONE_CAP_Z > BOT_SEAT_CONE_Z0 + 0.5, \
+    "seat cone has no height before its cap — check the bearing z-chain"
+assert SEP_Z1 - BOT_CONE_CAP_Z >= 2 * NOZZLE - 1e-9, \
+    "under 1.6 of web between the seat cavity's cap and the disk's top face"
+assert STUB_BOSS_D <= BEARING_IRACE_OD, \
+    "stub shoulder must land fully on the inner race's face annulus"
+assert STUB_BOSS_D / 2.0 + STUB_FLARE < (SLEEVE_OD - 2 * SLEEVE_T) / 2.0, \
+    "stub base flare reaches the guide sleeve's bore"
+assert LOOP_D_TIGHT / 2.0 >= CABLE_BEND_R_MIN - 1e-9, \
+    "tight coil's centreline under the cable's bend radius"
+assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
+    "loose coil pinches the wall bore"
+
+# ── Wall ↔ beam T joints (cadkit slide_joint, install="-z" — v2's numbers,
+# all print-proven at the 0.8 nozzle in PETG-GF) ─────────────────────────────
+JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
+JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
+JOINT_WIDTH = 6.5 * NOZZLE         # 5.2 — the smallest box whose tenon keeps
+                                   # EVERY wall segment ≥ 1.6 (v2 print find)
+JOINT_DEPTH = joint_box_min(JOINT_SPEC, JOINT_SPEC, install="-z",
+                            quality=True)[1]     # 3.5
+JOINT_SEAT_CLR = 0.15              # z seating clearance at the channel stops
+WALL_ZB       = FLOOR_Z0           # wall band bottom — FUSED into frame_bottom
+                                   # now (user's call; only wall_top + collar
+                                   # still slide)
+# (v2's wall_collar is GONE — user's call: above wall_top, four identical
+# flat LOCK STRIPS (wall.py) fill the beam channels up to frame_top's
+# underside and z-lock the stack. MORTISE_L is derived below — the channel
+# stop sits at the fused band's top at WALL_SPLIT_Z.)
+
+# frame_top ↔ frame_bottom ROTATIONAL arc joints (v2's half-arrowhead, the
+# same TOPJ_* profile the lid bayonet uses — angular constants from v2)
+TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
+TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
+TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
+
+# ── Levers (v2's design "worked well" — constants re-anchored to the v3
+# bands; the lever PARTS + kinematics suite land next round, these drive
+# the frame's mount + the wall windows now) ──────────────────────────────────
+LEVER_T        = 10.0              # plate thickness (Y) — ergonomic (v2)
+LEVER_HANDLE_W = 6.0               # handle X width (v2)
+PIN_SQ_S       = 4.4               # square TPU torsion-axle side (v2 print-
+                                   # proven; largest side passing the frame
+                                   # packaging asserts below)
+PIN_SQ_FRAME_CLR = 0.1             # per-side, column keyway + beam blind bore
+PIN_SQ_LEVER_CLR = 0.15            # per-side, the lever's through-pocket
+PIN_KEY_BASE_DEG = 45.0            # frame keyway clock: DIAMOND tip-up in the
+                                   # sideways print — self-supporting bores
+PIN_TIP_END_Y  = 4.4               # blind-bore floor |y| (the axle depth stop)
+PIN_GRIP_L     = 2.0               # axle proud of the column face (removal grip)
+PIN_PRETWIST_DEG = 12.0            # install pre-twist = seating preload (v2)
+POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
+BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud
+BOSS_BORE_ID   = PIN_SQ_S * math.sqrt(2.0) + 0.4   # 6.62 — clears the square's
+                                                   # rotating envelope
+LEVER_SIDE_CLR = BOSS_RING_W + 0.2 # 1.8 — air each side of the lever plates
+LEVER_Y_IN     = BEAM_SIZE / 2.0 + LEVER_SIDE_CLR  # 7.0 — inner plate face
+RATCHET_LEV_Y0 = LEVER_Y_IN                        # ratchet plate on +Y side
+RATCHET_LEV_Y1 = LEVER_Y_IN + LEVER_T              # 17.0
+BRAKE_LEV_Y1   = -LEVER_Y_IN                       # brake plate on −Y side
+BRAKE_LEV_Y0   = -LEVER_Y_IN - LEVER_T             # −17.0
+LEVER_PIVOT_X  = (BEAM_IR + BOSS_BORE_ID / 2.0 + BOSS_RING_W
+                  + NOZZLE / 2.0)                  # 78.74 — v2's derivation
+                                   # (rings flush at the beam's inner edge)
+                                   # + HALF A BEAD outboard: v3's larger
+                                   # brake contact angle leans the pad's
+                                   # rest-plumb joint plane closer to the
+                                   # handle, and the offset restores the
+                                   # 0.45 guard (A_PAD_HANDLE_CLR); the
+                                   # ring/diamond packaging asserts below
+                                   # still pass
+LEVER_BOSS_OD  = ((PIN_SQ_S + 2.0 * PIN_SQ_LEVER_CLR) * math.sqrt(2.0)
+                  + 2.0 * STRUCT_WALL)             # 9.85 — lever pivot boss
+# Pivots re-anchored to the v3 band stack (FLIPPED vs v2 — brake band on
+# the BOTTOM now, print-driven): ratchet pivot 10 above its band's top
+# (v2's rule, rest = pawl seated in the teeth, pull swings it out). The
+# BRAKE pivot goes 5.5 BELOW its band (v2's relative spot): the pad must
+# sit ABOVE its pivot or pulling would swing it AWAY from the band (an
+# above-band pivot shipped first — kinematically backwards). The pivot
+# hardware lives OUTSIDE the wall and the lever bays are full-height, so
+# the low pivot breaches nothing.
+RATCHET_PIVOT_Z = SEP_Z1 + 10.0                    # −24.4
+BRAKE_PIVOT_Z   = SEP_Z0 - 5.5                     # −49.5 — below the band
+LEVER_TRAVEL_DEG = 20.0            # equal pull travel, both levers (v2)
+HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −69.5 — grip-disc
+                                   # centre placed so the handles' round
+                                   # ends land FLUSH with the assembly's
+                                   # −z extent (user's call); pulling only
+                                   # raises them
+RATCHET_PHASE_DEG = math.degrees(math.asin(
+    ((RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0) / (RIM_OD / 2.0)))   # ≈ 9.95 —
+                                   # one catch face lands at the pawl's
+                                   # y-midline (v2's rule; the knurl is
+                                   # phase-locked to the same value)
+# Brake pad (95A TPU) + its cadkit hook slide joint (v2's print-proven set)
+BRAKE_RUBBER_T       = 3.3         # pad slab thickness (v1/v2)
+PAD_JOINT_CLR        = 0.1         # TPU in PETG — snug (v2)
+BRAKE_PAD_TOP_MARGIN = 0.0         # ZERO margins (v2's full-band pad —
+BRAKE_PAD_BOT_MARGIN = 0.0         # contact-only doctrine)
+PAD_SPEC      = PrintSpec(nozzle=NOZZLE, facing="up")
+PAD_FLANGE_H  = joint_box_min(PAD_SPEC, PAD_SPEC, install="-z", bounded=True,
+                              quality=True, clearance=PAD_JOINT_CLR)[0]
+                                   # 6.6 — the edge-bounded site's quality
+                                   # width = the pad flange / arm end face
+PAD_FLANGE_T  = 2 * NOZZLE         # flange depth (the arm face recesses by it)
+# TPU torsion-axle length: blind-bore floor → column outer face → grip stub
+LEVER_PIN_L = (RATCHET_LEV_Y1 + LEVER_SIDE_CLR + POST_OUT_T
+               + PIN_GRIP_L - PIN_TIP_END_Y)       # 21.6
+
+# ── Wall openings (v2's derivations, v3 anchors) ─────────────────────────────
+WALL_TOP_BAND = 4 * NOZZLE         # 3.2 — solid ring above the HIGHEST
+                                   # opening = wall_top's +z extent (user's
+                                   # call; was 1.6)
+# cable EXIT port at (+x,+y): the cable leaves tangent to its current
+# wrap, so the port spans tangency angles from the bare drum wall out to
+# design capacity (v2's cable_retainer math), centered on 45°.
+CABLE_EXIT_ANGLE_DEG  = 45.0
+CABLE_EXIT_R_LO       = DRUM_OR                    # innermost tangency (empty)
+CABLE_EXIT_R_HI       = R_OUT_COIL                 # outermost (full)
+CABLE_EXIT_MARGIN_DEG = math.degrees((CABLE_D / 2.0 + 1.0) / WALL_IR)   # ≈ 2.0
 CABLE_EXIT_SPAN_DEG   = (math.degrees(math.asin(CABLE_EXIT_R_HI / WALL_IR))
                          - math.degrees(math.asin(CABLE_EXIT_R_LO / WALL_IR))
-                         + 2 * CABLE_EXIT_MARGIN_DEG)                    # ≈ 47.5°
-CABLE_EXIT_Z0  = SEP_Z1 - 0.5                     # 31.0 — port floor
-CABLE_EXIT_Z1  = SEP_Z1 + CABLE_GAP + 0.5         # 36.2 — port ceiling
-WALL_SPLIT_Z   = SEP_Z1 + CABLE_GAP / 2.0         # 33.6 — stack plane (mid-port)
-
-# ── Source-cable port: HOUSE-shaped hole in the bottom wall half ─────────────
-# The stationary source lead leaves the TRAY chamber at −X, offset in −Y just
-# far enough that the exiting cable clears the −X beam's flank. HOUSE profile
-# (square sides + 45° gable roof) so the opening's ceiling prints support-free
-# in wall_bottom's −Z→+Z print. Width matches the separator tunnel (the
-# connector must thread through); sill 0.5 under the tray floor's top face.
-SOURCE_PORT_W         = SEP_PASS_W                # 13 — connector passes
-SOURCE_PORT_CLR       = 3.0                       # cable-path clearance off the beam flank
-SOURCE_PORT_ANGLE_DEG = 180.0 + math.degrees(math.asin(
-    (BEAM_SIZE / 2 + SOURCE_PORT_CLR + SOURCE_PORT_W / 2) / WALL_IR))    # ≈ 191° (−y side)
-SOURCE_PORT_Z0        = WALL_Z0 + WALL_TOP_BAND   # 15.4 — sill leaves a 1.6 band below
-                                                  # (same minimum as the top band); sits
-                                                  # 0.1 proud of the floor top — negligible
-SOURCE_PORT_APEX_Z    = WALL_SPLIT_Z - WALL_TOP_BAND   # 32.0 — gable peak leaves a 1.6
-                                                  # band up to the split plane
-SOURCE_PORT_RECT_TOP  = SOURCE_PORT_APEX_Z - SOURCE_PORT_W / 2  # 26.6 — 45° roof springs here
-
-# ── Levers — both-side supported, HARDWARE-FREE (TPU torsion-bar pivots) ─────
-# the original design's plate architecture kept: each lever is an XZ plate (LEVER_T thick in Y)
-# pivoting about a Y axis at +X; ratchet pivot ABOVE its band (rest=ENGAGED),
-# brake pivot BELOW its band (rest=OFF); pull = +X. changes: the plates
-# FLANK the +X beam (y ±5) instead of a housing spine; each pivot pin IS the
-# spring — a 95A TPU TORSION BAR spanning two fork posts (support both sides):
-# hex-keyed ends in the posts, a hex-keyed middle in the lever, round NECKED
-# spans between that twist as the lever rotates. The post keyways are CLOCKED
-# PIN_PRETWIST_DEG past rest, so installing the pin pre-twists it → real
-# seating preload at rest (pawl held into the teeth; brake held on its rest
-# stop) with nothing protruding at +X. The brake pad is TPU as before. The
-# WALL gets two open-top windows at +X so the arms reach the separator rims
-# (bottom ring left intact).
-LEVER_T          = 10.0                           # plate thickness (Y) — ergonomic (the original design)
-LEVER_HANDLE_W   = 6.0                            # handle X width (the original design)
-# Thrust boss rings — sized by cadkit's contact-rib rule: TWO nozzles (the
-# quality tier — a single bead sliced mushy, user print finding), both WIDE
-# and PROUD (1.6 at the 0.8 nozzle). Both rings are IDENTICAL with the
-# square axle: bore = BOSS_BORE_ID, clearing the square's rotating
-# envelope (the old design needed a bigger column-side relief bore — the
-# ring-around-its-local-bore lesson still applies if bores ever diverge).
-# The LEVER AREA GREW to fit (user's call): the side
-# gaps are ring-proud + 0.2 float, and the whole y-layout derives from them
-# (the print-proven original spacing had 1.0 gaps; _CLR_D tracks the growth so
-# the pin stack follows).
-PIN_SQ_S         = 4.4                            # SQUARE axle side — sharp 90° corners
-                                                  # grip where the old hex's 120° corners
-                                                  # printed too soft (the axle block below
-                                                  # has the full story). 4.4 is the
-                                                  # LARGEST side whose diamond bore keeps
-                                                  # 1.6 of beam to the frame's +x face AND
-                                                  # whose rings stay inside the frame
-                                                  # extent (both EOF-asserted; was 4.8,
-                                                  # which poked the rings 0.4 proud and
-                                                  # left 1.26 at the diamond — user-caught)
-BOSS_BORE_ID     = PIN_SQ_S * math.sqrt(2.0) + 0.4    # ≈ 6.62 — ring bore clears the
-                                                  # axle's rotating envelope + 0.4; the
-                                                  # rings track the axle automatically
-BOSS_RING_W      = contact_rib_size(NOZZLE)       # 1.6 — rib width AND proud
-LEVER_SIDE_CLR   = BOSS_RING_W + 0.2              # 1.8 — air each side of the lever
-                                                  # plates (ring + light-touch float)
-_CLR_D           = LEVER_SIDE_CLR - 1.0           # 0.8 — layout growth vs original spacing
-LEVER_Y_IN       = BEAM_SIZE / 2.0 + LEVER_SIDE_CLR   # 6.8 — inner plate face
-RATCHET_LEV_Y0   = LEVER_Y_IN                     # 6 — ratchet plate on the +Y side
-RATCHET_LEV_Y1   = LEVER_Y_IN + LEVER_T           # 16
-BRAKE_LEV_Y1     = -LEVER_Y_IN                    # −6 — brake plate on the −Y side
-BRAKE_LEV_Y0     = -LEVER_Y_IN - LEVER_T          # −16
-# BRAKE PAD: TALL, not wide (user's calls — a widened arm was tried and
-# reverted: the arm body would run through the fork column). The brake uses
-# a CONTACT-POSE solver (levers.py): validated at FIRST CONTACT only, where
-# the pre-tilted pad arrives PARALLEL to the band and FLUSH against it with
-# its corners landing inside the band; the pull beyond is the TPU
-# compression regime (reported, not asserted). Guards that remain: a bottom
-# margin keeps the full-pull drop ≥1 off the ratchet teeth, and a swept
-# assertion keeps the tall resting pad out of the spool chamber's coil
-# keep-out. Yields pad H ≈ 3.8 (vs 2.4 under the original design's mid-travel constraints).
-# pivot x — DERIVED: as close to the spool as possible with the thrust
-# rings' extremities landing exactly ON their arm's inner edge (x = BEAM_IR;
-# the substrate is the binding limit — and it keeps clear of the wall's
-# swept surface). ≈ 82.9 with the square-axle rings.
-LEVER_PIVOT_X    = BEAM_IR + BOSS_BORE_ID / 2.0 + BOSS_RING_W
-RATCHET_PIVOT_Z  = SEP_Z0 + RATCHET_H + 10.0      # 34.5 — above the tooth band
-BRAKE_PIVOT_Z    = SEP_Z0 + RATCHET_H + CONE_H - 5.5   # 20.5 — below the brake band
-LEVER_TRAVEL_DEG = 20.0                           # equal pull travel, both levers (the original design)
-HANDLE_Z_BOT     = -13.0                          # grab height (≈ bottom plus underside)
-# SQUARE torsion AXLE (95A TPU, user redesign — the stepped hex pin's small
-# corners printed too soft to grip the frame or lever): ONE plain square
-# PRISM per lever, constant section end to end, inserted axially from the
-# OUTER post's face. The FRAME's holes are the square rotated 45° —
-# DIAMOND, tip-up: the flanks are 45° (self-supporting) and the top is a
-# point, so the sideways frame holes print clean with no teardrop. The
-# LEVER's through-pocket is clocked 45° − PIN_PRETWIST_DEG: inserting the
-# straight axle (keyed 45° at BOTH frame ends) with the lever held pulled
-# by the pre-twist angle twists the middle — the torsion springs are the
-# two short free spans across the side gaps, in parallel. Torque path: lever
-# square → both gap spans twist → column keyway + beam blind bore.
-# Stiffness now comes from section side (∝ s⁴) and the gap lengths —
-# print-test on the rig and tune PIN_SQ_S / PIN_PRETWIST_DEG.
-PIN_SQ_FRAME_CLR = 0.1                            # per-side, column keyway + beam bore
-                                                  # (PIN_SQ_S lives up with the rings —
-                                                  # the ring bore derives from it)
-PIN_SQ_LEVER_CLR = 0.15                           # per-side, the lever's through-pocket
-PIN_TIP_END_Y    = 4.4                            # |y| of the seated axle's inner end =
-                                                  # the blind bore's floor (depth stop)
-                                                  # — placed so ≥ 1.6 of beam separates
-                                                  # the bore floors from the wall-joint
-                                                  # cavity (±2.71; EOF-asserted)
-PIN_GRIP_L       = 2.0                            # axle runs proud of the column face —
-                                                  # the removal/inspection grip
-PIN_PRETWIST_DEG = 12.0                           # keyway↔pocket RELATIVE clock →
-                                                  # install pre-twist = seating preload
-                                                  # (~37% sustained shear; a 3° creep-
-                                                  # minimizing bias was tried and
-                                                  # REVERTED — user's call, creep
-                                                  # judged acceptable; drop this if a
-                                                  # tensioned rig pin measures weak
-                                                  # after a week)
-PIN_KEY_BASE_DEG = 45.0                           # frame keyway base clock: square at
-                                                  # 45° = DIAMOND TIP-UP in the frame's
-                                                  # sideways print (printable); the
-                                                  # lever pocket sits at BASE − PRETWIST
-                                                  # (prints vertically, clock-free)
-POST_OUT_T       = 5.0                            # side-arm section thickness — HALF the
-                                                  # 10 mm centre arm (user's call): the
-                                                  # column + 45° diagonal + horizontal top
-                                                  # run keep this constant 5×10 section
-# axle length: blind-bore floor → column outer face → grip stub.
-LEVER_PIN_L      = (RATCHET_LEV_Y1 + LEVER_SIDE_CLR + POST_OUT_T
-                    + PIN_GRIP_L - PIN_TIP_END_Y)                # 21.2
-LEVER_BOSS_OD    = 12.0                           # pivot BOSS Ø on each lever (the 6 mm
-                                                  # handle is narrower than the pocket)
-# Separator tooth PHASE: one catch face lands at the pawl's y-MIDLINE, so
-# the tooth-profile cut leaves a 50/50 material split each side of the
-# grabbed tooth (the levers' catch-bump math and the separator share this).
-RATCHET_PHASE_DEG = math.degrees(math.asin(
-    ((RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0) / (FLOOR_OD / 2.0)))
-BRAKE_RUBBER_T   = 3.3                            # TPU brake-pad thickness (the original design)
-# Cable floor's LOWEST possible position (for the branch-climb clearance):
-# the floor clamp bottomed on the hub base (z 0..CLAMP_H), floor flush on top.
-FLOOR_MIN_BOT_Z  = CLAMP_H                        # 4.0 — floor underside at minimum
-# Wall windows (open to the wall TOP → no print overhang; bottom ring intact).
-# Margins are DERIVED, not blanket: the levers move only in XZ, so the y
-# edges need just LEVER_SIDE_CLR; and each window's far z edge (brake SILL,
-# ratchet CEILING) needs only to clear the Ø12 pivot boss where it actually
-# enters the wall's RADIAL band (worst at the y=LEVER_Y_IN edge, where the
-# wall's outer face reaches deepest into the boss circle) — the boss spins
-# in place, so its swept envelope is itself and 1.0 static clearance
-# suffices. The wall's own height then follows the ratchet ceiling.
-_BOSS_WALL_DZ    = math.sqrt((LEVER_BOSS_OD / 2.0) ** 2
-                             - (math.sqrt(WALL_OR ** 2 - LEVER_Y_IN ** 2)
-                                - LEVER_PIVOT_X) ** 2)   # 4.74 — boss half-height at the
-                                                  # wall band's deepest crossing
-LEVER_WIN_Y0     = LEVER_Y_IN - LEVER_SIDE_CLR    # 5 — inner y (1.5 clear of the ±3.5 tenon)
-LEVER_WIN_Y1     = RATCHET_LEV_Y1 + LEVER_SIDE_CLR   # 17 — outer y
-# Ratchet OVER-PULL STOP = the window SILL (user's design): the pawl block's
-# bottom edge arcs down-and-out into the wall's radial band as the lever is
-# pulled, so the sill's top face is the natural travel stop. The sill is
-# DERIVED so the edge lands on it at RATCHET_STOP_DEG, where the pawl has
-# ~2.0 radial clearance off the tooth tips (checked at the STOP angle in
-# lever_kinematics). The old blanket sill (SEP_Z0 − 1 = 18.5) silently
-# jammed the lever at ~7.4° — barely past pawl-clear — user-caught.
-# First-contact model (conservative): the full bottom edge (z = SEP_Z0 at
-# rest) meeting the wall's INNER face at the block's outer-y (largest y →
-# smallest wall x → earliest contact); tooth scallops can only delay it.
-RATCHET_STOP_DEG = 15.0                           # pawl↔tip clearance ≈ 2.0 at the stop
-_STOP_S  = math.sin(math.radians(RATCHET_STOP_DEG))
-_STOP_C  = math.cos(math.radians(RATCHET_STOP_DEG))
-_X_STOP  = math.sqrt(WALL_IR ** 2 - RATCHET_LEV_Y1 ** 2)         # 74.39
-_DZ_BOT  = SEP_Z0 - RATCHET_PIVOT_Z                              # −15
+                         + 2.0 * CABLE_EXIT_MARGIN_DEG)                 # ≈ 30
+CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
+CABLE_EXIT_Z1 = LID_Z0 + 0.5                       # −29.9 — port ceiling
+WALL_SPLIT_Z  = (CABLE_EXIT_Z0 + CABLE_EXIT_Z1) / 2.0   # −32.4 — stack plane
+# Lever WINDOWS at +X (y edges = plate faces + LEVER_SIDE_CLR; the pivot
+# boss never enters the wall's radial band at these numbers — v2's
+# _BOSS_WALL_DZ evaluates 0 — so the far z edges keep 1.0 off the pivots).
+LEVER_WIN_Y0 = LEVER_Y_IN - LEVER_SIDE_CLR         # 5.2
+LEVER_WIN_Y1 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR     # 18.8
+# Ratchet OVER-PULL STOP = the window SILL (v2's design): derived so the
+# pawl block's bottom edge lands on it at RATCHET_STOP_DEG.
+RATCHET_STOP_DEG = 15.0
+_STOP_S = math.sin(math.radians(RATCHET_STOP_DEG))
+_STOP_C = math.cos(math.radians(RATCHET_STOP_DEG))
+_X_STOP = math.sqrt(WALL_IR ** 2 - RATCHET_LEV_Y1 ** 2)        # 68.96
+_DZ_BOT = SEP_Z0 + BRAKE_H - RATCHET_PIVOT_Z       # −14.8 — tooth-band bottom
+                                                   # (the pawl block's rest
+                                                   # bottom) off the pivot
 _DX_STOP = (_X_STOP - LEVER_PIVOT_X + _DZ_BOT * _STOP_S) / _STOP_C
-RATCHET_WIN_Z0   = (RATCHET_PIVOT_Z + _DX_STOP * _STOP_S
-                    + _DZ_BOT * _STOP_C)          # ≈ 17.16 — sill = the stop face
-RATCHET_WIN_TOP  = RATCHET_PIVOT_Z + _BOSS_WALL_DZ + 1.0   # ≈ 40.24 — ratchet ceiling
-BRAKE_WIN_Z0     = BRAKE_PIVOT_Z - _BOSS_WALL_DZ - 1.0     # ≈ 14.76 — brake sill
-assert BRAKE_WIN_Z0 >= WALL_Z0 + WALL_TOP_BAND - 1e-9, \
-    "brake window sill fell below the wall's minimum bottom band"
-# The wall's top: an unbroken WALL_TOP_BAND ring above EVERY opening — the
-# ratchet window AND the cable exit port (user-caught: deriving from the
-# ratchet ceiling alone let the port, which tracks the spool chamber and
-# ROSE with the 15 rim while the pivots dropped with the thinner ratchet
-# band, break out through the wall top and sever the ring).
-WALL_H  = (max(RATCHET_WIN_TOP, CABLE_EXIT_Z1)
-           + WALL_TOP_BAND - WALL_Z0)                      # ≈ 27.3
-WALL_Z1 = WALL_Z0 + WALL_H                                 # ≈ 39.3 — wall top
+RATCHET_WIN_Z0  = (RATCHET_PIVOT_Z + _DX_STOP * _STOP_S
+                   + _DZ_BOT * _STOP_C)            # ≈ −42.2 — the FORMER wall
+                                                   # sill (= the derived over-
+                                                   # pull stop face): the wall
+                                                   # below the windows is GONE
+                                                   # (user's call, #815) — this
+                                                   # stays as the reference z
+                                                   # for the lever's future
+                                                   # stop tab
+# Both lever bays run through the ENTIRE wall stack now (user #834 — the
+# top band over the bays deleted; the +x sector of wall_top goes with it,
+# else the beam-strip between the bays is an island). The wall's highest
+# remaining opening is therefore the EXIT PORT, and the highest-hole+3.2
+# rule shrinks wall_top accordingly.
+# wall verticals
+WALL_Z1 = CABLE_EXIT_Z1 + WALL_TOP_BAND            # −26.7 — wall_top's flat
+                                                   # top: highest opening + 3.2
+MORTISE_L = (BEAM_Z1 + 1.0) - (WALL_SPLIT_Z - JOINT_SEAT_CLR)   # channel: stop
+                                                   # just under the fused
+                                                   # band's top → past beam top
 assert WALL_Z1 - CABLE_EXIT_Z1 >= WALL_TOP_BAND - 1e-9, \
     "cable exit port breaks the wall's top band"
-assert WALL_Z1 - RATCHET_WIN_TOP >= WALL_TOP_BAND - 1e-9, \
-    "ratchet window breaks the wall's top band"
-
-# ── DESK/WALL MOUNT — bracket (tenons) ↔ frame_top (mortises) ────────────────
-# The mount BRACKET is a flat bar that screws to the mounting surface with two
-# of the original design's wood screws (Ø4 shaft, Ø9.3 countersunk head — they fit, reused) and
-# carries a row of two HANGING octagon tenons: the cadkit octagon joint
-# flipped upside down, which makes BOTH prints easier — the mortise's
-# one-nozzle bridge roof becomes a plain cavity floor in frame_top's −Z→+Z
-# print (no bridge at all: neck slot, 45° lip undersides, vertical bulb
-# walls, 45° closing tapers, flat floor), and the bracket prints FLIPPED
-# (+Z→−Z, bar on the bed) with library-native standing tenons.
-# frame_top's plus carries the SAME channel pattern along X and along Y
-# (mount the bracket in either orientation to pick the install axis). Each
-# channel = a retained MORTISE segment + an adjacent open-top ENTRY POCKET:
-# offer the assembly up (tenons drop through the pockets), slide it +x (or
-# +y) ~21.5 mm until the tenons hit the mortise stops. The cable exit's +45°
-# azimuth means working pulls push the frame INTO the stops; the FLOATING
-# TPU LOCK TENON (below) positively blocks the back-slide.
-WOOD_SCREW_SHAFT_D = 4.0                          # original mount screws, reused
-WOOD_SCREW_HEAD_D  = 9.3                          # countersunk-head pocket Ø at the face
-WOOD_SCREW_HEAD_H  = 4.0                          # cone depth
-MOUNT_R_OUT    = BEAM_IR + BEAM_SIZE              # 87.7 — plus-arm outer radius (the
-                                                  # frame's full extent; = frame._R_OUT)
-MOUNT_TEN_W    = 6.4                              # octagon width — leaves 1.65 side walls
-                                                  # in the 10 rib (≥ 2 beads, asserted)
-MOUNT_TEN_L    = 20.0                             # engagement per tenon
-MOUNT_CLR      = JOINT_CLR                        # 0.15 — long engagement (tested table)
-MOUNT_MORT_L   = MOUNT_TEN_L + 0.5                # retained cavity length
-MOUNT_POCKET_L = MOUNT_TEN_L + 2.0                # z-entry pocket (tenon + insert ease)
-MOUNT_WALL     = 1.6                              # min wall at the channels' outboard cap
-MOUNT_SCREW_X  = MOUNT_R_OUT / 2.0                # 43.85 — screw centres HALFWAY between
-                                                  # the axle and the frame edge (user's
-                                                  # call), both on the tenon axis
-# Channel layout along the +X arm (the Y pattern is this rotated 90°).
-# Bounds: outboard cap at BEAM_IR − MOUNT_WALL (the frame_top↔bottom
-# ARC-joint ring lives OUTSIDE BEAM_IR, r ≈ 84, in the rib's underside and
-# the mount cavities reach z ≈ 56.3 from the top — staying inboard keeps
-# solid material between the cavity systems by construction); inboard cap
-# clear of the plan-diagonal rod bore (inside |x| ≲ 6.5 within the ±3.35
-# channel band). The screws pin the rest: a Ø9.3 head can't share an x-spot
-# with a hanging tenon, so pocket A is CENTRED ON screw A (the head faces
-# the pocket's void; both screw heads land over pocket voids, asserted) —
-# which places tenon A inboard [12.35, 32.35] — and channel B hugs the
-# outboard cap, putting its pocket over screw B: tenon B [−76.1, −56.1].
-# The pattern stays a TRANSLATION of itself (both tenons travel −x relative
-# to the frame while seating — a rigid bracket slides one way).
-MOUNT_POCK_A_X0 = MOUNT_SCREW_X - MOUNT_POCKET_L / 2.0    # 32.85
-MOUNT_MORT_A_X0 = MOUNT_POCK_A_X0 - MOUNT_MORT_L          # 12.35 — stop face
-MOUNT_MORT_B_X0 = -(BEAM_IR - MOUNT_WALL)                 # −76.1 — stop face
-MOUNT_POCK_B_X0 = MOUNT_MORT_B_X0 + MOUNT_MORT_L          # −55.6
-MOUNT_TEN_A_X0  = MOUNT_MORT_A_X0                 # tenons modelled SEATED (butting
-MOUNT_TEN_B_X0  = MOUNT_MORT_B_X0                 #  both stops — equal cavity lengths)
-MOUNT_PLATE_T   = 4.0                             # bar thickness, 5 × 0.8 — the bar is
-                                                  # sandwiched flat (wood above, rib tops
-                                                  # below), so stiffness comes free; the
-                                                  # floor is the screw head: the Ø9.3
-                                                  # countersink needs its FULL cone depth
-                                                  # to seat flush on the underside
-MOUNT_PLATE_W   = WOOD_SCREW_HEAD_D + 2 * 0.8     # 10.9 — bar width: the Ø9.3 screw-head
-                                                  # pocket + exactly one 0.8 bead each side
-                                                  # (user's floor; 10 would leave 0.35)
-MOUNT_PLATE_X0  = -MOUNT_R_OUT                    # the bar runs the FULL frame length
-MOUNT_PLATE_X1  = MOUNT_R_OUT                     # (user's call), flush with the rib ends
-# PLUS shape (user's call): a joinery-free CROSS ARM through the centre,
-# perpendicular to the tenon row — no tenons, no screw holes. It rides the
-# OTHER pair of ribs, sandwiched flat between the wood and their top faces:
-# a wide lever arm against rocking about the slide axis. Full length too —
-# its ends host the LOCK (below) over the only channel-free rib real estate.
-MOUNT_CROSS_HALF = MOUNT_R_OUT                    # 87.7 — cross-arm half-length
-# LOCK — floating TPU tenon on the SECONDARY axis (user's design): matching
-# half-depth mortises in the cross arm's UNDERSIDE (both ends — keeps the
-# part symmetric) and in each rib's TOP face at its outboard tip (all four
-# arms, so both bracket orientations find one), aligned when seated. The
-# TPU key slides in axially from the open arm end and spans the joint plane
-# half-and-half → shear-blocks the octagon back-slide. Its axis is ⊥ the
-# slide axis, so no working load can push it out; line-on-line width + TPU
-# print fattening make it a press fit. The key is a plain rectangular bar
-# (+ a proud pull tail) — every print orientation is overhang-free. Sits
-# outboard of the channels (they cap at 76.1) and 2 mm of rib above the
-# r≈84 arc-joint cavities (groove bottom 62.2 vs their ceiling ≈ 59.4).
-MOUNT_LOCK_W    = 6.4                             # key width (8 beads)
-MOUNT_LOCK_D    = 2.0                             # groove depth EACH side of the joint
-                                                  # plane (key = 4.0 tall, half-and-half)
-MOUNT_LOCK_L    = 9.6                             # engaged length
-MOUNT_LOCK_Y0   = MOUNT_R_OUT - MOUNT_LOCK_L      # 78.1 — groove start (2.0 wall to the
-                                                  # channels' 76.1 cap, asserted)
-MOUNT_LOCK_TAIL = 3.0                             # pull tail proud of the arm end
-assert (TOP_RIB_SIZE - MOUNT_TEN_W) / 2.0 - MOUNT_CLR >= 1.6 - 1e-9, \
-    "mount mortise side walls fell under 2 beads"
-assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
-    "mount bar thinner than the wood-screw countersink — head would sit proud"
-# each screw head must face a pocket VOID (a head over a hanging tenon would
-# have to drill through it)
-for _sx, _p0 in ((MOUNT_SCREW_X, MOUNT_POCK_A_X0), (-MOUNT_SCREW_X, MOUNT_POCK_B_X0)):
-    assert (_p0 + 0.25 <= _sx - WOOD_SCREW_HEAD_D / 2.0
-            and _sx + WOOD_SCREW_HEAD_D / 2.0 <= _p0 + MOUNT_POCKET_L - 0.25), \
-        "a mount screw head is not fully over its entry-pocket void"
-assert MOUNT_LOCK_Y0 - (BEAM_IR - MOUNT_WALL) >= 1.6 - 1e-9, \
-    "lock groove too close to the mount channels"
-# Square-axle packaging (user's rules): the thrust rings stay INSIDE the
-# frame's +x extent, and the diamond bores leave ≥ 1.6 of beam to that face.
+assert PIN_TIP_END_Y - (JOINT_WIDTH / 2.0 + JOINT_CLR) >= 2 * NOZZLE - 1e-9, \
+    "wall-joint cavity too wide: under 1.6 of beam left beside the pin bores"
 assert (LEVER_PIVOT_X + BOSS_BORE_ID / 2.0 + BOSS_RING_W
         <= BEAM_IR + BEAM_SIZE + 1e-9), \
     "thrust rings poke past the frame's +x face — shrink PIN_SQ_S"
 assert ((BEAM_IR + BEAM_SIZE)
         - (LEVER_PIVOT_X
            + (PIN_SQ_S + 2.0 * PIN_SQ_FRAME_CLR) * math.sqrt(2.0) / 2.0)
-        >= 1.6 - 1e-9), \
+        >= 2 * NOZZLE - 1e-9), \
     "under 1.6 of beam between the diamond bore and the frame's +x face"
 
 # ── Consistency guards (fire at import) ──────────────────────────────────────
-# The wall's bottom is a literal (defined before the cap/clamp block); verify
-# it still reaches the cable floor's top face at the floor's LOWEST position.
-assert abs(WALL_Z0 - (FLOOR_MIN_BOT_Z + CAP_H)) < 1e-6, (
-    f"WALL_Z0 drifted: wall bottom {WALL_Z0} != lowest floor top "
-    f"{FLOOR_MIN_BOT_Z + CAP_H}")
-# The +X beam's wall-joint cavity (head ≤ JOINT_WIDTH, dilated JOINT_CLR)
-# must leave ≥ 1.6 of beam between its side wall and the blind pin-bore
-# floors at y ±PIN_TIP_END_Y (user's rule — quality-tier wall).
-assert PIN_TIP_END_Y - (JOINT_WIDTH / 2.0 + JOINT_CLR) >= 1.6 - 1e-9, (
-    "wall-joint cavity too wide: under 1.6 of beam left beside the pin bores")
+assert AXLE_PRINT_D < BEARING_ID, \
+    "printed axle must be undersized vs the metal bearing bore"
+assert BEARING_ID + 1.0 < AXLE_LIP_OD <= BEARING_IRACE_OD, \
+    "axle lip must land fully on the inner race's face annulus"
+assert BRG_LIP_ID < BEARING_OD - 1.0, \
+    "frame lip must lap the outer race by a real margin"
+assert BRG_LIP_H >= STRUCT_WALL, \
+    "bearing lip thinner than the quality tier"
+assert AXLE_Z_TOP <= FRAME_Z1, \
+    "axle lip pokes above the frame top — the assembly top must stay flat"
+assert (SPRING_BORE_BOT_D - JOINT_MORTISE_OD) / 2.0 >= 0.5, \
+    "mortise collar under 0.5/side rotating clearance in the bottom flange hole"
+assert (SPRING_BORE_TOP_D - AXLE_PRINT_D) / 2.0 >= 0.3, \
+    "shaft under 0.3/side rotating clearance in the top flange hole"
+assert JOINT_Z1 <= SPRING_Z1 - SPRING_FLANGE_T, \
+    "mortise opening pokes above the spring's top flange interior"
+assert JOINT_Z0 >= SPRING_Z0 + SPRING_FLANGE_T - 1e-9, \
+    "joint bore reaches below the spring's bottom flange interior"
+assert AXLE_ROOT_CONE_H <= SEP_SPRING_CLR, \
+    "axle root cone pokes past the spring's bottom face"
+# the slit must cover the strip (assume the strip is centred between the
+# flange interiors — measure and pin down when the spring body mount lands)
+_STRIP_ZC = (SPRING_Z0 + SPRING_Z1) / 2.0
+assert (JOINT_Z0 <= _STRIP_ZC - SPRING_STRIP_W / 2.0 + 1e-9
+        and _STRIP_ZC + SPRING_STRIP_W / 2.0 <= JOINT_Z1 + 1.0), \
+    "spring-strip span not covered by the joint slit"

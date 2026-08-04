@@ -1,0 +1,153 @@
+"""cable-chamber caps + TPU grip rings.
+
+  cable_ceiling — plain cylinder that slides on the hub above the separator,
+      key-slotted so it turns with it. Caps the wound working cable; no
+      self-clamp. The cable itself stops it moving toward the separator; a
+      grip ring locks the other direction. (Its tray-side twin cable_floor
+      left with the flat tray design — see the tail note.)
+  tpu_grip_ring — solid 95A TPU ring with a self-energizing conical lip
+      (see its block below): continuously z-adjustable, hardware-free —
+      it replaced the M2 C-clamp, the project's LAST screws (user's call).
+      Used twice, flipped: lip up under the floor, lip down over the
+      ceiling.
+"""
+
+import math
+
+import cadquery as cq
+
+from v2.dimensions import NOZZLE  # bead-multiple sizing unit
+
+from v2.helpers import cyl, heal, make_keys
+from v2.dimensions import HUB_OD, KEY_W, KEY_DEPTH, KEY_ANGLES, FIT_CLR
+from .params import (
+    RIM_ID, CAP_H, CAP_OD, CLAMP_H, CLAMP_OD, CLAMP_SLIT_W,
+    CLAMP_HW_ANGLE_DEG,
+    CAP_SPOKE_N, CAP_SPOKE_W, CAP_HUB_COLLAR_R,
+    CAP_MID_R0, CAP_MID_R1, CAP_RIM_R0,
+)
+
+
+def _arc_slot(r0, r1, a_lo, a_hi, h):
+    """One through-slot cutter: an annular sector r0..r1 whose radial sides
+    are offset so the SPOKES between slots keep constant CAP_SPOKE_W width
+    (the angular inset asin((W/2)/r) shrinks with radius)."""
+    def edge(a_deg, r):
+        d = math.degrees(math.asin((CAP_SPOKE_W / 2.0) / r))
+        return a_deg + d if a_deg == a_lo else a_deg - d
+
+    pts = []
+    n = 6
+    for i in range(n + 1):                       # inner arc, a_lo→a_hi
+        a = math.radians(edge(a_lo, r0) + (edge(a_hi, r0) - edge(a_lo, r0)) * i / n)
+        pts.append((r0 * math.cos(a), r0 * math.sin(a)))
+    for i in range(n + 1):                       # outer arc, back a_hi→a_lo
+        a = math.radians(edge(a_hi, r1) + (edge(a_lo, r1) - edge(a_hi, r1)) * i / n)
+        pts.append((r1 * math.cos(a), r1 * math.sin(a)))
+    return (cq.Workplane("XY").workplane(offset=-0.5)
+            .polyline(pts).close().extrude(h + 1.0))
+
+
+def _key_bosses(h):
+    """Local collar lobes at the six KEY angles — the mortise-side material
+    that keeps 1.6 EVERYWHERE around the quality-tier (1.6×1.6) key
+    grooves, same treatment as the bearing cap's tenon bosses: the hub
+    collar is only 1.6 thick, so a full-depth groove would leave 0.25
+    behind its tip. Each boss reaches groove tip + 1.6 radially and one
+    1.6 wall past the groove per side tangentially. The key angles ARE
+    cap spoke centerlines (60° = 4 × the 15° spoke pitch), so each boss
+    just widens a spoke's root — nothing floats in a window."""
+    r_tip = HUB_OD / 2.0 + KEY_DEPTH              # deepened groove tip
+    bw = (KEY_W + 2.0 * FIT_CLR) + 4 * NOZZLE      # groove + a wall per side
+    out = None
+    for ang in KEY_ANGLES:
+        b = (cq.Workplane("XY")
+             .box(r_tip + 2 * NOZZLE - (RIM_ID / 2.0 - 0.5), bw, h,
+                  centered=(False, True, False))
+             .translate((RIM_ID / 2.0 - 0.5, 0.0, 0.0))
+             .rotate((0, 0, 0), (0, 0, 1), ang))
+        out = b if out is None else out.union(b)
+    return out
+
+
+def _cap(h):
+    """A cable-chamber cap: annular cylinder on the hub, key-slotted for
+    rotation lock, with two rows of ARC-SLOT windows (see the wound cable at
+    install) between CAP_SPOKE_N continuous radial spokes, a solid mid band,
+    and a solid outer rim (params block explains the sizing). Slots first,
+    then the key BOSSES (they refill the inner slot row at the six key
+    angles), then the bore + grooves re-open through everything."""
+    c = cyl(CAP_OD, h, z=0).cut(cyl(RIM_ID, h + 1.0, z=-0.5))
+    pitch = 360.0 / CAP_SPOKE_N
+    for r0, r1 in ((CAP_HUB_COLLAR_R, CAP_MID_R0), (CAP_MID_R1, CAP_RIM_R0)):
+        for i in range(CAP_SPOKE_N):
+            c = c.cut(_arc_slot(r0, r1, i * pitch, (i + 1) * pitch, h))
+    c = c.union(_key_bosses(h))
+    c = c.cut(cyl(RIM_ID, h + 1.0, z=-0.5))       # bore through the bosses
+    c = c.cut(make_keys(HUB_OD / 2, -0.5, h + 0.5, groove=True))
+    return heal(c)
+
+
+# ── TPU GRIP RING — replaces the M2 C-clamp (the LAST screws, user's call) ──
+# A solid 95A TPU ring, CONTINUOUSLY z-adjustable on the hub (user's hard
+# requirement — no detents, no shoulders). Two grip mechanisms, split by
+# job so CREEP can't kill it:
+#   · STATION-KEEPING: a light bite — the conical inner LIP undersizes the
+#     hub barrel by RING_LIP_BITE. TPU stress-relaxes 30-50% over months,
+#     but this preload only has to hold the ring where you put it; the
+#     print's LAYER CORRUGATIONS (hub prints vertical, ring prints flat —
+#     both surfaces carry circumferential ridges) interlock across the
+#     slide direction and multiply the residual grip (user's point).
+#   · HOLDING FORCE: SELF-ENERGIZING — the lip points TOWARD the cap it
+#     braces, so the cap's push drags the anchored lip tip steeper and
+#     wedges it INTO the hub: grip is generated by the load at load time,
+#     i.e. FRESH deformation, which relaxation does not degrade. Years-
+#     stable by construction, not by preload arithmetic.
+# The lip rides over the six key tongues (local flex; the tongues bite it
+# = rotation lock, no grooves). One part serves both stations, flipped:
+# lip UP under the floor, lip DOWN over the ceiling.
+RING_LIP_BITE = 0.4                   # diametral undersize at the lip tip
+                                      # (light, per the user — the layer
+                                      # interlock does the sliding grip)
+RING_LIP_T    = 2 * NOZZLE                   # lip thickness (tier)
+_RING_BODY_ID = HUB_OD + 4 * NOZZLE + 0.6            # 70.2 — body clears the tongue tips
+
+
+def _build_grip_ring(bite):
+    """Revolved profile, local z 0..CLAMP_H, lip pointing +z (toward the
+    braced cap). bite=RING_LIP_BITE → the FREE part (exported print);
+    bite=0 → the SEATED pose model (lip tip line-on-line on the hub, so
+    the assembly scan stays contact-only)."""
+    r_tip  = HUB_OD / 2.0 - bite / 2.0
+    r_root = _RING_BODY_ID / 2.0
+    body = (cq.Workplane("XZ")
+            .polyline([(r_root, 0.0), (CLAMP_OD / 2.0, 0.0),
+                       (CLAMP_OD / 2.0, CLAMP_H), (r_root, CLAMP_H)])
+            .close().revolve(360.0, (0, 0), (0, 1)))
+    # the flap: root band on the body bore, tip band RING_LIP_T higher and
+    # RING_LIP_BITE deeper — a ~40° cone, printable flat in TPU
+    lip = (cq.Workplane("XZ")
+           .polyline([(r_root + 0.2, 0.0), (r_root + 0.2, RING_LIP_T),
+                      (r_tip, CLAMP_H - 0.6), (r_tip, CLAMP_H - 0.6 - RING_LIP_T)])
+           .close().revolve(360.0, (0, 0), (0, 1)))
+    return heal(body.union(lip))
+
+
+def grip_ring_seated(flip):
+    """Viewer pose model (bite=0, line-on-line, tongue grooves cut — the
+    REAL ring is plain and deflects over the tongues, which bite it; the
+    pose must be contact-only for the scan gate): flip=False → lip +z
+    (the floor station, cap above); True → lip −z (the ceiling)."""
+    r = _build_grip_ring(0.0)
+    r = r.cut(make_keys(HUB_OD / 2, -0.5, CLAMP_H + 0.5, groove=True))
+    if flip:
+        r = r.mirror("XY", (0.0, 0.0, CLAMP_H / 2.0))
+    return heal(r)
+
+
+# (cable_floor is GONE with the flat tray design — the tray service loop
+# failed its physical wind test 2026-08-03 and the axial floating-coil
+# chamber replaces the whole flat tray; the ceiling cap remains the spool
+# chamber's lid. The floor may return as the new chamber's platen.)
+cable_ceiling = _cap(CAP_H)
+tpu_grip_ring = _build_grip_ring(RING_LIP_BITE)   # the PRINT (free lip)
