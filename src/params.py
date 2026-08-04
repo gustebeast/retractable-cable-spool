@@ -547,6 +547,90 @@ TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 
+# ── MOUNT — desk/wall brackets (v3 flush redesign; v2's validated screw) ─────
+# TWO IDENTICAL brackets (one printed part, ×2) ride the ±Y arms — the
+# rotating axle caps the centre at 10.2, so no v2-style full-length bar
+# can cross FLUSH, and flush is the point (user: vertical space is
+# precious — assembled, bracket tops sit level with the frame's top face
+# and the whole stack stays FRAME_RIB thick). Each bracket: a mushroom
+# TENON (cadkit joint, THROUGH mortise — both hosts print +z→−z, so the
+# up+up octagon's closure is dead weight; the cavity just exits the arm's
+# underside, over the drum chamber) hanging from a flush SPINE exactly
+# one stem wide (any wider slot would leave a flat floor = a bridge in
+# the frame's print), a shallow RAIL crossing the arc-joint zone in a
+# 45°-V-bottom groove, and a SCREW PAD hanging in free air OUTBOARD of
+# the arm tip (the Ø9.3 head + walls outgrow the 10.4 arm; outboard it
+# needs no frame material at all, and the screw stays driver-accessible
+# from below with the assembly attached).
+# INSTALL: drop the brackets through the entry pockets, slide the frame
+# +y to the stops (the cable pull's +y component preloads the seat —
+# v2's rule; no lock insert, user's call), offer up, drive both screws.
+# REMOVE: slide the frame −y off the fixed brackets, drop away.
+# +Y arm: entry pocket OUTBOARD of the mortise, stop at the mortise's
+# inboard end; −Y arm mirrored (entry INBOARD, stop outboard) — BOTH
+# seat on the same frame +y slide, which is what lets one bracket
+# design serve both arms (rotated 90° / 270° into place).
+WOOD_SCREW_SHAFT_D = 4.0           # v2's validated screw geometry, verbatim
+WOOD_SCREW_HEAD_D  = 9.3           # countersunk-head pocket Ø at the face
+WOOD_SCREW_HEAD_H  = 4.0           # cone depth
+MOUNT_PLATE_T = 5 * NOZZLE         # 4.0 — pad/spine thickness: the MINIMUM
+                                   # that swallows the head cone flush
+                                   # (user's rule — v2's config)
+assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
+    "mount plate too thin to countersink the wood screw flush"
+
+MOUNT_TEN_W  = 8 * NOZZLE          # 6.4 — joint width (v2's mount size)
+MOUNT_TEN_L  = 20 * NOZZLE         # 16.0 — engagement per bracket
+MOUNT_WALL   = 2 * NOZZLE          # min wall at the channels' radial caps
+MOUNT_MATE_Z = FRAME_RIB - MOUNT_PLATE_T           # 6.4 — the joint's mating
+                                                   # plane (spine underside)
+MOUNT_THRU_D = MOUNT_MATE_Z + 1.0                  # 7.4 — cavity run past the
+                                                   # mating plane: out the arm's
+                                                   # underside → THROUGH
+MOUNT_T0     = 43 * NOZZLE                         # 34.4 — seated tenon start
+MOUNT_TEN_R1 = MOUNT_T0 + MOUNT_TEN_L              # 50.4 — seated tenon end
+MOUNT_MORT_SLACK = 0.5             # cavity runs this past the tenon's free
+                                   # end (v2's pattern)
+MOUNT_POCKET_L = MOUNT_TEN_L + 2.0                 # 18.0 — z-entry pockets
+MOUNT_TRAVEL   = MOUNT_POCKET_L - 1.0              # 17.0 — the seating slide
+MOUNT_CAP_OUT  = BEAM_IR - MOUNT_WALL              # 71.83 — outboard cap
+MOUNT_CAP_IN   = BRG_BOSS_OD / 2.0 + MOUNT_WALL    # 15.9 — inboard cap
+# channel spans per arm, (r0, r1) — tenons modelled SEATED, butting their
+# stops (+Y: the inboard end wall; −Y: the outboard end wall):
+MOUNT_YP_MORT = (MOUNT_T0, MOUNT_TEN_R1 + MOUNT_MORT_SLACK)   # [34.4, 50.9]
+MOUNT_YP_POCK = (MOUNT_YP_MORT[1],
+                 MOUNT_YP_MORT[1] + MOUNT_POCKET_L)           # [50.9, 68.9]
+MOUNT_YM_MORT = (MOUNT_T0 - MOUNT_MORT_SLACK, MOUNT_TEN_R1)   # [33.9, 50.4]
+MOUNT_YM_POCK = (MOUNT_YM_MORT[0] - MOUNT_POCKET_L,
+                 MOUNT_YM_MORT[0])                            # [15.9, 33.9]
+assert MOUNT_YP_POCK[1] <= MOUNT_CAP_OUT + 1e-9, \
+    "+Y mount pocket runs past the outboard cap (arc-joint keep-out)"
+assert MOUNT_YM_POCK[0] >= MOUNT_CAP_IN - 1e-9, \
+    "−Y mount pocket runs into the centre boss's keep-out"
+assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= MOUNT_WALL - 1e-9, \
+    "mount cavity leaves the arm's side walls under the 1.6 tier"
+
+MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 3.2 — the spine IS the mushroom stem:
+                                   # it rides the cavity's stem slot with
+                                   # zero ledge
+MOUNT_RAIL_T  = 3 * NOZZLE         # 2.4 — shallow rail over the arc-joint zone
+MOUNT_RAIL_X0 = MOUNT_TEN_R1 - MOUNT_MORT_SLACK    # 49.9 — spine→rail step:
+                                   # the full-depth spine never leaves the
+                                   # cavity zones in either arm's pose,
+                                   # seated or pre-slide
+MOUNT_PAD_GAP = NOZZLE             # 0.8 — pad inboard face off the arm tip
+MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE     # 10.9 — square screw pad
+MOUNT_PAD_X0  = FRAME_R_OUT + MOUNT_PAD_GAP        # 84.63
+MOUNT_PAD_X1  = MOUNT_PAD_X0 + MOUNT_PAD_W         # 95.53
+MOUNT_SCREW_X = MOUNT_PAD_X0 + MOUNT_PAD_W / 2.0   # 90.08 — screw at pad centre
+# V-GROOVE for the rail across the cap + arc-joint zone: vertical walls,
+# then a 45° V closing on a one-bead(+clearance) flat — the groove's −z
+# boundary is the roof of the slot in the frame's +z→−z print:
+MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 3.5 — groove width
+MOUNT_GRV_VERT = MOUNT_RAIL_T + JOINT_CLR          # 2.55 — vertical depth
+MOUNT_GRV_FLAT = NOZZLE + 2 * JOINT_CLR            # 1.1 — dulled V flat
+MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.75
+
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
 # the frame's mount + the wall windows now) ──────────────────────────────────

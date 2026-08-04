@@ -41,6 +41,8 @@ from cadkit.holes import teardrop_hole
 
 from .helpers import cone_solid, cyl, heal
 from .lid_joint import flat_arc_solid, TOPJ_TOP, TOPJ_RD
+from .levers import BRAKE_SWEPT_TOP
+from .mount import mount_channel_cuts
 from .wall import wall_bottom_band
 from .params import (
     NOZZLE,
@@ -62,6 +64,7 @@ from .params import (
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
+    MOUNT_GRV_DEPTH,
 )
 
 # ── Wall ↔ beam T joint (cadkit — v2's print-proven box) ─────────────────────
@@ -76,6 +79,11 @@ assert (BEAM_IR + BEAM_SIZE) - (_TOPJ_R0 + TOPJ_RD) >= 2 * NOZZLE - 1e-9, \
     "arc-joint cavity's outer wall under 1.6 at the flush arm end"
 assert FRAME_RIB - (TOPJ_TOP + JOINT_BACK_CLR) >= 2 * NOZZLE - 1e-9, \
     "arc-joint cavity ceiling under 1.6 in the top plus"
+# the mount rail's V-groove crosses the arms' arc-joint zone from above —
+# the web between the groove's V and the cavities' ceilings must hold tier
+assert ((FRAME_RIB - MOUNT_GRV_DEPTH) - (TOPJ_TOP + JOINT_BACK_CLR)
+        >= 2 * NOZZLE - 1e-9), \
+    "mount rail groove undercuts the arc-joint cavity ceiling"
 
 _R_T = _TOPJ_R0 + (TOPJ_STEM + TOPJ_FLARE) / 2.0
 _ARM_HALF_A = math.degrees(math.asin((BEAM_SIZE / 2.0) / _R_T))
@@ -153,9 +161,15 @@ def _yz_prism(pts_yz, x0, x1):
 # −Z→+Z support-free. ────────────────────────────────────────────────────────
 _SB_Y0 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR         # 18.8 — side-column inner face
 _SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.0 — side-column outer face
-# arch-turn start: underside clears the swept lever boss by 1 (v2 hardcoded
-# the swept value; the boss top is swing-invariant = pivot + boss/2)
-_ARCH_Z0 = RATCHET_PIVOT_Z + LEVER_BOSS_OD / 2.0 + 1.0           # ≈ −18.5
+# arch-turn start, PER SIDE (user: each fork sets its own roof — reusing
+# the ratchet's on the brake wasted ~19 of fork): the band's turn sits
+# _ARCH_CLR above that side's swept ceiling. RATCHET: the swing-invariant
+# pivot boss (the material around the lever's torsion axle) is the
+# lever's top. BRAKE: the pad/flange assembly rides ABOVE its own pivot
+# axle — its swept top (levers.BRAKE_SWEPT_TOP) governs instead.
+_ARCH_CLR   = 1.0                                    # v2's roof clearance
+_ARCH_Z0_R = RATCHET_PIVOT_Z + LEVER_BOSS_OD / 2.0 + _ARCH_CLR   # ≈ −18.5
+_ARCH_Z0_B = BRAKE_SWEPT_TOP + _ARCH_CLR                          # ≈ −37
 
 
 def _arch(s, z_b0):
@@ -313,32 +327,32 @@ def _thrust_boss(y_face, grow, pz, clip_x=None):
 def _lever_mount():
     """Fork columns + arch struts + per-pivot thrust bosses (v2's design,
     fans/climbs retired; the lever plates/pins land next round on these
-    same constants)."""
-    _col_top = _ARCH_Z0 + 2.0 * POST_OUT_T / math.sqrt(2.0) - POST_OUT_T
-    m = _side_column(+1.0, _col_top)
-    m = m.union(_side_column(-1.0, _col_top))
-    m = m.union(_arch(+1.0, _ARCH_Z0))
-    m = m.union(_arch(-1.0, _ARCH_Z0))
-    # centre-arm gussets: the beam spreads 45° into each arch
+    same constants). Each side runs the SAME construction off its own
+    roof height (_ARCH_Z0_R / _ARCH_Z0_B — user's call)."""
     _rise = _SB_Y0 - BEAM_SIZE / 2.0
-    for s in (+1.0, -1.0):
-        m = m.union(_yz_prism(
-            [(s * BEAM_SIZE / 2.0, _ARCH_Z0),
-             (s * (BEAM_SIZE / 2.0 + _rise / 2.0), _ARCH_Z0 + _rise / 2.0),
-             (s * BEAM_SIZE / 2.0, _ARCH_Z0 + _rise / 2.0)],
-            BEAM_IR, _R_OUT))
-    # the arm turns back down 45° into the beam: bevel keeping the band
-    # POST_OUT_T thick perpendicular from the ^ apex (v2's yellow == blue)
     _half = _rise / 2.0
-    _k = ((_ARCH_Z0 + _half) - (_SB_Y0 - _half) + POST_OUT_T * math.sqrt(2.0))
     _y2 = BEAM_SIZE / 2.0 + _half + 1.0
-    for s in (+1.0, -1.0):
-        m = m.cut(_yz_prism(
+    m = None
+    for s, z0 in ((+1.0, _ARCH_Z0_R), (-1.0, _ARCH_Z0_B)):
+        col_top = z0 + 2.0 * POST_OUT_T / math.sqrt(2.0) - POST_OUT_T
+        p = _side_column(s, col_top)
+        p = p.union(_arch(s, z0))
+        # centre-arm gusset: the beam spreads 45° into the arch
+        p = p.union(_yz_prism(
+            [(s * BEAM_SIZE / 2.0, z0),
+             (s * (BEAM_SIZE / 2.0 + _half), z0 + _half),
+             (s * BEAM_SIZE / 2.0, z0 + _half)],
+            BEAM_IR, _R_OUT))
+        # the arm turns back down 45° into the beam: bevel keeping the band
+        # POST_OUT_T thick perpendicular from the ^ apex (v2's yellow == blue)
+        _k = ((z0 + _half) - (_SB_Y0 - _half) + POST_OUT_T * math.sqrt(2.0))
+        p = p.cut(_yz_prism(
             [(s * BEAM_SIZE / 2.0, BEAM_SIZE / 2.0 + _k),
              (s * BEAM_SIZE / 2.0, BEAM_Z1 + 1.0),
              (s * _y2, BEAM_Z1 + 1.0),
              (s * _y2, _y2 + _k)],
             BEAM_IR - 1.0, _R_OUT + 1.0))
+        m = p if m is None else m.union(p)
     # thrust bosses: beam flank grows OUT to the lever's inner face (wall-
     # cylinder guard on its −x side); the column face grows IN
     for s, pz in ((+1.0, RATCHET_PIVOT_Z), (-1.0, BRAKE_PIVOT_Z)):
@@ -423,9 +437,11 @@ def _anchor_wall():
 def _build_frame_top():
     ft = _plus(FRAME_Z0, FRAME_Z1)
     ft = ft.union(cyl(BRG_BOSS_OD, FRAME_Z1 - FRAME_Z0, z=FRAME_Z0))
-    ft = ft.union(_anchor_wall())   # twist-lock strip anchor + arm rib
+    ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
     for a in (0.0, 90.0, 180.0, 270.0):
         ft = ft.cut(_arc_mortise(a))
+    for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
+        ft = ft.cut(c)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top

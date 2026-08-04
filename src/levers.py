@@ -241,6 +241,16 @@ def _to_rest(wp):
 
 PAD_Z_HI = max(_rest_xz(_x_joint(y, Z_TOP_C), Z_TOP_C)[1]
                for y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1))
+# the brake side's swept CEILING (its fork-roof driver — frame.py): the
+# highest any brake-side material reaches over the rest↔contact swing.
+# Rest is the high extreme (the corners' radius never crosses the
+# pivot's vertical inside the swing), so the candidates are the pad
+# slab's and joint plane's top corners at REST, plus Z_TOP_C at contact.
+BRAKE_SWEPT_TOP = max(
+    Z_TOP_C, PAD_Z_HI,
+    max(_rest_xz(_x_band_plane(_y), Z_TOP_C)[1]
+        for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1)),
+)
 # (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
 # whole wall stack, so there is no cap over the swinging pad anymore; the
 # nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays
