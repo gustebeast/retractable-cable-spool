@@ -165,11 +165,11 @@ AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
 # A short wall hangs under the +X arm (running up THROUGH the frame as an
 # arm rib — the gate wall's proven inverted-print bed seat) with one
 # WINDOW at the strip's z: the T-head pushes straight through the tall
-# middle FLAT-ON (no twist), then the spring's one-signed pull drags the
-# strip sideways into a side bay too short for the head to escape — the
-# spring's own tension is the latch (user's insight: the pull direction
-# never reverses, and the install's 1.5–2 pre-wraps mean it never goes
-# slack in service).
+# +y end FLAT-ON (no twist), then the spring's one-signed pull drags the
+# strip to the −y bay, too short for the head to escape — the spring's
+# own tension is the latch (user's insight: the pull direction never
+# reverses, and the install's 1.5–2 pre-wraps mean it never goes slack
+# in service).
 # Strip tip, user-measured (same spring as v2; hardware = absolute dims):
 # 0.2 thick; 22-wide body, 13-long taper to the 9-wide × 8-long neck, then
 # the 7-long × 16-wide round T-head (4 root notch, unused here).
@@ -188,46 +188,51 @@ ANCH_IR = SPRING_FLANGE_OD / 2.0 + ANCH_FLANGE_CLR   # 40.95 — wall inner face
 ANCH_T  = 2 * NOZZLE               # 1.6 — wall thickness (the gate wall's)
 ANCH_OR = ANCH_IR + ANCH_T                           # 42.55
 
-# WINDOW — a TENT (print-driven, user's no-overhang call: frame_top
-# prints +z→−z, so the opening's −z boundary is the ROOF of the hole as
-# printed — here that roof is a 45° V dropping to the centre peak, and
-# the flat +z edge prints as a plain floor; nothing is flatter than
-# 45°). Flat top, a vertical side BAY each side (HOLD tall — blocks the
-# 16 head with 2.0 bite per side while the 9 neck rides with ±1.5
-# float), and the tall middle (PASS at the peak — the head enters
-# flat-on over a 4.0-wide zone). SYMMETRIC on purpose: the spring's
-# handedness isn't pinned yet, and tension parks the strip in whichever
-# bay it favours — 4.4 of travel AGAINST the pull from the escape zone.
+# WINDOW — a right-trapezoid TENSION TRAP (print-driven, user's
+# no-overhang call: frame_top prints +z→−z, so the opening's −z boundary
+# is the ROOF of the hole as printed — here that roof is one 45° floor;
+# the flat +z edge prints as a plain floor face; nothing is flatter than
+# 45°). CHIRALITY (user): pull-out spins the axle CW (viewed +z) and the
+# spring TIGHTENS; strip winding onto the arbor CW means the strip runs
+# CCW going outward, so it arrives at the +X anchor travelling toward
+# +y — its tension drags the free end toward −Y. So: the tall ENTRY
+# wall sits at +y (PASS — the head enters flat-on, no twist, hugging
+# that wall over a 2.0-wide zone), the floor climbs at 45° toward −y,
+# and the HOLDING BAY at −y (HOLD — blocks the 16 head with 2.0 bite
+# top and bottom while the 9 neck rides with ±1.5 float; the rising
+# floor stays 1.5 under the sliding neck the whole way). Escape means
+# 4.4 of travel back AGAINST the spring's pull. The width is FORCED at
+# PASS − HOLD: the 45° floor must climb the full entry-to-bay height
+# difference, and 23 beads of PASS is already the most the
+# bottom-flange keep-out allows.
 _SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
-ANCH_ZC     = _SPRING_ZC           # side bays centred on the strip line
-ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — side-bay height (head-blocking)
-ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — centre height at the peak
-                                   # (head-passing; 23 beads is the most
-                                   # the bottom-flange keep-out allows)
+ANCH_ZC     = _SPRING_ZC           # holding bay centred on the strip line
+ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — bay height (head-blocking)
+ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing)
 ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_HOLD / 2.0         # −10 — flat top edge
-ANCH_HOLD_Z0 = ANCH_ZC - ANCH_WIN_HOLD / 2.0         # −22 — side-bay bottom
-ANCH_WIN_Z0  = ANCH_WIN_Z1 - ANCH_WIN_PASS           # −28.4 — the V peak
-ANCH_WIN_HW  = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — half-width: the
-                                   # V runs bay-corner to bay-corner at
-                                   # exactly 45° by construction
+ANCH_HOLD_Z0 = ANCH_ZC - ANCH_WIN_HOLD / 2.0         # −22 — bay bottom (−y)
+ANCH_WIN_Z0  = ANCH_WIN_Z1 - ANCH_WIN_PASS           # −28.4 — the deep corner
+                                                     # at the +y entry wall
+ANCH_WIN_W   = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — width: 45° floor
+                                                     # bay-corner → deep corner
 ANCH_Z0      = ANCH_WIN_Z0 - 4 * NOZZLE              # −31.6 — wall bottom
-                                                     # (3.2 sill under the peak)
-# SWEEP: centred on the +X arm — window + a 6-bead pier each side. The
-# window is WIDER than the 10.4 arm, so the piers stand past the arm's
-# edges; in the inverted print they root on the BED like the old gate
-# wall's open span did.
+                                   # (3.2 sill under the deep corner)
+# SWEEP: centred on the +X arm — window + a 6-bead pier each side (the
+# 16 chord still overhangs the 10.4 arm a touch; in the inverted print
+# the outboard blades root on the BED like the old gate wall's open
+# span did).
 ANCH_HALF_A = math.degrees(math.asin(
-    (ANCH_WIN_HW + 6 * NOZZLE) / ANCH_IR))           # ≈ 15.9°
+    (ANCH_WIN_W / 2.0 + 6 * NOZZLE) / ANCH_IR))      # ≈ 11.3°
 
 # The pass/block mechanism IS these inequalities:
 assert ANCH_WIN_PASS >= STRIP_HEAD_W + 0.4 - 1e-9, \
-    "head doesn't pass flat-on at the centre"
+    "head doesn't pass flat-on at the entry wall"
 assert ANCH_WIN_PASS - (STRIP_HEAD_W + 0.4) >= 2 * NOZZLE - 1e-9, \
     "entry zone too narrow to thread the head by hand"
 assert ANCH_WIN_HOLD <= STRIP_HEAD_W - 3.0 + 1e-9, \
-    "head escapes the side bays"
+    "head escapes the holding bay"
 assert ANCH_WIN_HOLD >= STRIP_NECK_W + 0.4 - 1e-9, \
-    "neck binds in the side bays"
+    "neck binds in the holding bay"
 assert STRIP_NECK_L >= ANCH_T + 1.0 - 1e-9, \
     "neck too short — the head can't fully clear the wall"
 assert ANCH_WIN_Z1 <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \
