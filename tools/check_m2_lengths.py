@@ -16,7 +16,7 @@ For a 20 mm screw:
                   engages the outer threads; usually still OK if engagement
                   >= ~1xD = 2 mm, but the head won't fully torque down).
 """
-from src.dimensions import M2_HEAD_RECESS_H, M2_INSERT_DEPTH, DRUM_OD
+from v2.dimensions import M2_HEAD_RECESS_H, M2_INSERT_DEPTH, DRUM_OD
 from src import wheel as W
 from src import housing as H
 from src import housing_guide as PG, housing_lever_guide as LG
