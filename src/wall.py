@@ -1,12 +1,13 @@
 """WALL — the containment ring around the separator/lid (WALL_SEP_CLR off
 their OD, user's 1.6 / 2.4 thick). The BOTTOM band is no longer a part: it
 exports as a solid that frame.py FUSES into frame_bottom (user's call — it
-replaces the bottom plus as the beams' structural tie). Both lever bays
-are FULL-HEIGHT openings now (user's call): floor plate → split in the
-fused band, continuing in wall_top to the ratchet ceiling — the former
-derived sill (the over-pull stop) leaves the wall; RATCHET_WIN_Z0 stays in
-params as the lever's future stop-tab reference. Above the split, v2's
-sliding pieces remain:
+replaces the bottom plus as the beams' structural tie). The lever bays
+open from the COIL CHAMBER's ceiling (CH_TOP_Z — below it the band runs a
+CLOSED RING, the bottom rim + coil containment, user's call) up through
+the split and the wall_top sector — the former derived sill (the
+over-pull stop) is still gone; RATCHET_WIN_Z0 stays in params as the
+lever's future stop-tab reference. Above the split, v2's sliding pieces
+remain:
 
   wall_top  — prints +Z→−Z (INVERTED). The upper part of the ratchet
       window and the exit port — their world-CEILINGS are bed-side on its
@@ -169,11 +170,17 @@ def _build_wall_full():
     w = _ring(2 * WALL_IR, 2 * WALL_OR, WALL_ZB, WALL_Z1 - WALL_ZB)
     for a in (0.0, 90.0, 180.0, 270.0):
         w = w.union(_tenon(a))
-    # lever bays: FULL-HEIGHT through the fused band (floor plate → split)…
+    # lever bays: from the COIL CHAMBER's ceiling up through the split
+    # (user's call — the old floor-up cut severed the band's bottom rim
+    # AND opened the chamber at both bays, where the loose coil could
+    # bulge out; below CH_TOP_Z the band now runs a CLOSED RING again.
+    # Every lever working part crosses the wall ABOVE it: the pawl band
+    # bottom at −38.4, the brake contact frame above the −44.4 band —
+    # posed-lever probes at the gate)…
     w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
-                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
+                            CH_TOP_Z, WALL_SPLIT_Z + 0.5))
     w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
-                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
+                            CH_TOP_Z, WALL_SPLIT_Z + 0.5))
     # …and the whole +x SECTOR of wall_top above them (user #834: the top
     # band over the bays deleted; the beam-strip between the bays would be
     # an island, so it goes too — wall_top is a C-ring on THREE tenons and
