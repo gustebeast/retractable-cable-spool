@@ -160,15 +160,16 @@ SEP_Z0 = SEP_Z1 - RIM_H                # −44.4 — disk bottom = the bed face
 AXLE_Z_BOT = SEP_Z0                    # the column runs flush through the disk
 AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
 
-# ── Spring-strip TWIST-LOCK anchor (user's v3 design — retires the ported
+# ── Spring-strip TENSION-TRAP anchor (user's v3 design — retires the ported
 # v2 two-block gate + drop-in insert; zero extra parts) ──────────────────────
 # A short wall hangs under the +X arm (running up THROUGH the frame as an
 # arm rib — the gate wall's proven inverted-print bed seat) with one
-# WINDOW at the strip's z that passes the T-head ONLY twisted ~45° about
-# the strip axis: twist, push through, let the strip relax parallel with
-# the spring — pulled back, the head grabs the wall around the window,
-# and winding tension (mostly tangential) bears on the window's edge in
-# shear. The window's exact shape is print-driven (below).
+# WINDOW at the strip's z: the T-head pushes straight through the tall
+# middle FLAT-ON (no twist), then the spring's one-signed pull drags the
+# strip sideways into a side bay too short for the head to escape — the
+# spring's own tension is the latch (user's insight: the pull direction
+# never reverses, and the install's 1.5–2 pre-wraps mean it never goes
+# slack in service).
 # Strip tip, user-measured (same spring as v2; hardware = absolute dims):
 # 0.2 thick; 22-wide body, 13-long taper to the 9-wide × 8-long neck, then
 # the 7-long × 16-wide round T-head (4 root notch, unused here).
@@ -187,50 +188,46 @@ ANCH_IR = SPRING_FLANGE_OD / 2.0 + ANCH_FLANGE_CLR   # 40.95 — wall inner face
 ANCH_T  = 2 * NOZZLE               # 1.6 — wall thickness (the gate wall's)
 ANCH_OR = ANCH_IR + ANCH_T                           # 42.55
 
-# WINDOW — OVERHANG-FREE (user's call: frame_top prints +z→−z, print-up =
-# assembly −z, so every opening edge must be vertical, 45°, or
-# teardropped; a plain square window would leave its −z edge a flat
-# bridge, and gabling that edge would lengthen the vertical diagonal
-# until the untwisted head slips out). Instead: a round NECK HOLE
-# (cadkit teardrop, apex toward −z) crossed by a 45° INSERTION SLOT
-# through its centre — the slot's long sides AND square end caps all lie
-# at 45°. The head threads the slot at its ~45° twist (slot > head), the
-# neck relaxes and TURNS freely in the round hole (Ø12 beats the 9 neck
-# at every angle — a bare crossed-slots window would trap it mid-turn),
-# and once parallel the head stays: the hole bites it 2.0 per side, the
-# slot's vertical cross-chord is only 4.5, and the hole+apex vertical
-# run is 14.5 < the 16 head — whose ROUND end can't even enter the 45°
-# apex wedge. Escape = re-aligning the head with the slot by hand.
+# WINDOW — a TENT (print-driven, user's no-overhang call: frame_top
+# prints +z→−z, so the opening's −z boundary is the ROOF of the hole as
+# printed — here that roof is a 45° V dropping to the centre peak, and
+# the flat +z edge prints as a plain floor; nothing is flatter than
+# 45°). Flat top, a vertical side BAY each side (HOLD tall — blocks the
+# 16 head with 2.0 bite per side while the 9 neck rides with ±1.5
+# float), and the tall middle (PASS at the peak — the head enters
+# flat-on over a 4.0-wide zone). SYMMETRIC on purpose: the spring's
+# handedness isn't pinned yet, and tension parks the strip in whichever
+# bay it favours — 4.4 of travel AGAINST the pull from the escape zone.
 _SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
-ANCH_ZC     = _SPRING_ZC           # window centre rides the strip line
-ANCH_HOLE_D = 15 * NOZZLE          # 12.0 — neck seat (±1.5 z-float on the 9)
-ANCH_SLOT_L = 24 * NOZZLE          # 19.2 — 45° slot: 16 head + hand slack
-ANCH_SLOT_W = 4 * NOZZLE           # 3.2 — slot gap for the 0.2 strip
-# the slot's bounding half-span in y AND z (45° axis, square end caps):
-_ANCH_SLOT_HALF = (ANCH_SLOT_L + ANCH_SLOT_W) / (2.0 * math.sqrt(2.0))  # ≈ 7.9
-ANCH_WIN_Z0 = ANCH_ZC - _ANCH_SLOT_HALF              # ≈ −23.9 — lowest opening
-ANCH_WIN_Z1 = ANCH_ZC + _ANCH_SLOT_HALF              # ≈ −8.1 — highest opening
-ANCH_Z0     = ANCH_WIN_Z0 - 4 * NOZZLE               # ≈ −27.1 — wall bottom
-                                   # (3.2 sill under the slot's low corner)
-# SWEEP: centred on the +X arm — opening + a 6-bead pier each side. The
-# opening is WIDER than the 10.4 arm, so the piers stand past the arm's
+ANCH_ZC     = _SPRING_ZC           # side bays centred on the strip line
+ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — side-bay height (head-blocking)
+ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — centre height at the peak
+                                   # (head-passing; 23 beads is the most
+                                   # the bottom-flange keep-out allows)
+ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_HOLD / 2.0         # −10 — flat top edge
+ANCH_HOLD_Z0 = ANCH_ZC - ANCH_WIN_HOLD / 2.0         # −22 — side-bay bottom
+ANCH_WIN_Z0  = ANCH_WIN_Z1 - ANCH_WIN_PASS           # −28.4 — the V peak
+ANCH_WIN_HW  = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — half-width: the
+                                   # V runs bay-corner to bay-corner at
+                                   # exactly 45° by construction
+ANCH_Z0      = ANCH_WIN_Z0 - 4 * NOZZLE              # −31.6 — wall bottom
+                                                     # (3.2 sill under the peak)
+# SWEEP: centred on the +X arm — window + a 6-bead pier each side. The
+# window is WIDER than the 10.4 arm, so the piers stand past the arm's
 # edges; in the inverted print they root on the BED like the old gate
 # wall's open span did.
 ANCH_HALF_A = math.degrees(math.asin(
-    (_ANCH_SLOT_HALF + 6 * NOZZLE) / ANCH_IR))       # ≈ 18.1°
+    (ANCH_WIN_HW + 6 * NOZZLE) / ANCH_IR))           # ≈ 15.9°
 
 # The pass/block mechanism IS these inequalities:
-assert ANCH_SLOT_L >= STRIP_HEAD_W + 0.4 - 1e-9, \
-    "twisted head doesn't fit the 45° slot"
-assert ANCH_HOLE_D <= STRIP_HEAD_W - 3.0 + 1e-9, \
-    "head passes the neck hole untwisted"
-assert ANCH_HOLE_D >= STRIP_NECK_W + 0.4 - 1e-9, \
-    "neck binds in the hole (it must ride AND rotate there untwisted)"
-assert ANCH_SLOT_W * math.sqrt(2.0) <= STRIP_NECK_W - 1.0 + 1e-9, \
-    "slot's vertical cross-chord lets the seated neck wander off the hole"
-assert (ANCH_HOLE_D / 2.0) * (1.0 + math.sqrt(2.0)) \
-        <= STRIP_HEAD_W - 1.4 + 1e-9, \
-    "head could slide down past the teardrop apex (flat-edge bound)"
+assert ANCH_WIN_PASS >= STRIP_HEAD_W + 0.4 - 1e-9, \
+    "head doesn't pass flat-on at the centre"
+assert ANCH_WIN_PASS - (STRIP_HEAD_W + 0.4) >= 2 * NOZZLE - 1e-9, \
+    "entry zone too narrow to thread the head by hand"
+assert ANCH_WIN_HOLD <= STRIP_HEAD_W - 3.0 + 1e-9, \
+    "head escapes the side bays"
+assert ANCH_WIN_HOLD >= STRIP_NECK_W + 0.4 - 1e-9, \
+    "neck binds in the side bays"
 assert STRIP_NECK_L >= ANCH_T + 1.0 - 1e-9, \
     "neck too short — the head can't fully clear the wall"
 assert ANCH_WIN_Z1 <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \

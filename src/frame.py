@@ -1,9 +1,10 @@
 """FRAME — split frame_top / frame_bottom, v2's architecture ported to v3.
 
 frame_top — plus spider carrying the 608 IN its own thickness (recessed on
-    a quality-tier lip → flat assembly top), the spring-strip TWIST-LOCK
-    anchor wall under the +X arm (its teardrop-hole + 45°-slot window
-    passes the strip's T-head only twisted ~45° — params block), and the arc-joint MORTISE
+    a quality-tier lip → flat assembly top), the spring-strip TENSION-TRAP
+    anchor wall under the +X arm (tent window: the strip's T-head enters
+    flat-on at the tall middle, spring tension parks it in a side bay
+    too short to escape — params block), and the arc-joint MORTISE
     channels in its underside. PRINTS INVERTED (+Z→−Z, top face on the
     bed — the anchor wall rises rooted on its rib band): the arc cavities
     open at the print TOP, so they close with plain floors — no bridges
@@ -45,7 +46,7 @@ from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_ZC, ANCH_HOLE_D, ANCH_SLOT_L, ANCH_SLOT_W,
+    ANCH_WIN_HW, ANCH_WIN_Z0, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_POCKET_Z0, BRG_LIP_ID, BRG_BOSS_OD,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
@@ -391,26 +392,26 @@ def _build_frame_bottom():
 
 
 def _anchor_wall():
-    """Spring-strip TWIST-LOCK anchor (params block): a short wall sector
-    centred under the +X arm, ANCH_Z0 up THROUGH the frame (the over-frame
-    band is the arm rib and the wall's bed-rooted print seat — the gate
-    wall's proven pattern). The pass/block window is OVERHANG-FREE in the
-    inverted print (user's call): a cadkit teardrop neck hole (apex toward
-    assembly −z = print-up) crossed by the 45° insertion slot, whose long
-    sides and square end caps all lie at 45° to the layers."""
+    """Spring-strip TENSION-TRAP anchor (params block): a short wall
+    sector centred under the +X arm, ANCH_Z0 up THROUGH the frame (the
+    over-frame band is the arm rib and the wall's bed-rooted print seat —
+    the gate wall's proven pattern). The TENT window is overhang-free in
+    the inverted print: its −z boundary — the roof of the hole as
+    printed — is the 45° V to the peak; the flat +z edge prints as a
+    plain floor."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
          .close().revolve(2.0 * ANCH_HALF_A, (0, 0), (0, 1))
          .rotate((0, 0, 0), (0, 0, 1), -ANCH_HALF_A))
-    w = w.cut(teardrop_hole(ANCH_HOLE_D, ANCH_T + 2.0,
-                            (ANCH_IR - 1.0, 0.0, ANCH_ZC),
-                            (1.0, 0.0, 0.0), print_up=(0.0, 0.0, -1.0)))
-    slot = (cq.Workplane("XY")
-            .box(ANCH_T + 4.0, ANCH_SLOT_L, ANCH_SLOT_W)
-            .rotate((0, 0, 0), (1, 0, 0), 45.0)
-            .translate((ANCH_IR + ANCH_T / 2.0, 0.0, ANCH_ZC)))
-    return w.cut(slot)
+    win = (cq.Workplane("YZ").workplane(offset=ANCH_IR - 1.0)
+           .polyline([(-ANCH_WIN_HW, ANCH_HOLD_Z0),
+                      (-ANCH_WIN_HW, ANCH_WIN_Z1),
+                      (ANCH_WIN_HW, ANCH_WIN_Z1),
+                      (ANCH_WIN_HW, ANCH_HOLD_Z0),
+                      (0.0, ANCH_WIN_Z0)])
+           .close().extrude(ANCH_T + 2.0))
+    return w.cut(win)
 
 
 def _build_frame_top():
