@@ -2,9 +2,9 @@
 
 frame_top — plus spider carrying the 608 IN its own thickness (recessed on
     a quality-tier lip → flat assembly top), the spring-strip TENSION-TRAP
-    anchor wall under the +X arm (tent window: the strip's T-head enters
-    flat-on at the tall middle, spring tension parks it in a side bay
-    too short to escape — params block), and the arc-joint MORTISE
+    anchor wall under the +X arm (trapezoid window: the strip's T-head
+    enters flat-on at the tall +y end, spring tension parks it in the −y
+    bay, too short to escape — params block), and the arc-joint MORTISE
     channels in its underside. PRINTS INVERTED (+Z→−Z, top face on the
     bed — the anchor wall rises rooted on its rib band): the arc cavities
     open at the print TOP, so they close with plain floors — no bridges
@@ -46,7 +46,7 @@ from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_WIN_HW, ANCH_WIN_Z0, ANCH_WIN_Z1, ANCH_HOLD_Z0,
+    ANCH_WIN_W, ANCH_WIN_Z0, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_POCKET_Z0, BRG_LIP_ID, BRG_BOSS_OD,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
@@ -395,21 +395,23 @@ def _anchor_wall():
     """Spring-strip TENSION-TRAP anchor (params block): a short wall
     sector centred under the +X arm, ANCH_Z0 up THROUGH the frame (the
     over-frame band is the arm rib and the wall's bed-rooted print seat —
-    the gate wall's proven pattern). The TENT window is overhang-free in
-    the inverted print: its −z boundary — the roof of the hole as
-    printed — is the 45° V to the peak; the flat +z edge prints as a
-    plain floor."""
+    the gate wall's proven pattern). The right-trapezoid window is
+    overhang-free in the inverted print: its −z boundary — the roof of
+    the hole as printed — is the single 45° floor climbing from the +y
+    entry corner to the −y holding bay; the flat +z edge prints as a
+    plain floor face. The closing polyline edge (deep corner → bay
+    corner) is the 45° by construction: Δy = Δz = ANCH_WIN_W."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
          .close().revolve(2.0 * ANCH_HALF_A, (0, 0), (0, 1))
          .rotate((0, 0, 0), (0, 0, 1), -ANCH_HALF_A))
+    hw = ANCH_WIN_W / 2.0
     win = (cq.Workplane("YZ").workplane(offset=ANCH_IR - 1.0)
-           .polyline([(-ANCH_WIN_HW, ANCH_HOLD_Z0),
-                      (-ANCH_WIN_HW, ANCH_WIN_Z1),
-                      (ANCH_WIN_HW, ANCH_WIN_Z1),
-                      (ANCH_WIN_HW, ANCH_HOLD_Z0),
-                      (0.0, ANCH_WIN_Z0)])
+           .polyline([(-hw, ANCH_HOLD_Z0),      # −y bay bottom corner
+                      (-hw, ANCH_WIN_Z1),
+                      (hw, ANCH_WIN_Z1),
+                      (hw, ANCH_WIN_Z0)])       # +y deep entry corner
            .close().extrude(ANCH_T + 2.0))
     return w.cut(win)
 
