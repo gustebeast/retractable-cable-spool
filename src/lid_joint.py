@@ -7,10 +7,10 @@ existed for hosts whose cavity had to close on an inclined roof): flat
 inner cylindrical face, stem, ONE outboard 45° flare (the retention
 lip — its 45° UNDERSIDE is the loaded face and the standing tenon's
 only overhang, self-supporting), a TOPJ_TIP vertical tip face, then a
-FLAT top. With frame_top flipped upright its cavity ceilings are short
-flat bridges (~4 wide, user-accepted), and the lid's cavities are
-THROUGH slots — both sides print fine. Lateral faces run JOINT_CLR;
-the z-sandwich pairs run JOINT_BACK_CLR (cadkit's fiber-fill policy).
+FLAT top. Every host prints it cleanly: frame_top's +z→−z print opens
+its cavities at the print top (plain floors), and the lid's cavities
+are THROUGH slots. Lateral faces run JOINT_CLR; the z-sandwich pairs
+run JOINT_BACK_CLR (cadkit's fiber-fill policy).
 
 SEP ↔ LID (user's design — sides SWAPPED vs the old mount-flip, so
 this joint now mirrors frame_top↔frame_bottom): the SEPARATOR's drum

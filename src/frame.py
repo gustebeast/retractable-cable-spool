@@ -1,17 +1,15 @@
 """FRAME — split frame_top / frame_bottom, v2's architecture ported to v3.
 
 frame_top — plus spider carrying the 608 IN its own thickness (recessed
-    onto a 45° FUNNEL cone seat — the flipped print's answer to the old
-    flat lip, params block), the spring-strip TENSION-TRAP anchor wall
-    under the +X arm (trapezoid window: the strip's T-head enters flat-on
-    in the +y entry pocket, spring tension parks it in the −y bay, too
-    short to escape — params block), and the arc-joint MORTISE channels
-    in its underside. PRINTS UPRIGHT now (−z→+z — user's flip): the
-    bearing seat and the anchor window are shaped for it (funnel cone,
-    45°-roofed window), the flat-top arc cavities close with short
-    ~4-wide ceiling bridges (user-accepted), and the anchor wall HANGS
-    below the plate — the plate prints on supports, the user's call with
-    the orientation.
+    onto a 45° FUNNEL cone seat — overhang-free replacement for the old
+    bridge-ring lip, params block), the spring-strip TENSION-TRAP anchor
+    wall under the +X arm (trapezoid window: the strip's T-head enters
+    flat-on at the tall +y end, spring tension parks it in the −y bay,
+    too short to escape — params block), and the arc-joint MORTISE
+    channels in its underside. PRINTS +z→−z (top face on the bed — the
+    anchor wall rises rooted on its rib band): the arc cavities open at
+    the print TOP, so they close with plain floors — no bridges — and
+    the funnel seat prints as a 45° narrowing taper.
 
 frame_bottom — NO bottom plus anymore (user's call, #815): the WALL's
     lower band is FUSED in as the beams' structural tie, closed by a
@@ -48,8 +46,7 @@ from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_WIN_W, ANCH_ENT_W, ANCH_ENT_Z0,
-    ANCH_BAY_Z0, ANCH_BAY_Z1, ANCH_TIP_Z,
+    ANCH_WIN_W, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
     BRG_SEAT_CONE_Z0, BRG_SEAT_CONE_Z1,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
@@ -129,9 +126,9 @@ def _arc_mortise(site_deg):
     """Matching arc channel in frame_top's underside: the CW end wall (the
     STOP) sits TOP_STOP_WALL inside the arm's CW face; the CCW end sweeps
     open past the arm's CCW face (the entry — the tenon rotates in CW from
-    the open quadrant). In the flipped UPRIGHT print the cavity's flat
-    ceiling is a ~4-wide bridge over the channel — user-accepted with the
-    flat-top profile."""
+    the open quadrant). In the +z→−z print the cavities open at the print
+    top and close with plain floors — the flat-top profile has no
+    orientation-hostile face here."""
     sweep = (_TEN_HALF_A + _SEAT_A) + (_ARM_HALF_A + _OVER_A)
     return (flat_arc_solid(False, sweep, -2.0, _TOPJ_R0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A - _SEAT_A)
@@ -400,12 +397,13 @@ def _build_frame_bottom():
 def _anchor_wall():
     """Spring-strip TENSION-TRAP anchor (params block): a short wall
     sector centred under the +X arm, ANCH_Z0 up THROUGH the frame (the
-    over-frame band is the arm rib tying the wall into the plate). The
-    trapezoid window is overhang-free in the flipped UPRIGHT print: its
-    +z boundary — the roof of the hole as printed — is the single 45°
-    roof climbing from the −y bay top to the dulled one-bead tip flat
-    at +y; every bottom edge faces up (a print floor), so the bottom
-    contour steps freely — deep only in the entry pocket."""
+    over-frame band is the arm rib and the wall's bed-rooted print seat
+    in the +z→−z print — the gate wall's proven pattern). The window
+    follows the user's print rule for this part: FLAT +z edge (a plain
+    floor face as printed), 45° −z boundary — the single 45° floor
+    descending from the −y bay corner to the DULLED one-bead tip flat
+    at the +y entry wall (the roof of the hole as printed; no
+    knife-edge void)."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
@@ -413,14 +411,12 @@ def _anchor_wall():
          .rotate((0, 0, 0), (0, 0, 1), -ANCH_HALF_A))
     hw = ANCH_WIN_W / 2.0
     win = (cq.Workplane("YZ").workplane(offset=ANCH_IR - 1.0)
-           .polyline([(-hw, ANCH_BAY_Z0),           # bay floor, −y wall up
-                      (-hw, ANCH_BAY_Z1),           # roof's low end
-                      (hw - NOZZLE, ANCH_TIP_Z),    # 45° roof to the tip flat
-                      (hw, ANCH_TIP_Z),             # one-bead dulled tip
-                      (hw, ANCH_ENT_Z0),            # +y entry wall down
-                      (hw - ANCH_ENT_W, ANCH_ENT_Z0),   # entry pocket floor
-                      (hw - ANCH_ENT_W, ANCH_BAY_Z0)])  # step up to the bay
-           .close().extrude(ANCH_T + 2.0))
+           .polyline([(-hw, ANCH_HOLD_Z0),      # −y bay bottom corner
+                      (-hw, ANCH_WIN_Z1),       # bay wall up to the flat top
+                      (hw, ANCH_WIN_Z1),        # flat top edge
+                      (hw, ANCH_TIP_Z),         # +y entry wall down to...
+                      (hw - NOZZLE, ANCH_TIP_Z)])   # ...the dulled tip flat
+           .close().extrude(ANCH_T + 2.0))      # (close = the 45° floor)
     return w.cut(win)
 
 
