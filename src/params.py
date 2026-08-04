@@ -547,29 +547,35 @@ TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 
-# ── MOUNT — desk/wall brackets (v3 flush redesign; v2's validated screw) ─────
-# TWO IDENTICAL brackets (one printed part, ×2) ride the ±Y arms — the
-# rotating axle caps the centre at 10.2, so no v2-style full-length bar
-# can cross FLUSH, and flush is the point (user: vertical space is
-# precious — assembled, bracket tops sit level with the frame's top face
-# and the whole stack stays FRAME_RIB thick). Each bracket: a mushroom
-# TENON (cadkit joint, THROUGH mortise — both hosts print +z→−z, so the
-# up+up octagon's closure is dead weight; the cavity just exits the arm's
-# underside, over the drum chamber) hanging from a flush SPINE exactly
-# one stem wide (any wider slot would leave a flat floor = a bridge in
-# the frame's print), a shallow RAIL crossing the arc-joint zone in a
-# 45°-V-bottom groove, and a SCREW PAD hanging in free air OUTBOARD of
-# the arm tip (the Ø9.3 head + walls outgrow the 10.4 arm; outboard it
-# needs no frame material at all, and the screw stays driver-accessible
-# from below with the assembly attached).
-# INSTALL: drop the brackets through the entry pockets, slide the frame
-# +y to the stops (the cable pull's +y component preloads the seat —
-# v2's rule; no lock insert, user's call), offer up, drive both screws.
-# REMOVE: slide the frame −y off the fixed brackets, drop away.
-# +Y arm: entry pocket OUTBOARD of the mortise, stop at the mortise's
-# inboard end; −Y arm mirrored (entry INBOARD, stop outboard) — BOTH
-# seat on the same frame +y slide, which is what lets one bracket
-# design serve both arms (rotated 90° / 270° into place).
+# ── MOUNT — desk/wall mount (v3 flush redesign; v2's validated screw) ────────
+# ONE CONTINUOUS piece (user's call — a one-piece mount cannot be
+# screwed down at the wrong spacing): two bars riding the ±Y arms'
+# channels, tied by a SEMICIRCULAR BYPASS around the centre — the
+# rotating axle caps the centre at 10.2, so nothing can cross it flush,
+# and flush is the point (user: vertical space is precious — assembled,
+# the mount tops sit level with the frame's top face, stack = FRAME_RIB).
+# WORKFLOW (user): (1) screw the mount to the wood; (2) offer the
+# assembly up (tenons through the entry pockets) and slide it +y to the
+# stops (the cable pull's +y component preloads the seat — v2's rule; no
+# lock insert, user's call). Remove: slide −y, drop away.
+# Each arm bar: a mushroom TENON (cadkit joint, THROUGH mortise — both
+# hosts print +z→−z, so the up+up octagon's closure is dead weight; the
+# cavity exits the arm's underside) under a flush SPINE exactly one stem
+# wide (a wider slot would leave a flat floor = a bridge in the frame's
+# print), then a shallow RAIL out to the bypass junction at y = ±ARC_R.
+# +Y arm: entry pocket OUTBOARD of the mortise, stop inboard; −Y arm
+# mirrored — both seat on the same frame +y slide.
+# The BYPASS: every mount member must clear the frame's SWEPT plan (the
+# seated plan ⊕ the 17 slide) at the mount's z-band, and a member may
+# cross an arm ONLY running parallel to the slide (its groove then works
+# at every slide position). Hence the semicircle through +x at ARC_R:
+# it crosses the +X arm slide-parallel (a short V-groove across that
+# arm, radially clear of the anchor rib and the arc-joint cavities) and
+# lands on the rails tangentially at (0, ±ARC_R) (shallow junction
+# notches beside the rail grooves). The two SCREW PADS sit ON the
+# bypass at ±45°, over open quadrant air, INSIDE the frame's footprint
+# (user's call) — driver access is trivial because the mount screws on
+# BEFORE the assembly.
 WOOD_SCREW_SHAFT_D = 4.0           # v2's validated screw geometry, verbatim
 WOOD_SCREW_HEAD_D  = 9.3           # countersunk-head pocket Ø at the face
 WOOD_SCREW_HEAD_H  = 4.0           # cone depth
@@ -618,8 +624,11 @@ MOUNT_RAIL_X0 = MOUNT_TEN_R1 - MOUNT_MORT_SLACK    # 49.9 — spine→rail step:
                                    # the full-depth spine never leaves the
                                    # cavity zones in either arm's pose,
                                    # seated or pre-slide
-MOUNT_PAD_GAP = NOZZLE             # 0.8 — pad inboard face off the arm tip
 MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE     # 10.9 — square screw pad
+# (INTERIM — the one-piece rework is pending a design decision with the
+# user on the centre-bypass topology; the outboard pads below keep the
+# current two-bracket mount building meanwhile.)
+MOUNT_PAD_GAP = NOZZLE             # 0.8 — pad inboard face off the arm tip
 MOUNT_PAD_X0  = FRAME_R_OUT + MOUNT_PAD_GAP        # 84.63
 MOUNT_PAD_X1  = MOUNT_PAD_X0 + MOUNT_PAD_W         # 95.53
 MOUNT_SCREW_X = MOUNT_PAD_X0 + MOUNT_PAD_W / 2.0   # 90.08 — screw at pad centre
