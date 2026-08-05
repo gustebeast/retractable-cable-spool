@@ -137,12 +137,15 @@ SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
 # is FULLY OPEN at its joint-side end and the halves SLIDE ONTO the
 # strip — v2's design: separator open through its +z column top,
 # axle_top open through its tenon bottom.)
-# Each half's slit covers only the STRIP zone (+ clearance) — the
-# closed ends land just past the strip's ends, and the two slits need
-# to overlap only inside that zone (STRIP_Z0/Z1 defined with the joint
-# above):
-SLIT_Z_CLR = 1.0                   # slit closed-end room past the strip end
-assert STRIP_Z1 + SLIT_Z_CLR <= SPRING_Z1 + 1e-9, \
+# Slit closed ends: 3.2 in from the spring's edges — 0.8 of SHRINKAGE
+# margin past the strip's physical 4-inset ends (user's calls, in
+# order: the 1.0 margin cost too much section; then exactly-4 left
+# none; 3.2 is the balance). The two slits need to overlap only inside
+# the strip zone.
+SLIT_INSET = 3.2                   # slit end inset from the spring edges
+SLIT_ZLO = SPRING_Z0 + SLIT_INSET  # −28.8 — separator slit floor
+SLIT_ZHI = SPRING_Z1 - SLIT_INSET  # −3.2 — axle_top slit ceiling
+assert SLIT_ZHI <= SPRING_Z1 - 1e-9, \
     "top-axle slit would poke out of the spring (shaft must stay solid " \
     "through the bearing above)"
 
@@ -858,9 +861,8 @@ assert JOINT_Z0 >= SPRING_Z0 + SPRING_FLANGE_T - 1e-9, \
     "joint bore reaches below the spring's bottom flange interior"
 assert AXLE_ROOT_CONE_H <= SEP_SPRING_CLR, \
     "axle root cone pokes past the spring's bottom face"
-# strip-zone coverage: the separator's slit floor sits SLIT_Z_CLR under
-# the strip's lower end and must stay above the axle root cone; the
-# top half's slit ceiling sits SLIT_Z_CLR over the strip's upper end
-assert STRIP_Z0 - SLIT_Z_CLR >= SEP_Z1 + AXLE_ROOT_CONE_H - 1e-9, \
+# strip-zone coverage: the separator's slit floor (shrinkage margin
+# included) must stay above the axle root cone
+assert SLIT_ZLO >= SEP_Z1 + AXLE_ROOT_CONE_H - 1e-9, \
     "separator slit floor reaches down into the axle root cone"
 assert STRIP_Z0 < STRIP_Z1, "spring strip zone inverted"
