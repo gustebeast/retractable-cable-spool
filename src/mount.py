@@ -64,9 +64,17 @@ _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
 # ONE crossing per ring — cadkit's ring↔arm arrangement, shared verbatim
 # with the frame arc joints (same seat/overshoot constants, same seating
 # chirality): tenon anchored at the arm's ENTRY face spanning
-# MOUNT_TEN_ARC (half the crossing — the stop-side half stays solid arm)
+# MOUNT_TEN_ARC (half the crossing — the stop-side half stays solid arm).
+# hand="ccw" — the CHIRALITY AUDIT (user's worry: joints working
+# undone): pulling the cable out torques the whole assembly CW about
+# the axis (the cable's line of action is tangent on the drum's
+# CW-driving side), so the hanging assembly must seat rotating CW
+# relative to the fixed mount ≡ the mount TENONS seat CCW relative to
+# frame_top. Pull-out then PRESSES the stops; uninstall = a deliberate
+# CCW twist of the assembly, which no sustained load produces.
 _CROSS = {R: MOUNT_J.crossing(R, FRAME_RIB, MOUNT_TEN_ARC,
-                              seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER)
+                              seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER,
+                              hand="ccw")
           for R in _RINGS}
 
 # the shared install rotation: the DEEPER offset of the two rings' entries
@@ -178,8 +186,10 @@ def mount_channel_cuts():
             cuts.append(
                 _hang(c.mortise(drop=MOUNT_SPINE_T + 0.5))
                 .rotate((0, 0, 0), (0, 0, 1), site))
-            cuts.append(_v_groove_arc(R, site - c.arm - c.over,
-                                      site + c.arm - c.ten - c.seat + 0.1))
+            # hand="ccw" mirror of the groove span: entry overshoot on
+            # the arm's CCW (+) side now, stop-wall zone on the CW side
+            cuts.append(_v_groove_arc(R, site - c.arm + c.ten + c.seat - 0.1,
+                                      site + c.arm + c.over))
     return cuts
 
 

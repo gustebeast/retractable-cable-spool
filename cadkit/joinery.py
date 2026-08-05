@@ -646,7 +646,11 @@ class ArcCrossing:
     """ONE ring↔radial-arm crossing of a rotational install — build via
     `Joint.crossing()`. Conventions, for an arm CENTRED ON PLAN ANGLE 0
     whose faces sit at ±`arm` (rotate the solids about Z to the real site;
-    mirror("XY") + translate for hanging variants — plan angles survive):
+    mirror("XY") + translate for hanging variants — plan angles survive).
+    `hand` NAMES THE TENON'S SEATING ROTATION and is a real design choice:
+    pick it so the site's SUSTAINED loads rotate the tenon TOWARD the stop
+    (user's rule, cable-spool chirality audit — a rotational joint whose
+    working loads point at the entry works itself undone). hand="cw":
 
       · the TENON anchors FLUSH at the arm's CCW (+) face — the ENTRY —
         and spans `ten` of arc inboard (CW). The default engagement is
@@ -660,19 +664,25 @@ class ArcCrossing:
       · seating = the TENON rotating CW (−) relative to the mortise
         host; uninstall rotates CCW, against whatever preload guards it.
 
+    hand="ccw" is the exact mirror: entry at the arm's CW (−) face, stop
+    at the cavity's CCW end, the tenon seats rotating CCW (+).
+
     Attributes (all DEGREES): `arm`, `seat`, `over`, `ten`; `free` =
     ten + over — the relative rotation from seated past even the cavity's
     overshoot sweep (callers typically add a margin for the install
     offset). The constructor raises when the stop-side arm material left
-    CW of the cavity drops under one printed wall at the joint's tier."""
+    beyond the cavity drops under one printed wall at the joint's tier."""
 
     def __init__(self, jnt, radius, arm_w, tenon_l=None, seat=None,
-                 over=1.0):
+                 over=1.0, hand="cw"):
+        if hand not in ("cw", "ccw"):
+            raise ValueError("hand must be 'cw' or 'ccw' (the tenon's "
+                             "seating rotation), got %r" % (hand,))
         if tenon_l is None:
             tenon_l = arm_w / 2.0                    # the 50% rule
         if seat is None:
             seat = jnt.clearance
-        self.joint, self.radius = jnt, radius
+        self.joint, self.radius, self.hand = jnt, radius, hand
         self.arm = math.degrees(math.asin((arm_w / 2.0) / radius))
         self.seat = math.degrees(seat / radius)
         self.over = math.degrees(over / radius)
@@ -692,20 +702,28 @@ class ArcCrossing:
         overshoot — the minimum install offset before the z-mate."""
         return self.ten + self.over
 
+    def _handed(self, w):
+        """hand="ccw" is the hand="cw" arrangement mirrored about the arm's
+        centreline plane (the profile is symmetric along the sweep, so the
+        mirror is exact)."""
+        return w if self.hand == "cw" else w.mirror("XZ")
+
     def tenon(self, root=1.0):
-        """The engaged tenon, seated: flush at the entry face (+arm),
-        spanning `ten` inboard."""
-        return (self.joint.tenon_arc(self.radius, self.ten, root=root)
-                .rotate((0, 0, 0), (0, 0, 1), self.arm - self.ten))
+        """The engaged tenon, seated: flush at the entry face, spanning
+        `ten` inboard."""
+        return self._handed(
+            self.joint.tenon_arc(self.radius, self.ten, root=root)
+            .rotate((0, 0, 0), (0, 0, 1), self.arm - self.ten))
 
     def mortise(self, drop=2.0):
-        """The arm's cavity cutter: stop wall at (arm − ten − seat), open
-        past the entry face by `over`."""
-        return (self.joint.mortise_arc(self.radius,
-                                       self.ten + self.seat + self.over,
-                                       drop=drop)
-                .rotate((0, 0, 0), (0, 0, 1),
-                        self.arm - self.ten - self.seat))
+        """The arm's cavity cutter: stop wall `seat` beyond the seated
+        tenon's stop-side end, open past the entry face by `over`."""
+        return self._handed(
+            self.joint.mortise_arc(self.radius,
+                                   self.ten + self.seat + self.over,
+                                   drop=drop)
+            .rotate((0, 0, 0), (0, 0, 1),
+                    self.arm - self.ten - self.seat))
 
 
 # ──────────── T-SLOT (install ∥ print-Z) slide joint — was the dovetail ──────
@@ -1434,17 +1452,21 @@ class Joint:
                                     self.clearance, drop, height=self.depth,
                                     back_clearance=self.back_clearance)
 
-    def crossing(self, radius, arm_w, tenon_l=None, seat=None, over=1.0):
+    def crossing(self, radius, arm_w, tenon_l=None, seat=None, over=1.0,
+                 hand="cw"):
         """The rotational-install SITE builder: this joint crossing a
         radial ARM at `radius` (arm width `arm_w` mm across the crossing).
         Returns an ArcCrossing — the tenon/mortise arc solids pre-placed
         for an arm centred on plan angle 0, in the arrangement the
-        cable-spool ring joints print-validated: tenon flush at the CCW
-        entry face spanning `tenon_l` (default arm_w/2 — the 50% rule),
-        cavity + `seat` at the stop end + `over` past the entry (all mm,
-        converted to arc angles at `radius`). Arc-capable families only
-        (the up+up octagon and the up+down / through mushroom)."""
-        return ArcCrossing(self, radius, arm_w, tenon_l, seat, over)
+        cable-spool ring joints print-validated: tenon flush at the entry
+        face spanning `tenon_l` (default arm_w/2 — the 50% rule), cavity
+        + `seat` at the stop end + `over` past the entry (all mm,
+        converted to arc angles at `radius`). `hand` = the tenon's seating
+        rotation ("cw": entry at the arm's CCW face; "ccw": the mirror) —
+        CHOOSE IT so the site's sustained loads press toward the stop.
+        Arc-capable families only (the up+up octagon and the up+down /
+        through mushroom)."""
+        return ArcCrossing(self, radius, arm_w, tenon_l, seat, over, hand)
 
 
 def joint(width, length, tenon, mortise, clearance=None, install="+x",
@@ -1894,6 +1916,31 @@ if __name__ == "__main__":
         print("  stop-wall floor       did NOT raise  <-- FAIL")
     except ValueError:
         print("  stop-wall floor       raises (ok)")
+    # hand="ccw": the exact mirror — entry at the CW face, stop CCW,
+    # seat play and swing-out directions flip with it
+    cxm = cj.crossing(CR, CAW, seat=0.15, over=1.0, hand="ccw")
+    carm_m = (cq.Workplane("XY")
+              .box(20, CAW, Hc + 6, centered=(False, True, True))
+              .translate((CR - 10.0, 0, Hc / 2.0))
+              .cut(cxm.mortise(drop=3)))
+    cten_m = cxm.tenon(root=1.0)
+    for label, solid, expect in [
+            ("ccw seated", cten_m, "=0"),
+            ("ccw seat play free", _rot(cten_m, seat_deg * 0.5), "=0"),
+            ("ccw past seat locked", _rot(cten_m, seat_deg + 0.3), ">0"),
+            ("ccw swing-out free", _rot(cten_m, -(cxm.free + 0.5)), "=0")]:
+        v = vol(carm_m, solid)
+        ok = (v == 0.0) if expect == "=0" else (v > 0.0)
+        print(f"  {label:<20} {v:>9.3f} mm3 (must be {expect})"
+              f"{'' if ok else '  <-- FAIL'}")
+        if not ok:
+            fails.append(f"crossing: {label} = {v:.3f}")
+    try:
+        cj.crossing(CR, CAW, hand="widdershins")
+        fails.append("crossing: bad hand did not raise")
+        print("  bad hand              did NOT raise  <-- FAIL")
+    except ValueError:
+        print("  bad hand              raises (ok)")
 
     # ── tee (install ∥ print-Z): both hosts -Z→+Z, slides along Z ──
     print("-- tee --")
