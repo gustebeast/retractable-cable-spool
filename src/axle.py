@@ -40,7 +40,7 @@ from .params import (
     AXLE_PRINT_D, AXLE_LIP_OD, AXLE_LIP_H, AXLE_Z_BOT, AXLE_Z_TOP,
     BRG_Z1,
     JOINT_H, JOINT_Z0, JOINT_Z1, JOINT_MORTISE_HOLE_D, JOINT_MORTISE_OD,
-    SLIT_W, STRIP_Z0, STRIP_Z1, SLIT_Z_CLR,
+    SLIT_W, SLIT_ZLO, SLIT_ZHI,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     BRAKE_H, RIM_H, KNURL_N, KNURL_DEPTH,
     SEP_PASS_W, SEP_PASS_ANGLE_DEG, SEP_PASS_R,
@@ -70,11 +70,11 @@ def _build_top():
     t = cyl(AXLE_PRINT_D, AXLE_Z_TOP - JOINT_Z0, z=JOINT_Z0)
     t = t.union(cyl(AXLE_LIP_OD, AXLE_LIP_H, z=BRG_Z1))   # lip on the inner race
     # slit OPEN through the tenon bottom (the axle slides DOWN onto the
-    # fixed strip); the closed top end sits SLIT_Z_CLR past the strip's
-    # upper end (the strip starts 4 in from the spring's edges, user) —
-    # a print floor in this half's flipped print, and the shaft stays
+    # fixed strip); the closed top end sits 3.2 in from the spring's
+    # edge — 0.8 of shrinkage margin past the strip's 4-inset upper end
+    # (user) — a print floor in this half's flipped print; the shaft is
     # SOLID from there up through the bearing
-    t = t.cut(_slit(JOINT_Z0 - 1.0, STRIP_Z1 + SLIT_Z_CLR))
+    t = t.cut(_slit(JOINT_Z0 - 1.0, SLIT_ZHI))
     return heal(t)
 
 
@@ -169,10 +169,10 @@ def _build_axle_separator():
     b = b.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=JOINT_Z0))
     # slit OPEN through the +z column top (the separator slides UP onto
     # the fixed strip; the mortise mouth splits into two C-halves —
-    # v2's design); the closed bottom end sits SLIT_Z_CLR under the
-    # strip's lower end (4 in from the spring's edge, user) — a print
-    # floor, and it keeps the column solid above the root cone
-    b = b.cut(_slit(STRIP_Z0 - SLIT_Z_CLR, JOINT_Z1 + 1.0))
+    # v2's design); the closed bottom end sits 3.2 in from the spring's
+    # edge — 0.8 of shrinkage margin past the strip's 4-inset lower end
+    # (user) — a print floor, keeping the column solid above the root cone
+    b = b.cut(_slit(SLIT_ZLO, JOINT_Z1 + 1.0))
     for i in range(LIDJ_SITES):                # lid-bayonet tenons STANDING on
         b = b.union(sep_tenon(i * 360.0 / LIDJ_SITES))   # the wall top (user:
                                                # sides swapped — the upright
