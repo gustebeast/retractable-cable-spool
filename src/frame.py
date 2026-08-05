@@ -125,8 +125,12 @@ def _wall_mortise(angle_deg):
 
 
 def _arc_tenon(site_deg):
-    """Arc tenon on a beam top, seated CENTERED on its arm, root sunk 1.0."""
-    return (flat_arc_solid(True, 2.0 * _TEN_HALF_A, -1.0, _TOPJ_R0)
+    """Arc tenon on a beam top, root sunk 1.0: its stop-side end where it
+    always was (TOP_STOP_WALL + seat inside the arm's CW face), but its
+    entry-side end now runs FLUSH with the arm's CCW face (user: the
+    retained channel's entry half was sitting empty at seat — same
+    length-fill as the mount joint; the stop arrangement unchanged)."""
+    return (flat_arc_solid(True, _TEN_HALF_A + _ARM_HALF_A, -1.0, _TOPJ_R0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A)
             .translate((0, 0, BEAM_Z1)))
 
