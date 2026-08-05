@@ -45,6 +45,7 @@ from .params import (
     PAD_JOINT_CLR, PAD_SPEC, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
     PAD_FLANGE_H, PAD_FLANGE_T,
     LEVER_PIN_L, PIN_TIP_END_Y, LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L,
+    WALL_IR, WALL_OR, BRAKE_STOP_GAP,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -255,6 +256,25 @@ BRAKE_SWEPT_TOP = max(
 # bays is gone, the windows run open through the top rim, so nothing of
 # the band sits over the pad's swing anymore. BRAKE_SWEPT_TOP stays
 # exported — frame.py's arch roof is set from it.)
+
+# ── BRAKE REST STOP anchor (user, params block): the pretwisted axle
+# would swing the free lever back toward its insertion pose; frame.py's
+# corbel catches the PAD's TOP INNER CORNER instead — the pad's
+# band-face top edge at y = BRAKE_LEV_Y1, the highest pad point inside
+# the corbel's radial window — so the bare lever still swings freely
+# for the axle install. BRAKE_STOP_ZC = the 45° catch face's height AT
+# the contact plane (y = BRAKE_LEV_Y1).
+_BRS_X, _BRS_Z = _rest_xz(_x_band_plane(BRAKE_LEV_Y1), Z_TOP_C)
+BRAKE_STOP_ZC = _BRS_Z + BRAKE_STOP_GAP
+assert WALL_IR + 0.1 <= _BRS_X <= WALL_OR - 0.3, (
+    f"A_BRS_WINDOW: the pad's top inner corner rests at x {_BRS_X:.2f}, "
+    f"off the stop corbel's radial window [{WALL_IR:.2f}, {WALL_OR:.2f}]")
+# the gap converts to rest tilt at the corner's rise rate (pivot_x −
+# corner_x per radian); it must stay a small bite out of the pretwist
+_BRS_TILT = math.degrees(BRAKE_STOP_GAP / (LEVER_PIVOT_X - _BRS_X))
+assert _BRS_TILT <= 0.3 * PIN_PRETWIST_DEG - 1e-9, (
+    f"A_BRS_TILT: stop gap costs {_BRS_TILT:.2f} deg of the "
+    f"{PIN_PRETWIST_DEG} deg pretwist — tighten BRAKE_STOP_GAP")
 # (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
 # whole wall stack, so there is no cap over the swinging pad anymore; the
 # nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays

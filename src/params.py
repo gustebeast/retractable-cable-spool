@@ -682,6 +682,22 @@ PIN_KEY_BASE_DEG = 45.0            # frame keyway clock: DIAMOND tip-up in the
 PIN_TIP_END_Y  = 4.4               # blind-bore floor |y| (the axle depth stop)
 PIN_GRIP_L     = 2.0               # axle proud of the column face (removal grip)
 PIN_PRETWIST_DEG = 12.0            # install pre-twist = seating preload (v2)
+# BRAKE REST STOP (user): a frame-side corbel the PAD — never the bare
+# lever — rests on under the pin's pretwist. Install story: the bare
+# lever must swing to +PIN_PRETWIST to take the axle (pocket↔frame-key
+# alignment), so the frame may not block the lever anywhere; the PAD,
+# slid on afterwards with the lever held plumb, is what the stop
+# catches when the axle twists the lever back. The corbel's 45°
+# underside (rising toward −y off the bay window's edge — the printable
+# corbel face) IS the catch face: the pad's preload arc has no
+# y-component, so it lands square on it. Height anchor derived in
+# levers.py (BRAKE_STOP_ZC); solid in frame.py.
+BRAKE_STOP_GAP      = 0.15         # vertical gap over the pad's top inner
+                                   # corner at plumb → rest settles ~1.3°
+                                   # past vertical (≈10.7° preload kept;
+                                   # tilt asserted small in levers.py)
+BRAKE_STOP_TIP_OVER = 1.5          # reach past the pad's inner end face
+BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud
 BOSS_BORE_ID   = PIN_SQ_S * math.sqrt(2.0) + 0.4   # 6.62 — clears the square's

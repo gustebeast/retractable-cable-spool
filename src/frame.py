@@ -39,7 +39,7 @@ from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import cone_solid, cyl, heal
-from .levers import BRAKE_SWEPT_TOP
+from .levers import BRAKE_SWEPT_TOP, BRAKE_STOP_ZC
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
@@ -59,7 +59,8 @@ from .params import (
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
-    RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
+    RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
+    BRAKE_STOP_TIP_OVER, BRAKE_STOP_TOP_T,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -271,6 +272,30 @@ def _hand_wedge():
             .translate((0.0, _SB_Y1 + 1.0, 0.0)))
 
 
+def _brake_rest_stop():
+    """BRAKE REST STOP (user, params block): a small corbel rooted in the
+    wall-band strip at the brake bay window's edge, reaching
+    BRAKE_STOP_TIP_OVER past the pad's inner end. Its 45° underside —
+    rising toward −y, the printable corbel face in this part's upright
+    print — IS the catch face: the pretwisted axle swings the assembled
+    lever back until the PAD's top inner corner lands on it (~1.3° past
+    plumb, asserted in levers.py). The bare lever clears it at every
+    angle from full pull to the axle-insertion pose, the braking stroke
+    dives away from it, and it stays >2 mm off the separator's rim
+    (all probed)."""
+    zc = BRAKE_STOP_ZC
+    y_c = BRAKE_LEV_Y1                        # −7 — the contact plane
+    y_tip = y_c - BRAKE_STOP_TIP_OVER         # −8.5
+    y_root = -4.5                             # buried into the band strip
+    z_top = zc + BRAKE_STOP_TOP_T
+    return (cq.Workplane("YZ")
+            .polyline([(y_root, zc + (y_c - y_root)),
+                       (y_tip, zc + (y_c - y_tip)),
+                       (y_tip, z_top), (y_root, z_top)])
+            .close().extrude(WALL_OR - WALL_IR)
+            .translate((WALL_IR, 0.0, 0.0)))
+
+
 def _floor():
     """The SPOKED coil-chamber floor (user's design): 1.6 plate — centre
     hub disc, FLOOR_SPOKE_N radial spokes, two tie rings under the coil
@@ -423,6 +448,7 @@ def _build_frame_bottom():
     for a in (0.0, 90.0, 180.0, 270.0):
         fb = fb.union(_beam(a)).union(_arc_tenon(a)).union(_beam_filler(a))
     fb = fb.union(_lever_mount())
+    fb = fb.union(_brake_rest_stop())
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     return heal(fb)
