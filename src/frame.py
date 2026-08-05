@@ -22,9 +22,12 @@ frame_bottom — NO bottom plus anymore (user's call, #815): the WHOLE
     for hand access). Prints −Z→+Z (floor plate on the bed).
 
 INSTALL: frame_top rotates straight onto frame_bottom — z-mate through
-the open quadrants, rotate to the angular stops (retraction torque
-preloads the joints; uninstall rotates back against load). Nothing
-slides anymore.
+the open quadrants, rotate CW (viewed +z) to the angular stops. The
+chirality is load-derived (user's audit): the parked spring loop
+(strip anchor CW on frame_top, ratchet pawl CCW on frame_bottom),
+pull-out and retraction brake drag all press frame_top CW = INTO the
+stops; uninstall (CCW) is a torque no sustained load produces.
+Nothing slides anymore.
 """
 
 import math
@@ -72,14 +75,22 @@ from .params import (
 # SITED via cadkit's ring↔arm CROSSING — ONE shared arrangement with the
 # mount's rings (user: share the code; the two joints differ only in
 # profile — flat-top here, full stop sign there): tenon flush at the
-# beam's CCW entry face spanning FRAMEJ_TEN_ARC = half the crossing (the
+# beam's entry face spanning FRAMEJ_TEN_ARC = half the crossing (the
 # 50% rule now applies here too, user's call), cavity + seat + entry
-# overshoot, and the stop wall is simply the solid CW half of the beam. ──────
+# overshoot, and the stop wall is simply the solid uncut half of the
+# beam. hand="ccw" — the CHIRALITY AUDIT (user's worry: rotational
+# joints working undone): parked with the ratchet holding, the spring's
+# torque loop reacts CW on frame_top (strip anchor at +X pulled −Y) and
+# CCW on frame_bottom (pawl holding the separator) — that relative
+# twist crosses THIS joint, so frame_top must seat rotating CW (viewed
+# +z) for the parked spring, pull-out and brake drag to all PRESS the
+# stops. Uninstall = frame_top CCW, a torque no sustained load makes. ────────
 _DOWN = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="down")
 FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
                 install="-x")
 FRAME_X = FRAME_J.crossing(FRAMEJ_R, BEAM_SIZE, FRAMEJ_TEN_ARC,
-                           seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER)
+                           seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER,
+                           hand="ccw")
 
 assert ((BEAM_IR + BEAM_SIZE) - (FRAMEJ_R + FRAMEJ_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
@@ -117,8 +128,8 @@ def _beam(angle_deg):
 
 def _arc_tenon(site_deg):
     """Arc tenon on a beam top (the cadkit crossing, root sunk 1.0): flush
-    at the beam's CCW entry face, spanning half the crossing inboard —
-    the stop-side half stays solid beam."""
+    at the beam's CW entry face (hand="ccw"), spanning half the crossing
+    inboard — the stop-side half stays solid beam."""
     return (FRAME_X.tenon(root=1.0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg)
             .translate((0, 0, BEAM_Z1)))
@@ -126,11 +137,11 @@ def _arc_tenon(site_deg):
 
 def _arc_mortise(site_deg):
     """Matching arc channel in frame_top's underside (the crossing's
-    cavity): its CW end wall — TOP_JOINT_SEAT_CLR shy of the seated tenon
-    — is the angular STOP; the CCW end sweeps open past the arm's CCW
-    face (the entry — the tenon rotates in CW from the open quadrant).
-    In the +z→−z print the cavities open at the print top and close with
-    plain floors."""
+    cavity): its CCW end wall — TOP_JOINT_SEAT_CLR shy of the seated
+    tenon — is the angular STOP; the CW end sweeps open past the arm's
+    CW face (the entry — the tenon swings in CCW from the open quadrant
+    = frame_top seats rotating CW over it). In the +z→−z print the
+    cavities open at the print top and close with plain floors."""
     return (FRAME_X.mortise(drop=2.0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg)
             .translate((0, 0, BEAM_Z1)))
