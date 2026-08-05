@@ -44,7 +44,7 @@ from .params import (
     WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1, WALL_ZB,
     BEAM_IR, BEAM_SIZE, BEAM_Z1,
     JOINT_SPEC, JOINT_WIDTH, JOINT_DEPTH,
-    LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z1,
+    LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
     CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0, CABLE_EXIT_Z1,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
     PERF_D, PERF_WEB, CH_TOP_Z,
@@ -174,14 +174,18 @@ def _build_wall_full():
     # lever bays: FULL-HEIGHT below the split (user's outline — every band
     # arc −z of the levers is EXCLUDED: it blocked the hand reaching the
     # handles from below; the coil-containment closure tried at #844 is
-    # deliberately traded away). ABOVE the split, wall_top stays a FULL
-    # CLOSED RING (user's call — the ring band [WALL_SPLIT_Z, WALL_Z1]
-    # sits above both levers' swept envelopes, asserted in levers.py, so
-    # it crosses the bays for free and keeps its +X tenon).
+    # deliberately traded away). The windows cut from BELOW the band's
+    # bottom face (a FLOOR_Z1 start left the band's bottom 1.6 slice
+    # ringing across the bays — user-caught at #846: it measured exactly
+    # one floor thickness because it WAS the floor-plate z-slice of the
+    # band). ABOVE the split, wall_top stays a FULL CLOSED RING (user's
+    # call — the ring band sits above both levers' swept envelopes,
+    # asserted in levers.py, so it crosses the bays for free and keeps
+    # its +X tenon).
     w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
-                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
+                            FLOOR_Z0 - 0.5, WALL_SPLIT_Z + 0.5))
     w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
-                            FLOOR_Z1, WALL_SPLIT_Z + 0.5))
+                            FLOOR_Z0 - 0.5, WALL_SPLIT_Z + 0.5))
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
     if WALL_PERF:                  # revertable — see the flag above
