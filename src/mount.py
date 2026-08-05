@@ -7,7 +7,7 @@ four hanging arc tenons into its own channels in the arms, tied by
 four mid-quadrant SPOKES, with four AXIS-HUGGING screw pads (use the
 pair matching your mounting beam's axis — x or y). Screw the mount to
 the wood first, offer the assembly up (all eight tenons pass through
-the open quadrants), rotate ~17° to the stops. Rotation keeps both
+the open quadrants), rotate ~11° to the stops. Rotation keeps both
 rings on their own circles, so only the spokes and pads move over the
 frame's plan — and they live in the 90°-wide quadrants.
 
@@ -15,9 +15,14 @@ Joint: cadkit's OCTAGON (stop-sign) ARC — the standard for two hosts
 printing the same direction (+z→−z): the cavities CLOSE on their
 one-bead roofs inside the arms with a ≥1.6 floor below (user's call —
 the earlier THROUGH mushroom left the arms' undersides open and weak;
-the spine shrank to MOUNT_SPINE_T to buy the octagon its room).
-Angular constants are the frame arc joints' own, evaluated per ring
-radius (they scale up at the inner ring). Spines are one stem wide;
+the spine shrank to MOUNT_SPINE_T to buy the octagon its room). The
+octagon carries the 0.30 Z-RELIEF natively now (user's mechanism: the
+tenon's post and the cavity's waist vertical both grow by the depth
+gap, opening the flare z-sandwich — the faces that grab — by 0.30
+while the arm's printed neck wall keeps its tier). SITED via cadkit's
+ring↔arm CROSSING, the SAME arrangement as the frame_top↔frame_bottom
+joints (user: shared code, different profile) evaluated per ring
+radius (angles scale up at the inner ring). Spines are one stem wide;
 over each arm's stop-wall zone they ride annular V-bottom grooves.
 
 PRINTS +z→−z (top face on the bed): rings, spokes and pads on the bed;
@@ -32,7 +37,7 @@ import cadquery as cq
 from cadkit.joinery import PrintSpec, joint
 
 from .params import (
-    NOZZLE, FRAME_Z1, FRAME_RIB, JOINT_CLR,
+    NOZZLE, FRAME_Z1, FRAME_RIB,
     MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
@@ -45,7 +50,8 @@ from .params import (
 _SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
 # cadkit's standard for two same-direction hosts: the OCTAGON — its
 # cavity CLOSES on the one-bead roof inside the arm (user's call: the
-# old THROUGH mushroom left the arm's underside open and weak)
+# old THROUGH mushroom left the arm's underside open and weak). The GF
+# specs give it the 0.30 z-relief natively (joint height includes it).
 MOUNT_J = joint(MOUNT_TEN_W, None, tenon=_SPEC, mortise=_SPEC,
                 install="-x")
 assert (MOUNT_MATE_Z - (MOUNT_J.height + MOUNT_J.clearance)
@@ -55,25 +61,16 @@ assert (MOUNT_MATE_Z - (MOUNT_J.height + MOUNT_J.clearance)
 _SITES = (0.0, 90.0, 180.0, 270.0)
 _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
 
-
-def _angles(R):
-    """(arm_half, seat, over, tenon_sweep) in degrees at radius R. The
-    tenon ANCHORS AT THE ARM'S ENTRY FACE and spans MOUNT_TEN_ARC of
-    arc inboard (user: the stop side of the crossing stays solid arm —
-    the stop wall is wherever the cavity ends, about half the crossing
-    in); seat/over are the frame arc joints' constants, arc-converted."""
-    arm = math.degrees(math.asin((FRAME_RIB / 2.0) / R))
-    seat = math.degrees(TOP_JOINT_SEAT_CLR / R)
-    over = math.degrees(TOP_ENTRY_OVER / R)
-    ten = math.degrees(MOUNT_TEN_ARC / R)
-    assert ten <= 2.0 * arm - seat - math.degrees(2 * NOZZLE / R) + 1e-9, \
-        f"mount tenon arc at r={R} leaves no stop-side arm material"
-    return arm, seat, over, ten
-
+# ONE crossing per ring — cadkit's ring↔arm arrangement, shared verbatim
+# with the frame arc joints (same seat/overshoot constants, same seating
+# chirality): tenon anchored at the arm's ENTRY face spanning
+# MOUNT_TEN_ARC (half the crossing — the stop-side half stays solid arm)
+_CROSS = {R: MOUNT_J.crossing(R, FRAME_RIB, MOUNT_TEN_ARC,
+                              seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER)
+          for R in _RINGS}
 
 # the shared install rotation: the DEEPER offset of the two rings' entries
-MOUNT_MATE_DEG = max(_angles(R)[2] + _angles(R)[3]
-                     for R in _RINGS) + 1.0                     # ≈ 11.1°
+MOUNT_MATE_DEG = max(c.free for c in _CROSS.values()) + 1.0     # ≈ 11.1°
 
 
 def _hang(w):
@@ -115,14 +112,13 @@ def _build_mount():
     m = None
     for R in _RINGS:
         ring = _annulus(R - hw, R + hw, MOUNT_MATE_Z, FRAME_Z1)
-        arm, seat, over, ten = _angles(R)
         for site in _SITES:
-            # hanging octagon arc tenons, SEATED: anchored at the arm's
-            # ENTRY face, spanning MOUNT_TEN_ARC inboard — the stop-side
-            # half of every crossing stays solid arm
+            # hanging octagon arc tenons, SEATED (the crossing pre-places
+            # them: anchored at the arm's ENTRY face, spanning half the
+            # crossing inboard — the stop-side half stays solid arm)
             ring = ring.union(
-                _hang(MOUNT_J.tenon_arc(R, ten, root=2.0))
-                .rotate((0, 0, 0), (0, 0, 1), site + arm - ten),
+                _hang(_CROSS[R].tenon(root=2.0))
+                .rotate((0, 0, 0), (0, 0, 1), site),
                 clean=False)
         m = ring if m is None else m.union(ring, clean=False)
     # mid-quadrant SPOKES tying the rings (full plate depth — they hang
@@ -169,23 +165,21 @@ def _v_groove_arc(R, a0, a1):
 
 
 def mount_channel_cuts():
-    """frame_top's cutters — per arm, per ring: the retained arc CAVITY
-    (open past the arm's CCW face — the entry; its CW end, TOP_STOP_WALL
-    inside the arm's CW face, is the stop — the frame arc joints'
-    arrangement verbatim, same seating rotation) plus the spine's
-    V-groove over the stop-wall zone so the rings pass at every install
-    angle."""
+    """frame_top's cutters — per arm, per ring: the crossing's retained
+    arc CAVITY (open past the arm's CCW face — the entry; its CW end
+    wall, seat-shy of the seated tenon, is the stop — the frame arc
+    joints' arrangement verbatim, same seating rotation) plus the
+    spine's V-groove over the stop-wall zone so the rings pass at every
+    install angle."""
     cuts = []
     for R in _RINGS:
-        arm, seat, over, ten = _angles(R)
-        cav_sweep = ten + seat + over
+        c = _CROSS[R]
         for site in _SITES:
             cuts.append(
-                _hang(MOUNT_J.mortise_arc(R, cav_sweep,
-                                          drop=MOUNT_SPINE_T + 0.5))
-                .rotate((0, 0, 0), (0, 0, 1), site + arm - ten - seat))
-            cuts.append(_v_groove_arc(R, site - arm - over,
-                                      site + arm - ten - seat + 0.1))
+                _hang(c.mortise(drop=MOUNT_SPINE_T + 0.5))
+                .rotate((0, 0, 0), (0, 0, 1), site))
+            cuts.append(_v_groove_arc(R, site - c.arm - c.over,
+                                      site + c.arm - c.ten - c.seat + 0.1))
     return cuts
 
 

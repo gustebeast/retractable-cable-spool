@@ -9,8 +9,9 @@ closes with 45° geometry in the band's upright print instead:
     dulled WALL_WIN_TIP ridge; the ring band over the bays closes on the
     ridges' short bridges (the ring the user asked for survives, as the
     band's own crown);
-  · cable EXIT port — its ~30°-wide ceiling closes with a SAWTOOTH of
-    CABLE_EXIT_TEETH 45° teeth (one gable would need ~19 of rise);
+  · cable EXIT port — NO ceiling at all now (user's call: the sawtooth
+    roof was an unnecessary overhang — the port just cuts OPEN through
+    the band's top rim, interrupting the crown over its ~30° span);
   · entry port — its house gable, as always.
 
 The former derived sill (the over-pull stop) is still gone;
@@ -23,11 +24,9 @@ import cadquery as cq
 
 from .helpers import cyl, heal
 from .params import (
-    NOZZLE,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1, WALL_ZB, WALL_WIN_TIP,
     LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
-    CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0, CABLE_EXIT_Z1,
-    CABLE_EXIT_TEETH,
+    CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
     PERF_D, PERF_WEB, CH_TOP_Z,
 )
@@ -53,12 +52,12 @@ def _lever_window(y0, y1, z0):
 
 
 def _cable_exit():
-    """The cable exit PORT — an arc wedge at (+x,+y) spanning the spool
-    chamber's z-band; the span covers exit tangencies from the bare drum
-    wall to design capacity (v2's math, params). Its ceiling closes with
-    a SAWTOOTH of CABLE_EXIT_TEETH 45° teeth — the port's roof in the
-    band's upright print (teeth sized at the wall's OD, so they overlap
-    slightly at the bore instead of leaving flat slivers outboard)."""
+    """The cable exit PORT — an arc wedge at (+x,+y) from the spool
+    chamber's floor OPEN THROUGH THE BAND'S TOP RIM (user's call: the
+    old sawtooth ceiling was an unnecessary overhang — nothing needs the
+    crown closed over this span, so the port has no roof at all and
+    prints trivially). The span covers exit tangencies from the bare
+    drum wall to design capacity (v2's math, params)."""
     a0 = math.radians(CABLE_EXIT_ANGLE_DEG - CABLE_EXIT_SPAN_DEG / 2.0)
     a1 = math.radians(CABLE_EXIT_ANGLE_DEG + CABLE_EXIT_SPAN_DEG / 2.0)
     n = 12
@@ -66,23 +65,9 @@ def _cable_exit():
     pts = [(0.0, 0.0)]
     pts += [(r_arc * math.cos(a0 + (a1 - a0) * i / n),
              r_arc * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
-    port = (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
-            .polyline(pts).close().extrude(CABLE_EXIT_Z1 - CABLE_EXIT_Z0))
-    pitch = CABLE_EXIT_SPAN_DEG / CABLE_EXIT_TEETH
-    tooth_w = math.radians(pitch) * (WALL_OR + 1.0)
-    rise = (tooth_w - NOZZLE) / 2.0
-    tooth = (cq.Workplane("YZ")
-             .polyline([(-tooth_w / 2.0, CABLE_EXIT_Z1 - 0.1),
-                        (tooth_w / 2.0, CABLE_EXIT_Z1 - 0.1),
-                        (NOZZLE / 2.0, CABLE_EXIT_Z1 + rise),
-                        (-NOZZLE / 2.0, CABLE_EXIT_Z1 + rise)])
-             .close().extrude((WALL_OR + 3.0) - 60.0)
-             .translate((60.0, 0.0, 0.0)))
-    for k in range(CABLE_EXIT_TEETH):
-        az = (CABLE_EXIT_ANGLE_DEG - CABLE_EXIT_SPAN_DEG / 2.0
-              + (k + 0.5) * pitch)
-        port = port.union(tooth.rotate((0, 0, 0), (0, 0, 1), az))
-    return port
+    return (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
+            .polyline(pts).close()
+            .extrude((WALL_Z1 + 1.0) - CABLE_EXIT_Z0))
 
 
 def _entry_port():
