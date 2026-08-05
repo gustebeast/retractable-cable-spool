@@ -269,14 +269,31 @@ def _hand_port(s):
     eave = (CH_TOP_Z if s > 0 else
             BRAKE_PIVOT_Z - (LEVER_BOSS_OD / 2.0) * math.sqrt(2.0)
             - (x1 - LEVER_PIVOT_X) - 0.8)
+    depth = (_SB_Y1 + 1.0) - (RATCHET_LEV_Y1 + LEVER_SIDE_CLR - 0.5)
     p = (cq.Workplane("XZ")
          .polyline([(WALL_OR, FLOOR_Z0 - 1.0), (x1, FLOOR_Z0 - 1.0),
                     (x1, eave), (WALL_OR, eave + w)])
-         .close().extrude((_SB_Y1 + 1.0) - (RATCHET_LEV_Y1
-                                            + LEVER_SIDE_CLR - 0.5)))
+         .close().extrude(depth))
     # ("XZ" extrudes toward −y: shift onto the +y block, mirror for −y)
     p = p.translate((0.0, _SB_Y1 + 1.0, 0.0))
     return p if s > 0 else p.mirror("XZ")
+
+
+def _hand_wedge():
+    """FOOT WEDGE across the WHOLE lever front — all three uprights (both
+    fork columns AND the +X beam, user's call): everything below the 45°
+    plane running −z−x → +x+z, hinged at the wall bottom's OD at the
+    bed, out past the outer faces. A finger can now hook up under the
+    grips from outside. The three uprights lose their bed feet and hang
+    from the band weld / webs / arches; their 45° undersides are
+    self-supporting in the upright print. The T-channel and the fused
+    band's weld tenons live far above the diagonal at these radii."""
+    return (cq.Workplane("XZ")
+            .polyline([(WALL_OR, FLOOR_Z0 - 1.0), (WALL_OR, FLOOR_Z0),
+                       (_R_OUT + 1.0, FLOOR_Z0 + (_R_OUT + 1.0 - WALL_OR)),
+                       (_R_OUT + 1.0, FLOOR_Z0 - 1.0)])
+            .close().extrude(2.0 * (_SB_Y1 + 1.0))
+            .translate((0.0, _SB_Y1 + 1.0, 0.0)))
 
 
 def _floor():
@@ -432,6 +449,7 @@ def _build_frame_bottom():
         fb = fb.union(_beam(a)).union(_arc_tenon(a)).union(_beam_filler(a))
     fb = fb.union(_lever_mount())
     fb = fb.cut(_hand_port(+1.0)).cut(_hand_port(-1.0))
+    fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     for a in (0.0, 90.0, 180.0, 270.0):
         fb = fb.cut(_wall_mortise(a))     # channels for the SLIDING pieces
