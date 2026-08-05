@@ -30,7 +30,8 @@ from cadkit.joinery import PrintSpec, joint
 
 from .params import (
     NOZZLE, FRAME_Z1, FRAME_RIB,
-    MOUNT_TEN_W, MOUNT_TEN_H, MOUNT_THRU_D, MOUNT_PLATE_T, MOUNT_MATE_Z,
+    MOUNT_TEN_W, MOUNT_TEN_H, MOUNT_TEN_ARC, MOUNT_THRU_D,
+    MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
     MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_AZ,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
@@ -47,21 +48,23 @@ _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
 
 
 def _angles(R):
-    """(arm_half, seat, stop, over, tenon_half) in degrees at radius R —
-    the frame arc joints' constants, arc-converted per ring."""
+    """(arm_half, seat, over, tenon_sweep) in degrees at radius R. The
+    tenon ANCHORS AT THE ARM'S ENTRY FACE and spans MOUNT_TEN_ARC of
+    arc inboard (user: the stop side of the crossing stays solid arm —
+    the stop wall is wherever the cavity ends, about half the crossing
+    in); seat/over are the frame arc joints' constants, arc-converted."""
     arm = math.degrees(math.asin((FRAME_RIB / 2.0) / R))
     seat = math.degrees(TOP_JOINT_SEAT_CLR / R)
-    stop = math.degrees(TOP_STOP_WALL / R)
     over = math.degrees(TOP_ENTRY_OVER / R)
-    ten = arm - stop - seat
-    assert ten >= math.degrees(2 * NOZZLE / R) - 1e-9, \
-        f"mount arc tenon at r={R} thinner than a quality-tier arc"
-    return arm, seat, stop, over, ten
+    ten = math.degrees(MOUNT_TEN_ARC / R)
+    assert ten <= 2.0 * arm - seat - math.degrees(2 * NOZZLE / R) + 1e-9, \
+        f"mount tenon arc at r={R} leaves no stop-side arm material"
+    return arm, seat, over, ten
 
 
 # the shared install rotation: the DEEPER offset of the two rings' entries
-MOUNT_MATE_DEG = max(sum((_angles(R)[0], _angles(R)[3], _angles(R)[4]))
-                     for R in _RINGS) + 1.0                     # ≈ 16.8°
+MOUNT_MATE_DEG = max(_angles(R)[2] + _angles(R)[3]
+                     for R in _RINGS) + 1.0                     # ≈ 11.1°
 
 
 def _hang(w):
@@ -103,12 +106,17 @@ def _build_mount():
     m = None
     for R in _RINGS:
         ring = _annulus(R - hw, R + hw, MOUNT_MATE_Z, FRAME_Z1)
-        _, _, _, _, ten = _angles(R)
-        for site in _SITES:                    # hanging arc tenons, SEATED,
-            ring = ring.union(                 # grown to FILL the cavities
-                _hang(MOUNT_J.tenon_arc(R, 2.0 * ten, root=2.0,
+        arm, seat, over, ten = _angles(R)
+        for site in _SITES:
+            # hanging arc tenons, SEATED: anchored at the arm's ENTRY
+            # face, spanning MOUNT_TEN_ARC inboard, grown to full cavity
+            # depth (height=) — the joint fills its mortise exactly, and
+            # the mortise is only as big as the joint
+            ring = ring.union(
+                _hang(MOUNT_J.tenon_arc(R, ten, root=2.0,
                                         height=MOUNT_TEN_H))
-                .rotate((0, 0, 0), (0, 0, 1), site - ten), clean=False)
+                .rotate((0, 0, 0), (0, 0, 1), site + arm - ten),
+                clean=False)
         m = ring if m is None else m.union(ring, clean=False)
     # mid-quadrant SPOKES tying the rings (flush slabs over open air)
     for az in MOUNT_SPOKE_AZ:
@@ -161,15 +169,15 @@ def mount_channel_cuts():
     angle."""
     cuts = []
     for R in _RINGS:
-        arm, seat, stop, over, ten = _angles(R)
-        cav_sweep = (ten + seat) + (arm + over)
+        arm, seat, over, ten = _angles(R)
+        cav_sweep = ten + seat + over
         for site in _SITES:
             cuts.append(
                 _hang(MOUNT_J.mortise_arc(R, cav_sweep,
                                           drop=MOUNT_PLATE_T + 0.5))
-                .rotate((0, 0, 0), (0, 0, 1), site - ten - seat))
+                .rotate((0, 0, 0), (0, 0, 1), site + arm - ten - seat))
             cuts.append(_v_groove_arc(R, site - arm - over,
-                                      site - ten - seat + 0.1))
+                                      site + arm - ten - seat + 0.1))
     return cuts
 
 

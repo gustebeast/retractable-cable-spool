@@ -597,6 +597,12 @@ MOUNT_RING2_R = 44 * NOZZLE        # 35.2 — INNER ring at half the diameter
 MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 2.4 — the spines ARE the mushroom stem:
                                    # they ride the cavities' stem slots with
                                    # zero ledge
+MOUNT_TEN_ARC = BEAM_SIZE / 2.0    # 5.2 — engaged tenon ARC LENGTH per site
+                                   # (user: trim the joint from the STOP
+                                   # side — the tenon anchors at the arm's
+                                   # ENTRY face and spans half the crossing,
+                                   # leaving the other half solid arm;
+                                   # mirrors the 50% width rule)
 MOUNT_TEN_H = MOUNT_MATE_Z - NOZZLE  # 5.6 — tenons FILL the through cavities
                                    # (user: don't waste the mortise depth):
                                    # the extra height rides the waist walls;
