@@ -4,10 +4,12 @@ bearing and the spring body will be fixed to the frame).
 
 Carried from v1/v2: the TWO-HALF glue joint (the joint collar can't pass
 the spring's flange holes, so the axle splits and the halves meet inside
-the spring). The strip slits are closed WINDOWS now (user's call): each
-half keeps a solid SLIT_END_CAP band at its joint-side face — the tenon
-tip and the mortise mouth are full-section — and the strip's end tongue
-threads the windows rather than the halves sliding onto the strip.
+the spring). The strip slits are OPEN-ENDED slots (user's call — the
+closed-window experiment is reversed: the spring's central strip is
+FIXED and cannot thread a window, so the halves SLIDE ONTO the strip,
+v2's design): the separator's slit runs open through its +z column top
+(the mortise mouth is split), axle_top's runs open through its tenon
+bottom (the tenon tip is split).
 
   * TOP half — retention lip at the very top (rests on the 608's inner
     race: the axle can't pass down through the bearing; with the bearing
@@ -32,13 +34,13 @@ import math
 
 import cadquery as cq
 
-from .helpers import cone_solid, cyl, heal
+from .helpers import cone_solid, cyl, drop_stray_shells, heal
 from .lid_joint import sep_tenon
 from .params import (
     AXLE_PRINT_D, AXLE_LIP_OD, AXLE_LIP_H, AXLE_Z_BOT, AXLE_Z_TOP,
     BRG_Z1,
     JOINT_H, JOINT_Z0, JOINT_Z1, JOINT_MORTISE_HOLE_D, JOINT_MORTISE_OD,
-    SLIT_W, SLIT_END_CAP,
+    SLIT_W, STRIP_Z0, STRIP_Z1, SLIT_Z_CLR,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     BRAKE_H, RIM_H, KNURL_N, KNURL_DEPTH,
     SEP_PASS_W, SEP_PASS_ANGLE_DEG, SEP_PASS_R,
@@ -50,28 +52,29 @@ from .params import (
 _SLIT_Y_OVERSHOOT = JOINT_MORTISE_OD + 10.0
 
 
-def _slit(z0, z1, peak):
-    """Spring-strip slit window: cuts through the shaft in Y over z0..z1
-    (each half insets its own joint-side end by SLIT_END_CAP). The end
-    that closes OVERHEAD in the part's print gets a 45° house roof ^
-    (user's call — the flat ceiling was a bridge): peak='top' for the
-    upright separator, 'bottom' for the flipped top half (its world-
-    bottom end is the print ceiling). The roof sits INSIDE the window's
-    envelope, so the solid end caps keep their full 5.6."""
+def _slit(z0, z1):
+    """Spring-strip slit: a plain open-ended slot through the shaft in Y
+    over z0..z1 — pass z0/z1 BEYOND the part so the joint-side end is
+    fully open (the halves slide onto the fixed strip, v2's design).
+    Each half's one CLOSED end lands as a print FLOOR in that part's
+    own orientation (separator upright → its closed bottom end; top
+    half flipped → its closed top end), so the old 45° roof peaks are
+    no longer needed anywhere."""
     w = SLIT_W / 2.0
-    if peak == "top":
-        pts = [(-w, z0), (w, z0), (w, z1 - w), (0.0, z1), (-w, z1 - w)]
-    else:
-        pts = [(-w, z0 + w), (0.0, z0), (w, z0 + w), (w, z1), (-w, z1)]
-    return (cq.Workplane("XZ").polyline(pts).close()
+    return (cq.Workplane("XZ")
+            .polyline([(-w, z0), (w, z0), (w, z1), (-w, z1)]).close()
             .extrude(_SLIT_Y_OVERSHOOT / 2.0, both=True))
 
 
 def _build_top():
     t = cyl(AXLE_PRINT_D, AXLE_Z_TOP - JOINT_Z0, z=JOINT_Z0)
     t = t.union(cyl(AXLE_LIP_OD, AXLE_LIP_H, z=BRG_Z1))   # lip on the inner race
-    t = t.cut(_slit(JOINT_Z0 + SLIT_END_CAP, JOINT_Z1,
-                    peak="bottom"))                   # solid tenon tip band
+    # slit OPEN through the tenon bottom (the axle slides DOWN onto the
+    # fixed strip); the closed top end sits SLIT_Z_CLR past the strip's
+    # upper end (the strip starts 4 in from the spring's edges, user) —
+    # a print floor in this half's flipped print, and the shaft stays
+    # SOLID from there up through the bearing
+    t = t.cut(_slit(JOINT_Z0 - 1.0, STRIP_Z1 + SLIT_Z_CLR))
     return heal(t)
 
 
@@ -164,8 +167,12 @@ def _build_axle_separator():
     b = b.union(_ratchet_star(SEP_Z0 + BRAKE_H, SEP_Z1))     # teeth grow on the ring
     b = b.union(_drum_wall())
     b = b.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=JOINT_Z0))
-    b = b.cut(_slit(JOINT_Z0, JOINT_Z1 - SLIT_END_CAP,
-                    peak="top"))                      # solid mortise-mouth band
+    # slit OPEN through the +z column top (the separator slides UP onto
+    # the fixed strip; the mortise mouth splits into two C-halves —
+    # v2's design); the closed bottom end sits SLIT_Z_CLR under the
+    # strip's lower end (4 in from the spring's edge, user) — a print
+    # floor, and it keeps the column solid above the root cone
+    b = b.cut(_slit(STRIP_Z0 - SLIT_Z_CLR, JOINT_Z1 + 1.0))
     for i in range(LIDJ_SITES):                # lid-bayonet tenons STANDING on
         b = b.union(sep_tenon(i * 360.0 / LIDJ_SITES))   # the wall top (user:
                                                # sides swapped — the upright
@@ -183,7 +190,9 @@ def _build_axle_separator():
     b = b.cut(cone_solid(d_bottom=BRG_BORE, d_top=BOT_CONE_CAP_D,
                          h=BOT_CONE_CAP_Z - BOT_SEAT_CONE_Z0,
                          z_base=BOT_SEAT_CONE_Z0))
-    return heal(b)
+    # a lid-bayonet tenon fuse strands an orphan internal face (an OPEN
+    # second shell — Bambu flags it); strip it (see helpers)
+    return drop_stray_shells(heal(b))
 
 
 axle_top = _build_top()

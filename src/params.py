@@ -125,12 +125,22 @@ JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — colla
                                                    # (user's call — no narrowing
                                                    # below the collar)
 SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
-SLIT_END_CAP         = 7 * NOZZLE                  # 5.6 — solid band between each
-                                                   # half's slit and its joint-side
-                                                   # face (user's call): the slits
-                                                   # are closed WINDOWS now, not
-                                                   # open-ended slots — the strip's
-                                                   # end tongue threads the window
+# (SLIT_END_CAP is RETIRED — user's call reversed: the spring's central
+# strip is FIXED and cannot thread a closed window, so each half's slit
+# is FULLY OPEN at its joint-side end and the halves SLIDE ONTO the
+# strip — v2's design: separator open through its +z column top,
+# axle_top open through its tenon bottom.)
+# The strip does NOT span the whole spring: it starts 4 in from the
+# spring's top/bottom edges (user 2026-08-05), so each half's slit only
+# needs to cover the STRIP zone (+ clearance) — the closed ends land
+# just past the strip's ends, and the two slits need to overlap only
+# inside that zone:
+STRIP_Z0   = SPRING_Z0 + 4.0       # −28 — strip lower end
+STRIP_Z1   = SPRING_Z1 - 4.0       # −4  — strip upper end (= JOINT_Z1)
+SLIT_Z_CLR = 1.0                   # slit closed-end room past the strip end
+assert STRIP_Z1 + SLIT_Z_CLR <= SPRING_Z1 + 1e-9, \
+    "top-axle slit would poke out of the spring (shaft must stay solid " \
+    "through the bearing above)"
 
 # ── Separator (brake + ratchet rims), FUSED to the bottom axle ───────────────
 # v2's standalone sliding rim, ported: now a SOLID disk (no bore, no key
@@ -844,9 +854,9 @@ assert JOINT_Z0 >= SPRING_Z0 + SPRING_FLANGE_T - 1e-9, \
     "joint bore reaches below the spring's bottom flange interior"
 assert AXLE_ROOT_CONE_H <= SEP_SPRING_CLR, \
     "axle root cone pokes past the spring's bottom face"
-# the slit must cover the strip (assume the strip is centred between the
-# flange interiors — measure and pin down when the spring body mount lands)
-_STRIP_ZC = (SPRING_Z0 + SPRING_Z1) / 2.0
-assert (JOINT_Z0 <= _STRIP_ZC - SPRING_STRIP_W / 2.0 + 1e-9
-        and _STRIP_ZC + SPRING_STRIP_W / 2.0 <= JOINT_Z1 + 1.0), \
-    "spring-strip span not covered by the joint slit"
+# strip-zone coverage: the separator's slit floor sits SLIT_Z_CLR under
+# the strip's lower end and must stay above the axle root cone; the
+# top half's slit ceiling sits SLIT_Z_CLR over the strip's upper end
+assert STRIP_Z0 - SLIT_Z_CLR >= SEP_Z1 + AXLE_ROOT_CONE_H - 1e-9, \
+    "separator slit floor reaches down into the axle root cone"
+assert STRIP_Z0 < STRIP_Z1, "spring strip zone inverted"
