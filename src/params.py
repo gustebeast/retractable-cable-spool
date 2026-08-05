@@ -524,28 +524,30 @@ assert LOOP_D_TIGHT / 2.0 >= CABLE_BEND_R_MIN - 1e-9, \
 assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
     "loose coil pinches the wall bore"
 
-# ── Wall ↔ beam T joints (cadkit slide_joint, install="-z" — v2's numbers,
-# all print-proven at the 0.8 nozzle in PETG-GF) ─────────────────────────────
+# ── Wall clearances (the T-joint POLICY values live on — the wall↔beam T
+# joints themselves are GONE, user's call: the wall is ONE fused band now,
+# no sliding pieces, so JOINT_CLR/JOINT_BACK_CLR remain as the project's
+# print-proven lateral / depth-face clearances for every other joint) ────────
 JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
 JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
-JOINT_WIDTH = 6.5 * NOZZLE         # 5.2 — the smallest box whose tenon keeps
-                                   # EVERY wall segment ≥ 1.6 (v2 print find)
-JOINT_DEPTH = joint_box_min(JOINT_SPEC, JOINT_SPEC, install="-z",
-                            quality=True)[1]     # 3.5
-JOINT_SEAT_CLR = 0.15              # z seating clearance at the channel stops
-WALL_ZB       = FLOOR_Z0           # wall band bottom — FUSED into frame_bottom
-                                   # now (user's call; only wall_top + collar
-                                   # still slide)
-# (v2's wall_collar is GONE — user's call: above wall_top, four identical
-# flat LOCK STRIPS (wall.py) fill the beam channels up to frame_top's
-# underside and z-lock the stack. MORTISE_L is derived below — the channel
-# stop sits at the fused band's top at WALL_SPLIT_Z.)
+WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
+                                   # into frame_bottom, bed to lid-top
+                                   # (user: wall_top, the 4 lock strips and
+                                   # the beam T channels are all RETIRED)
 
-# frame_top ↔ frame_bottom ROTATIONAL arc joints (v2's half-arrowhead, the
-# same TOPJ_* profile the lid bayonet uses — angular constants from v2)
+# frame_top ↔ frame_bottom ROTATIONAL arc joints — now cadkit's MUSHROOM
+# arc, TWO-SIDED (user: v2 halved this joint to one flare for T-channel
+# access; the T is retired, so the second flare returns — a stop sign
+# with the top chopped off: the flat top prints fine because the two
+# hosts print in OPPOSITE directions, so no roof geometry is needed)
 TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
+FRAMEJ_W = 6 * NOZZLE              # 4.8 — joint width (stem 2.4, cadkit)
+FRAMEJ_R = 99 * NOZZLE             # 79.2 — profile centreline radius on the
+                                   # beams: cavity [76.65, 81.75] keeps a
+                                   # 1.6+ outer wall and a 2.9 web to the
+                                   # mount ring's cavities (frame.py asserts)
 
 # ── MOUNT — desk/wall TWIST-LOCK RING (v3; v2's validated screw) ─────────────
 # ONE CONTINUOUS ring (user: a one-piece mount can't be screwed down at
@@ -564,11 +566,15 @@ TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 # install sweep trivial: the ring maps onto its own circle, so nothing
 # ever sweeps across the centre — the reason a slide-in bypass around
 # the axle could not work. Remove: rotate back, drop away.
-# Joint: the flat-top mushroom ARC (cadkit, THROUGH mortise — both
-# hosts print +z→−z, and the cavities exit the arms' undersides over
-# the open bays), hanging from a flush SPINE ring exactly one stem wide
-# (a wider slot floor would bridge in the frame's print). Over each
-# arm's stop-wall zone the spine rides an annular V-bottom groove.
+# Joint: cadkit's OCTAGON (stop-sign) ARC — the library's standard for
+# two hosts printing the same direction (user's call at #864: the old
+# THROUGH-mushroom avoided the stop sign by leaving the cavity open at
+# the arm's underside, which weakened the arm; the octagon closes the
+# cavity on its one-bead roof with a ≥1.6 floor left below — the spine
+# shrank to MOUNT_SPINE_T to raise the mating plane and buy the room).
+# The tenons hang from a flush SPINE ring exactly one stem wide (a
+# wider slot floor would bridge in the frame's print); over each arm's
+# stop-wall zone the spine rides an annular V-bottom groove.
 WOOD_SCREW_SHAFT_D = 4.0           # v2's validated screw geometry, verbatim
 WOOD_SCREW_HEAD_D  = 9.3           # countersunk-head pocket Ø at the face
 WOOD_SCREW_HEAD_H  = 4.0           # cone depth
@@ -578,14 +584,19 @@ MOUNT_PLATE_T = 5 * NOZZLE         # 4.0 — pad/spine thickness: the MINIMUM
 assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
     "mount plate too thin to countersink the wood screw flush"
 
-MOUNT_TEN_W  = 6 * NOZZLE          # 4.8 — joint width (down from v2's 6.4,
-                                   # user: the cavities must leave ~50% of
-                                   # the arm's width intact — asserted)
-MOUNT_MATE_Z = FRAME_RIB - MOUNT_PLATE_T           # 6.4 — the joint's mating
+MOUNT_TEN_W  = 5 * NOZZLE          # 4.0 — joint width: the largest whose
+                                   # OCTAGON swallow fits above the 1.6
+                                   # arm floor (asserted in mount.py); its
+                                   # cavity leaves 59% of the arm intact
+                                   # (user's ≥~50% rule, asserted)
+MOUNT_SPINE_T = 3 * NOZZLE         # 2.4 — spine ring depth (was 4.0: the
+                                   # shallower spine raises the mating
+                                   # plane, buying the octagon its room;
+                                   # the screw PADS keep MOUNT_PLATE_T)
+MOUNT_MATE_Z = FRAME_RIB - MOUNT_SPINE_T           # 8.0 — the joint's mating
                                                    # plane (spine underside)
-MOUNT_THRU_D = MOUNT_MATE_Z + 1.0                  # 7.4 — cavity run past the
-                                                   # mating plane: out the arm's
-                                                   # underside → THROUGH
+MOUNT_FLOOR_MIN = 2 * NOZZLE       # 1.6 — solid arm required under the
+                                   # closed cavities (user's call)
 MOUNT_RING_R  = 89 * NOZZLE        # 71.2 — outer ring centreline (near the
                                    # arm ends, user's call; radial keep-out
                                    # to the arc joints asserted in frame.py)
@@ -594,21 +605,15 @@ MOUNT_RING2_R = 44 * NOZZLE        # 35.2 — INNER ring at half the diameter
                                    # arc joinery in all four arms; its
                                    # cavities stop exactly one 1.6 web
                                    # inboard of the +x anchor rib (assert)
-MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 2.4 — the spines ARE the mushroom stem:
-                                   # they ride the cavities' stem slots with
-                                   # zero ledge
+MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 2.0 — the spines ARE the octagon stem
+                                   # (cadkit's width/2 optimum): they ride
+                                   # the cavities' stem slots with zero ledge
 MOUNT_TEN_ARC = BEAM_SIZE / 2.0    # 5.2 — engaged tenon ARC LENGTH per site
                                    # (user: trim the joint from the STOP
                                    # side — the tenon anchors at the arm's
                                    # ENTRY face and spans half the crossing,
                                    # leaving the other half solid arm;
-                                   # mirrors the 50% width rule)
-MOUNT_TEN_H = MOUNT_MATE_Z - NOZZLE  # 5.6 — tenons FILL the through cavities
-                                   # (user: don't waste the mortise depth):
-                                   # the extra height rides the waist walls;
-                                   # tips stop one bead above the arms'
-                                   # undersides (the inner ring's tips hover
-                                   # over the spring-flange plane there)
+                                   # mirrors the ~50% width rule)
 MOUNT_SPOKE_W  = 4 * NOZZLE        # 3.2 — ring-tie spokes
 MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
                                    # stay over open air at EVERY install
@@ -645,11 +650,10 @@ assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
 # annular V-GROOVE for the spine over each arm's stop-wall zone (the
 # groove's floor is the roof of the slot in the frame's +z→−z print —
 # vertical walls, then a 45° V closing on a one-bead(+clearance) flat):
-MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 3.5 — groove width
-MOUNT_GRV_VERT = MOUNT_PLATE_T + JOINT_CLR         # 4.15 — vertical depth
-                                                   # (the spine runs full-T)
+MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 2.3 — groove width
+MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
 MOUNT_GRV_FLAT = NOZZLE + 2 * JOINT_CLR            # 1.1 — dulled V flat
-MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 5.35
+MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.15
 
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
@@ -725,8 +729,10 @@ LEVER_PIN_L = (RATCHET_LEV_Y1 + LEVER_SIDE_CLR + POST_OUT_T
                + PIN_GRIP_L - PIN_TIP_END_Y)       # 21.6
 
 # ── Wall openings (v2's derivations, v3 anchors) ─────────────────────────────
-WALL_TOP_BAND = 4 * NOZZLE         # 3.2 — solid ring above the HIGHEST
-                                   # opening = wall_top's +z extent (user's
+_WALL_TOP_BAND_RETIRED = 4 * NOZZLE   # (kept only for the comment trail —
+                                   # wall_top itself is retired; the band
+                                   # runs to LID_Z1 and the openings close
+                                   # with 45° gables/teeth instead) (user's
                                    # call; was 1.6)
 # cable EXIT port at (+x,+y): the cable leaves tangent to its current
 # wrap, so the port spans tangency angles from the bare drum wall out to
@@ -765,21 +771,23 @@ RATCHET_WIN_Z0  = (RATCHET_PIVOT_Z + _DX_STOP * _STOP_S
                                                    # stays as the reference z
                                                    # for the lever's future
                                                    # stop tab
-# Both lever bays run through the ENTIRE wall stack now (user #834 — the
-# top band over the bays deleted; the +x sector of wall_top goes with it,
-# else the beam-strip between the bays is an island). The wall's highest
-# remaining opening is therefore the EXIT PORT, and the highest-hole+3.2
-# rule shrinks wall_top accordingly.
-# wall verticals
-WALL_Z1 = CABLE_EXIT_Z1 + WALL_TOP_BAND            # −26.7 — wall_top's flat
-                                                   # top: highest opening + 3.2
-MORTISE_L = (BEAM_Z1 + 1.0) - (WALL_SPLIT_Z - JOINT_SEAT_CLR)   # channel: stop
-                                                   # just under the fused
-                                                   # band's top → past beam top
-assert WALL_Z1 - CABLE_EXIT_Z1 >= WALL_TOP_BAND - 1e-9, \
-    "cable exit port breaks the wall's top band"
-assert PIN_TIP_END_Y - (JOINT_WIDTH / 2.0 + JOINT_CLR) >= 2 * NOZZLE - 1e-9, \
-    "wall-joint cavity too wide: under 1.6 of beam left beside the pin bores"
+# wall verticals — ONE fused band, bed → the LID'S TOP (user's call: the
+# whole wall is frame_bottom now; the bay windows and the exit port close
+# with 45° gables/teeth in its upright print, wall.py)
+WALL_Z1 = LID_Z1                                   # −25.6 — band top = lid top
+# lever-bay window gables: dulled ridge width + the resulting crown of
+# solid ring left above the peaks (the ring band OVER the bays)
+WALL_WIN_TIP  = 3 * NOZZLE                         # 2.4 — dulled gable ridge
+_WIN_RISE = ((LEVER_WIN_Y1 - LEVER_WIN_Y0) - WALL_WIN_TIP) / 2.0   # 5.6
+assert WALL_Z1 - (WALL_SPLIT_Z + _WIN_RISE) >= NOZZLE - 1e-9, \
+    "bay-window gables poke through the band's top ring"
+# exit-port ceiling SAWTOOTH: N 45° teeth tile the ~30° span (one gable
+# would need ~19 of rise; 4.3 is available)
+CABLE_EXIT_TEETH = 5
+_EXIT_TOOTH_W = math.radians(CABLE_EXIT_SPAN_DEG / CABLE_EXIT_TEETH) * WALL_IR
+assert (WALL_Z1 - (CABLE_EXIT_Z1 + (_EXIT_TOOTH_W - NOZZLE) / 2.0)
+        >= NOZZLE - 1e-9), \
+    "exit-port sawtooth teeth poke through the band's top ring"
 assert (LEVER_PIVOT_X + BOSS_BORE_ID / 2.0 + BOSS_RING_W
         <= BEAM_IR + BEAM_SIZE + 1e-9), \
     "thrust rings poke past the frame's +x face — shrink PIN_SQ_S"

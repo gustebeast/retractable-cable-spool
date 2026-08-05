@@ -252,12 +252,11 @@ BRAKE_SWEPT_TOP = max(
     max(_rest_xz(_x_band_plane(_y), Z_TOP_C)[1]
         for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1)),
 )
-# A_PAD_RING (A_PAD_WINDOW reborn — user closed wall_top into a full
-# ring): the ring band starts at WALL_SPLIT_Z above the bays, so the
-# pad's swing must stay under it
+# A_PAD_RING: the wall band's crown ring closes over the bays — its
+# gables spring from WALL_SPLIT_Z, so the pad's swing must stay under it
 assert WALL_SPLIT_Z - BRAKE_SWEPT_TOP >= 1.0 - 1e-9, (
     f"A_PAD_RING: brake pad's swept top {BRAKE_SWEPT_TOP:.2f} within 1.0 of "
-    f"the wall_top ring's underside at {WALL_SPLIT_Z:.2f}")
+    f"the band's crown-ring base at {WALL_SPLIT_Z:.2f}")
 # (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
 # whole wall stack, so there is no cap over the swinging pad anymore; the
 # nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays

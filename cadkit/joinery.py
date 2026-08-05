@@ -1269,13 +1269,16 @@ class Joint:
         minimal profile toward the cavity's exit — the extra rides the
         waist walls (more flank bearing, fuller cavity); keep it short of
         the host's far face so nothing pokes out."""
-        if self.family == "mushroom" and self.through:
+        if self.family == "mushroom":
+            if height is not None and not self.through:
+                raise ValueError("tenon height override is modelled for the "
+                                 "THROUGH mushroom site only")
             return _mushroom_tenon_arc(self.width, radius, sweep_deg,
                                        self.nozzle, self.clearance, root,
                                        height=height)
         if height is not None:
             raise ValueError("tenon height override is modelled for the "
-                             "THROUGH mushroom site only (the octagon sizes "
+                             "mushroom sites only (the octagon sizes "
                              "from `depth` at joint())")
         if self.family != "octagon":
             raise NotImplementedError(
@@ -1288,10 +1291,11 @@ class Joint:
         """Cavity CUTTER matching tenon_arc — sweep it past the host's open
         face on the entry side; the far angular end left inside is the
         stop."""
-        if self.family == "mushroom" and self.through:
+        if self.family == "mushroom":
             return _mushroom_mortise_arc(self.width, radius, sweep_deg,
                                          self.nozzle, self.clearance, drop,
-                                         height=self.depth,
+                                         height=(self.depth if self.through
+                                                 else None),
                                          back_clearance=self.back_clearance)
         if self.family != "octagon":
             raise NotImplementedError(
