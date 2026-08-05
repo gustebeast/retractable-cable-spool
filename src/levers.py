@@ -45,7 +45,6 @@ from .params import (
     PAD_JOINT_CLR, PAD_SPEC, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
     PAD_FLANGE_H, PAD_FLANGE_T,
     LEVER_PIN_L, PIN_TIP_END_Y, LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L,
-    WALL_SPLIT_Z,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -252,11 +251,10 @@ BRAKE_SWEPT_TOP = max(
     max(_rest_xz(_x_band_plane(_y), Z_TOP_C)[1]
         for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1)),
 )
-# A_PAD_RING: the wall band's crown ring closes over the bays — its
-# gables spring from WALL_SPLIT_Z, so the pad's swing must stay under it
-assert WALL_SPLIT_Z - BRAKE_SWEPT_TOP >= 1.0 - 1e-9, (
-    f"A_PAD_RING: brake pad's swept top {BRAKE_SWEPT_TOP:.2f} within 1.0 of "
-    f"the band's crown-ring base at {WALL_SPLIT_Z:.2f}")
+# (A_PAD_RING is RETIRED — user's call: the band's gable crown over the
+# bays is gone, the windows run open through the top rim, so nothing of
+# the band sits over the pad's swing anymore. BRAKE_SWEPT_TOP stays
+# exported — frame.py's arch roof is set from it.)
 # (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
 # whole wall stack, so there is no cap over the swinging pad anymore; the
 # nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays

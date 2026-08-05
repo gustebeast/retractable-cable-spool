@@ -5,14 +5,15 @@ are all RETIRED — frame.py fuses this band into frame_bottom and nothing
 slides). Everything that used to close in wall_top's inverted print
 closes with 45° geometry in the band's upright print instead:
 
-  · lever bay windows — full-width to WALL_SPLIT_Z, then 45° GABLES to a
-    dulled WALL_WIN_TIP ridge; the ring band over the bays closes on the
-    ridges' short bridges (the ring the user asked for survives, as the
-    band's own crown);
-  · cable EXIT port — NO ceiling at all now (user's call: the sawtooth
-    roof was an unnecessary overhang — the port just cuts OPEN through
-    the band's top rim, interrupting the crown over its ~30° span);
-  · entry port — its house gable, as always.
+  · lever bay windows — FULL-HEIGHT slots now, bed → THROUGH the band's
+    top rim (user's call: the 45° gable crown between the levers and
+    the lid was an overhang — remove it; the band's arcs are carried by
+    the bay webs / fork columns instead of a closed ring);
+  · cable EXIT port — NO ceiling either (user's call: the sawtooth roof
+    was an unnecessary overhang — the port cuts open through the top
+    rim over its ~30° span);
+  · entry port — its house gable, as always (a hole mid-band still
+    needs a printable roof).
 
 The former derived sill (the over-pull stop) is still gone;
 RATCHET_WIN_Z0 stays in params as the lever's future stop-tab reference.
@@ -24,7 +25,7 @@ import cadquery as cq
 
 from .helpers import cyl, heal
 from .params import (
-    WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1, WALL_ZB, WALL_WIN_TIP,
+    WALL_IR, WALL_OR, WALL_Z1, WALL_ZB,
     LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
     CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
@@ -37,16 +38,13 @@ def _ring(id_, od, z, h):
 
 
 def _lever_window(y0, y1, z0):
-    """Bay window through the wall at the +X lever azimuth: full-width up
-    to WALL_SPLIT_Z, then a 45° GABLE to the dulled WALL_WIN_TIP ridge —
-    the window's roof in the band's upright print."""
-    yc = (y0 + y1) / 2.0
-    rise = ((y1 - y0) - WALL_WIN_TIP) / 2.0
+    """Bay window through the wall at the +X lever azimuth: a full-width,
+    FULL-HEIGHT slot, open through the band's top rim (user's call: the
+    old 45° gable crown between the levers and the lid was an overhang
+    — gone; hand access and the lever swing own the whole bay now)."""
     return (cq.Workplane("YZ")
-            .polyline([(y0, z0), (y1, z0), (y1, WALL_SPLIT_Z),
-                       (yc + WALL_WIN_TIP / 2.0, WALL_SPLIT_Z + rise),
-                       (yc - WALL_WIN_TIP / 2.0, WALL_SPLIT_Z + rise),
-                       (y0, WALL_SPLIT_Z)])
+            .polyline([(y0, z0), (y1, z0),
+                       (y1, WALL_Z1 + 1.0), (y0, WALL_Z1 + 1.0)])
             .close().extrude((WALL_OR + 3.0) - (WALL_IR - 3.0))
             .translate((WALL_IR - 3.0, 0, 0)))
 
@@ -143,12 +141,11 @@ def _perforation():
 def _build_wall_full():
     # the one band: bed → the lid's top plane
     w = _ring(2 * WALL_IR, 2 * WALL_OR, WALL_ZB, WALL_Z1 - WALL_ZB)
-    # lever bays: FULL-HEIGHT below the split (user's outline — no band
-    # −z of the levers: hand access wins; windows cut from below the
-    # band's bottom face, the #847 lesson), closing above the split with
-    # 45° GABLES — the band's crown ring over the bays is the closed
-    # ring the user asked for, now part of the one-piece band (clears
-    # both levers' swept envelopes, asserted in levers.py)
+    # lever bays: FULL-HEIGHT slots, bed → through the top rim (user's
+    # calls: no band −z of the levers — hand access wins; windows cut
+    # from below the band's bottom face, the #847 lesson; and no crown
+    # ABOVE them either — the gable ring between the levers and the lid
+    # was an overhang, removed)
     w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0 - 0.5))
     w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0, FLOOR_Z0 - 0.5))
     w = w.cut(_cable_exit())
