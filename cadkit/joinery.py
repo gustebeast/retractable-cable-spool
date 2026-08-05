@@ -461,8 +461,49 @@ def _mushroom_tenon(width, length, nozzle=0.8, clearance=0.1, root=1.0,
     return cq.Workplane("YZ").polyline(pts).close().extrude(length)
 
 
+def _mushroom_cavity_pts(width, nozzle, base_z, clearance, back_clearance,
+                         pocket=False, height=None):
+    """CAVITY outline with SPLIT clearances (the flat-arc convention the
+    projects print-validated): lateral faces dilated `clearance`, the
+    Z-LOADED faces — the 45° flare pair (and a capped top) — backed off
+    by `back_clearance` instead. Fiber-filled filaments grab on the
+    z-sandwich long before the laterals bind (see joint_clearances);
+    the flare shift is VERTICAL by bc, keeping the face at 45°."""
+    c, bc = abs(clearance), abs(back_clearance)
+    pv = _bead_pref(nozzle)
+    grow = c * (math.sqrt(2.0) - 1.0)
+    hw = width / 2.0
+    stem = _STEM_FRAC * width
+    flare = hw - stem / 2.0
+    z_neck = pv + grow
+    z_wb = z_neck + flare
+    z_top = z_wb + pv
+    if height is not None:
+        if height < z_top - 1e-9:
+            raise ValueError(f"height {height:.3f} below the width's minimum "
+                             f"{z_top:.3f} mm")
+        top = height + bc
+    else:
+        top = z_top + bc
+    if pocket:
+        return [(hw + c, base_z), (hw + c, top),
+                (-hw - c, top), (-hw - c, base_z)]
+    return [(stem / 2.0 + c, base_z), (stem / 2.0 + c, z_neck - bc),
+            (hw + c, z_wb - bc), (hw + c, top),
+            (-hw - c, top), (-hw - c, z_wb - bc),
+            (-stem / 2.0 - c, z_neck - bc), (-stem / 2.0 - c, base_z)]
+
+
 def _mushroom_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
-                      pocket=False, height=None):
+                      pocket=False, height=None, back_clearance=None):
+    """Cavity CUTTER. Without `back_clearance`: the tenon profile dilated
+    uniformly (the original site). With it: split clearances — laterals
+    at `clearance`, z-faces at `back_clearance` (fiber depth relief)."""
+    if back_clearance is not None and abs(back_clearance - clearance) > 1e-9:
+        pts = _mushroom_cavity_pts(width, nozzle, -abs(drop), clearance,
+                                   back_clearance, pocket=pocket,
+                                   height=height)
+        return (cq.Workplane("YZ").polyline(pts).close().extrude(length))
     pts, _ = _mushroom_profile(width, nozzle, -abs(drop), clearance,
                                pocket=pocket, height=height)
     return (cq.Workplane("YZ").polyline(pts).close()
@@ -531,12 +572,18 @@ def _mushroom_tenon_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
 
 
 def _mushroom_mortise_arc(width, radius, sweep_deg, nozzle=0.8,
-                          clearance=0.1, drop=2.0, height=None):
-    """Cavity CUTTER matching _mushroom_tenon_arc — dilated `clearance`
-    per side (mitred in the radial plane), dropped `drop` below the
-    mating plane, swept over the LONGER arc (engagement + angular entry
-    overshoot + seat). Sweep past the host's open face on the entry
-    side; the far angular end left inside the host is the stop."""
+                          clearance=0.1, drop=2.0, height=None,
+                          back_clearance=None):
+    """Cavity CUTTER matching _mushroom_tenon_arc — dropped `drop` below
+    the mating plane, swept over the LONGER arc (engagement + angular
+    entry overshoot + seat). Sweep past the host's open face on the
+    entry side; the far angular end left inside the host is the stop.
+    With `back_clearance` the z-faces back off by it while the laterals
+    keep `clearance` (fiber depth relief, as the straight variant)."""
+    if back_clearance is not None and abs(back_clearance - clearance) > 1e-9:
+        pts = _mushroom_cavity_pts(width, nozzle, -abs(drop), clearance,
+                                   back_clearance, height=height)
+        return _arc_wire(pts, radius).revolve(sweep_deg, (0, 0), (0, 1))
     pts, _ = _mushroom_profile(width, nozzle, -abs(drop), clearance,
                                height=height)
     return _arc_wire(pts, radius, clearance).revolve(sweep_deg, (0, 0), (0, 1))
@@ -903,8 +950,11 @@ def _hook_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0):
 # lateral 0.15 slid fine, the depth faces needed 0.3. The LATERAL faces keep
 # the table value, and the T's depth allocation runs on the depth gap (tenon
 # lip pre-grows by it), so every printed wall on both halves keeps its tier
-# size — the depth BOX grows instead. Other families use the base value
-# (their fiber behavior is unmeasured — print-check before extending the rule).
+# size — the depth BOX grows instead. The MUSHROOM family applies the same
+# split (user-directed, cable-spool mount rings: the flare z-faces grab):
+# laterals at the base, the 45° flare pair and any capped top backed off by
+# the depth gap. Other families still use the base value (their fiber
+# behavior is unmeasured — print-check before extending the rule).
 #
 # `fit` picks the tier: "normal" (default) = the print-tested slide fit;
 # "loose" = 2× BOTH values, for joints that must slide with zero effort
@@ -1180,7 +1230,8 @@ class Joint:
                 return _mushroom_mortise(self.width, L, self.nozzle,
                                          self.clearance, drop, pocket=True,
                                          height=(self.depth if self.through
-                                                 else None))
+                                                 else None),
+                                         back_clearance=self.back_clearance)
             if self.family != "octagon":
                 raise NotImplementedError(
                     "pocket mortises are modelled for the install='x' up+up "
@@ -1194,7 +1245,8 @@ class Joint:
             return _mushroom_mortise(self.width, L, self.nozzle,
                                      self.clearance, drop,
                                      height=(self.depth if self.through
-                                             else None))
+                                             else None),
+                                     back_clearance=self.back_clearance)
         if self.family == "hook":
             return _hook_mortise(self.width, L, self.nozzle,
                                  self.clearance, drop)
@@ -1239,7 +1291,8 @@ class Joint:
         if self.family == "mushroom" and self.through:
             return _mushroom_mortise_arc(self.width, radius, sweep_deg,
                                          self.nozzle, self.clearance, drop,
-                                         height=self.depth)
+                                         height=self.depth,
+                                         back_clearance=self.back_clearance)
         if self.family != "octagon":
             raise NotImplementedError(
                 "rotational (arc) installs are modelled for the up+up "
@@ -1964,8 +2017,8 @@ if __name__ == "__main__":
                through=True)
     ok = (jt.family == "mushroom"
           and abs(jt.mortise(drop=2.0).val().BoundingBox().zmax
-                  - (9.0 + jt.clearance)) < 1e-6
-          and abs(jt.tenon().val().BoundingBox().zmax
+                  - (9.0 + jt.back_clearance)) < 1e-6   # z-faces run the
+          and abs(jt.tenon().val().BoundingBox().zmax   # DEPTH gap (fiber)
                   - _mushroom_height(6.4, 0.8, CGF)) < 1e-6)
     print(f"  up+up through -> mushroom  {'ok' if ok else 'FAIL'}")
     if not ok:
