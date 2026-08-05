@@ -661,11 +661,13 @@ assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
     "seated pads must land exactly on the arm flanks (they are the stop)"
 # annular V-GROOVE for the spine over each arm's stop-wall zone (the
 # groove's floor is the roof of the slot in the frame's +z→−z print —
-# vertical walls, then a 45° V closing on a one-bead(+clearance) flat):
+# vertical walls, then a 45° V closing on a ONE-BEAD flat: 0.8 is the
+# bridging limit, user's call — the earlier +2·clearance flat printed a
+# 1.1 bridge; the V runs 0.15 deeper instead):
 MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 2.3 — groove width
 MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
-MOUNT_GRV_FLAT = NOZZLE + 2 * JOINT_CLR            # 1.1 — dulled V flat
-MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.15
+MOUNT_GRV_FLAT = NOZZLE                            # 0.8 — dulled V flat
+MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
