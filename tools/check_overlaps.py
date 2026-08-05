@@ -13,7 +13,6 @@ from cadkit.overlap_check import run
 
 from src.frame import frame_top, frame_bottom
 from src.mount import mount_ring
-from src.wall import wall_top, wall_lock
 from src.axle import axle_top, axle_separator
 from src.lid import lid
 from src.levers import (ratchet_lever, brake_lever, brake_pad_tpu,
@@ -26,10 +25,6 @@ def collect_components():
     return [
         ("frame_top",   frame_top),
         ("frame_bottom", frame_bottom),
-        ("wall_top",    wall_top),
-        *[(f"wall_lock_{a}",
-           wall_lock.rotate((0, 0, 0), (0, 0, 1), a))
-          for a in (0, 90, 180, 270)],
         ("mount_ring",  mount_ring),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),

@@ -1,89 +1,64 @@
 """WALL — the containment ring around the separator/lid (WALL_SEP_CLR off
-their OD, user's 1.6 / 2.4 thick). The BOTTOM band is no longer a part: it
-exports as a solid that frame.py FUSES into frame_bottom (user's call — it
-replaces the bottom plus as the beams' structural tie). The lever bays
-are FULL-HEIGHT below the split (user's outline: no band −z of the
-levers — hand access to the handles wins over closing the chamber at
-the bays), while wall_top above the split is a FULL CLOSED RING riding
-all four tenons (user's call — it clears both levers' swept envelopes).
+their OD, user's 1.6 / 2.4 thick). ONE FUSED BAND now, bed → the LID'S
+TOP (user's call: wall_top, the four lock strips and the beam T channels
+are all RETIRED — frame.py fuses this band into frame_bottom and nothing
+slides). Everything that used to close in wall_top's inverted print
+closes with 45° geometry in the band's upright print instead:
+
+  · lever bay windows — full-width to WALL_SPLIT_Z, then 45° GABLES to a
+    dulled WALL_WIN_TIP ridge; the ring band over the bays closes on the
+    ridges' short bridges (the ring the user asked for survives, as the
+    band's own crown);
+  · cable EXIT port — its ~30°-wide ceiling closes with a SAWTOOTH of
+    CABLE_EXIT_TEETH 45° teeth (one gable would need ~19 of rise);
+  · entry port — its house gable, as always.
+
 The former derived sill (the over-pull stop) is still gone;
-RATCHET_WIN_Z0 stays in params as the lever's future stop-tab
-reference. Above the split, v2's sliding pieces remain:
-
-  wall_top  — prints +Z→−Z (INVERTED). The upper part of the ratchet
-      window and the exit port — their world-CEILINGS are bed-side on its
-      plate, so every opening closes with NO overhang, NO supports. Ends
-      flat at WALL_Z1 = the highest opening + 3.2 (user's call; that flat
-      top is its bed).
-  wall_lock — ONE printed part, used FOUR times (replaces v2's collar,
-      user's call): a flat 1.6 prism, beam-wide, carrying a T tenon —
-      it slides down a beam channel ABOVE the seated wall_top and fills
-      it to the frame_top underside plane, z-locking the stack. Prints
-      standing (the T's plan profile as vertical walls, like the wall).
-
-The split plane (WALL_SPLIT_Z) passes through the CABLE EXIT PORT at
-(+x,+y): floor in the fused band, ceiling in wall_top. Every piece carries
-its segment of the 4 T tenons (the fused band's double as its weld into
-the beams), so all align in the same channels.
-
-INSTALL: wall_top slides down the beam channels onto the fused band's top
-face, then the four lock strips drop into the channels above it; frame_top
-caps the channels (the strips end at its underside plane — the seated
-stack can rise only JOINT_SEAT_CLR).
+RATCHET_WIN_Z0 stays in params as the lever's future stop-tab reference.
 """
 
 import math
 
 import cadquery as cq
 
-from cadkit.joinery import joint
-
 from .helpers import cyl, heal
 from .params import (
     NOZZLE,
-    WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1, WALL_ZB,
-    BEAM_IR, BEAM_SIZE, BEAM_Z1,
-    JOINT_SPEC, JOINT_WIDTH, JOINT_DEPTH,
+    WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1, WALL_ZB, WALL_WIN_TIP,
     LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
     CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0, CABLE_EXIT_Z1,
+    CABLE_EXIT_TEETH,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
     PERF_D, PERF_WEB, CH_TOP_Z,
 )
-
-_TEN_L = WALL_Z1 - WALL_ZB                        # band bottom → wall_top's top
-_JOINT = joint(JOINT_WIDTH, _TEN_L, tenon=JOINT_SPEC, mortise=JOINT_SPEC,
-               install="-z", depth=JOINT_DEPTH)   # wall slides DOWN to its stop
 
 
 def _ring(id_, od, z, h):
     return cyl(od, h, z=z).cut(cyl(id_, h + 1.0, z=z - 0.5))
 
 
-def _tenon(angle_deg):
-    """T tenon (prism along Z = the install axis), head radially outward,
-    root sunk into the wall's outer face; runs the FULL extended height —
-    seated, the tenon tops sit JOINT_SEAT_CLR under frame_top (the
-    stack's z-lock, v2)."""
-    return (_JOINT.tenon(root=1.0, length=_TEN_L)
-            .translate((WALL_OR, 0, WALL_ZB))
-            .rotate((0, 0, 0), (0, 0, 1), angle_deg))
-
-
-def _lever_window(y0, y1, z0, z1):
-    """Window box through the wall at the +X lever azimuth. Windows flank
-    the +X wall tenon, so the joinery survives."""
-    return (cq.Workplane("XY").workplane(offset=z0)
-            .polyline([(WALL_IR - 3.0, y0), (WALL_OR + 3.0, y0),
-                       (WALL_OR + 3.0, y1), (WALL_IR - 3.0, y1)])
-            .close().extrude(z1 - z0))
+def _lever_window(y0, y1, z0):
+    """Bay window through the wall at the +X lever azimuth: full-width up
+    to WALL_SPLIT_Z, then a 45° GABLE to the dulled WALL_WIN_TIP ridge —
+    the window's roof in the band's upright print."""
+    yc = (y0 + y1) / 2.0
+    rise = ((y1 - y0) - WALL_WIN_TIP) / 2.0
+    return (cq.Workplane("YZ")
+            .polyline([(y0, z0), (y1, z0), (y1, WALL_SPLIT_Z),
+                       (yc + WALL_WIN_TIP / 2.0, WALL_SPLIT_Z + rise),
+                       (yc - WALL_WIN_TIP / 2.0, WALL_SPLIT_Z + rise),
+                       (y0, WALL_SPLIT_Z)])
+            .close().extrude((WALL_OR + 3.0) - (WALL_IR - 3.0))
+            .translate((WALL_IR - 3.0, 0, 0)))
 
 
 def _cable_exit():
     """The cable exit PORT — an arc wedge at (+x,+y) spanning the spool
     chamber's z-band; the span covers exit tangencies from the bare drum
-    wall to design capacity (v2's math, params). The split plane passes
-    through it: floor prints in the bottom half, ceiling in the inverted
-    top half."""
+    wall to design capacity (v2's math, params). Its ceiling closes with
+    a SAWTOOTH of CABLE_EXIT_TEETH 45° teeth — the port's roof in the
+    band's upright print (teeth sized at the wall's OD, so they overlap
+    slightly at the bore instead of leaving flat slivers outboard)."""
     a0 = math.radians(CABLE_EXIT_ANGLE_DEG - CABLE_EXIT_SPAN_DEG / 2.0)
     a1 = math.radians(CABLE_EXIT_ANGLE_DEG + CABLE_EXIT_SPAN_DEG / 2.0)
     n = 12
@@ -91,8 +66,23 @@ def _cable_exit():
     pts = [(0.0, 0.0)]
     pts += [(r_arc * math.cos(a0 + (a1 - a0) * i / n),
              r_arc * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
-    return (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
+    port = (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
             .polyline(pts).close().extrude(CABLE_EXIT_Z1 - CABLE_EXIT_Z0))
+    pitch = CABLE_EXIT_SPAN_DEG / CABLE_EXIT_TEETH
+    tooth_w = math.radians(pitch) * (WALL_OR + 1.0)
+    rise = (tooth_w - NOZZLE) / 2.0
+    tooth = (cq.Workplane("YZ")
+             .polyline([(-tooth_w / 2.0, CABLE_EXIT_Z1 - 0.1),
+                        (tooth_w / 2.0, CABLE_EXIT_Z1 - 0.1),
+                        (NOZZLE / 2.0, CABLE_EXIT_Z1 + rise),
+                        (-NOZZLE / 2.0, CABLE_EXIT_Z1 + rise)])
+             .close().extrude((WALL_OR + 3.0) - 60.0)
+             .translate((60.0, 0.0, 0.0)))
+    for k in range(CABLE_EXIT_TEETH):
+        az = (CABLE_EXIT_ANGLE_DEG - CABLE_EXIT_SPAN_DEG / 2.0
+              + (k + 0.5) * pitch)
+        port = port.union(tooth.rotate((0, 0, 0), (0, 0, 1), az))
+    return port
 
 
 def _entry_port():
@@ -166,71 +156,23 @@ def _perforation():
 
 
 def _build_wall_full():
-    # ring + tenons both end at WALL_Z1 — the channel above is the lock
-    # strips' territory
+    # the one band: bed → the lid's top plane
     w = _ring(2 * WALL_IR, 2 * WALL_OR, WALL_ZB, WALL_Z1 - WALL_ZB)
-    for a in (0.0, 90.0, 180.0, 270.0):
-        w = w.union(_tenon(a))
-    # lever bays: FULL-HEIGHT below the split (user's outline — every band
-    # arc −z of the levers is EXCLUDED: it blocked the hand reaching the
-    # handles from below; the coil-containment closure tried at #844 is
-    # deliberately traded away). The windows cut from BELOW the band's
-    # bottom face (a FLOOR_Z1 start left the band's bottom 1.6 slice
-    # ringing across the bays — user-caught at #846: it measured exactly
-    # one floor thickness because it WAS the floor-plate z-slice of the
-    # band). ABOVE the split, wall_top stays a FULL CLOSED RING (user's
-    # call — the ring band sits above both levers' swept envelopes,
-    # asserted in levers.py, so it crosses the bays for free and keeps
-    # its +X tenon).
-    w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
-                            FLOOR_Z0 - 0.5, WALL_SPLIT_Z + 0.5))
-    w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
-                            FLOOR_Z0 - 0.5, WALL_SPLIT_Z + 0.5))
+    # lever bays: FULL-HEIGHT below the split (user's outline — no band
+    # −z of the levers: hand access wins; windows cut from below the
+    # band's bottom face, the #847 lesson), closing above the split with
+    # 45° GABLES — the band's crown ring over the bays is the closed
+    # ring the user asked for, now part of the one-piece band (clears
+    # both levers' swept envelopes, asserted in levers.py)
+    w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0 - 0.5))
+    w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0, FLOOR_Z0 - 0.5))
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
     if WALL_PERF:                  # revertable — see the flag above
         w = w.cut(_perforation())
-    return w
+    return heal(w)
 
 
-def _split(w):
-    """Bottom band (→ fused into frame_bottom) + the sliding wall_top."""
-    big = 400.0
-
-    def band(z0, z1):
-        return w.intersect(cq.Workplane("XY").workplane(offset=z0)
-                           .rect(big, big).extrude(z1 - z0))
-
-    return (band(WALL_ZB - 5.0, WALL_SPLIT_Z),
-            heal(band(WALL_SPLIT_Z, WALL_Z1 + 5.0)))
-
-
-wall_bottom_band, wall_top = _split(_build_wall_full())
-
-
-# ── wall_lock — ONE part, printed 4× (replaces v2's collar, user's call) ─────
-_LOCK_T = 2 * NOZZLE                              # 1.6 — plate thickness
-_LOCK_H = BEAM_Z1 - WALL_Z1                       # 20.2 — wall_top top → the
-                                                  # frame_top underside plane
-_LOCK_JOINT = joint(JOINT_WIDTH, _LOCK_H, tenon=JOINT_SPEC,
-                    mortise=JOINT_SPEC, install="-z", depth=JOINT_DEPTH)
-
-
-def _build_wall_lock():
-    """Flat beam-wide prism + T tenon (modelled at the +X site; the
-    assembly rotates four copies): drops down a beam channel onto
-    wall_top's flat top and fills it to frame_top's underside — the
-    stack's z-lock. Prints STANDING like the wall pieces (plan profile =
-    vertical walls, no overhangs)."""
-    plate = (cq.Workplane("XY").workplane(offset=WALL_Z1)
-             .polyline([(BEAM_IR - _LOCK_T, -BEAM_SIZE / 2.0),
-                        (BEAM_IR, -BEAM_SIZE / 2.0),
-                        (BEAM_IR, BEAM_SIZE / 2.0),
-                        (BEAM_IR - _LOCK_T, BEAM_SIZE / 2.0)])
-             .close().extrude(_LOCK_H))
-    ten = (_LOCK_JOINT.tenon(root=1.0, length=_LOCK_H)
-           .translate((WALL_OR, 0, WALL_Z1)))
-    return heal(plate.union(ten))
-
-
-wall_lock = _build_wall_lock()
+# ONE band — fused into frame_bottom (wall_top, the lock strips and the
+# beam T channels are RETIRED, user's call; nothing slides anymore)
+wall_band = _build_wall_full()

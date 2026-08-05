@@ -11,11 +11,14 @@ the open quadrants), rotate ~17° to the stops. Rotation keeps both
 rings on their own circles, so only the spokes and pads move over the
 frame's plan — and they live in the 90°-wide quadrants.
 
-Joint: the flat-top mushroom ARC (cadkit, THROUGH mortises — both
-hosts print +z→−z; the cavities exit the arms' undersides). Angular
-constants are the frame arc joints' own, evaluated per ring radius
-(they scale up at the inner ring). Spines are one stem wide; over each
-arm's stop-wall zone they ride annular V-bottom grooves.
+Joint: cadkit's OCTAGON (stop-sign) ARC — the standard for two hosts
+printing the same direction (+z→−z): the cavities CLOSE on their
+one-bead roofs inside the arms with a ≥1.6 floor below (user's call —
+the earlier THROUGH mushroom left the arms' undersides open and weak;
+the spine shrank to MOUNT_SPINE_T to buy the octagon its room).
+Angular constants are the frame arc joints' own, evaluated per ring
+radius (they scale up at the inner ring). Spines are one stem wide;
+over each arm's stop-wall zone they ride annular V-bottom grooves.
 
 PRINTS +z→−z (top face on the bed): rings, spokes and pads on the bed;
 the eight arc tenons rise library-native. Screw countersinks open at
@@ -29,19 +32,25 @@ import cadquery as cq
 from cadkit.joinery import PrintSpec, joint
 
 from .params import (
-    NOZZLE, FRAME_Z1, FRAME_RIB,
-    MOUNT_TEN_W, MOUNT_TEN_H, MOUNT_TEN_ARC, MOUNT_THRU_D,
+    NOZZLE, FRAME_Z1, FRAME_RIB, JOINT_CLR,
+    MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
     MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_AZ,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
-    TOP_JOINT_SEAT_CLR, TOP_STOP_WALL, TOP_ENTRY_OVER,
+    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
 )
 
 _SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
+# cadkit's standard for two same-direction hosts: the OCTAGON — its
+# cavity CLOSES on the one-bead roof inside the arm (user's call: the
+# old THROUGH mushroom left the arm's underside open and weak)
 MOUNT_J = joint(MOUNT_TEN_W, None, tenon=_SPEC, mortise=_SPEC,
-                install="-x", depth=MOUNT_THRU_D, through=True)
+                install="-x")
+assert (MOUNT_MATE_Z - (MOUNT_J.height + MOUNT_J.clearance)
+        >= MOUNT_FLOOR_MIN - 1e-9), \
+    "octagon cavity leaves under 1.6 of arm floor — shrink MOUNT_TEN_W"
 
 _SITES = (0.0, 90.0, 180.0, 270.0)
 _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
@@ -108,20 +117,19 @@ def _build_mount():
         ring = _annulus(R - hw, R + hw, MOUNT_MATE_Z, FRAME_Z1)
         arm, seat, over, ten = _angles(R)
         for site in _SITES:
-            # hanging arc tenons, SEATED: anchored at the arm's ENTRY
-            # face, spanning MOUNT_TEN_ARC inboard, grown to full cavity
-            # depth (height=) — the joint fills its mortise exactly, and
-            # the mortise is only as big as the joint
+            # hanging octagon arc tenons, SEATED: anchored at the arm's
+            # ENTRY face, spanning MOUNT_TEN_ARC inboard — the stop-side
+            # half of every crossing stays solid arm
             ring = ring.union(
-                _hang(MOUNT_J.tenon_arc(R, ten, root=2.0,
-                                        height=MOUNT_TEN_H))
+                _hang(MOUNT_J.tenon_arc(R, ten, root=2.0))
                 .rotate((0, 0, 0), (0, 0, 1), site + arm - ten),
                 clean=False)
         m = ring if m is None else m.union(ring, clean=False)
-    # mid-quadrant SPOKES tying the rings (flush slabs over open air)
+    # mid-quadrant SPOKES tying the rings (full plate depth — they hang
+    # below the shallow spine level, over open quadrant air)
     for az in MOUNT_SPOKE_AZ:
         m = m.union(
-            cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
+            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PLATE_T)
             .center((MOUNT_RING_R + MOUNT_RING2_R) / 2.0, 0.0)
             .rect(MOUNT_RING_R - MOUNT_RING2_R + MOUNT_SPINE_W,
                   MOUNT_SPOKE_W)
@@ -133,7 +141,7 @@ def _build_mount():
         x = MOUNT_RING_R * math.cos(math.radians(az))
         y = MOUNT_RING_R * math.sin(math.radians(az))
         m = m.union(
-            cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
+            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PLATE_T)
             .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
             .extrude(MOUNT_PLATE_T), clean=False)
     for az in MOUNT_PAD_AZ:
@@ -174,7 +182,7 @@ def mount_channel_cuts():
         for site in _SITES:
             cuts.append(
                 _hang(MOUNT_J.mortise_arc(R, cav_sweep,
-                                          drop=MOUNT_PLATE_T + 0.5))
+                                          drop=MOUNT_SPINE_T + 0.5))
                 .rotate((0, 0, 0), (0, 0, 1), site + arm - ten - seat))
             cuts.append(_v_groove_arc(R, site - arm - over,
                                       site + arm - ten - seat + 0.1))

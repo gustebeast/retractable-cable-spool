@@ -18,7 +18,6 @@ from cadkit.freecad import show
 
 from .frame import frame_top, frame_bottom
 from .mount import mount_ring
-from .wall import wall_top, wall_lock
 from .axle import axle_top, axle_separator
 from .lid import lid
 from .levers import (
@@ -57,8 +56,6 @@ COLOR = {
     "frame_top":   "#4F6D8F",  # slate — top plus (v2's frame_top colour)
     "frame_bottom": "#6B8AAB", # lighter slate — beams + fused wall band +
                                # spoked floor + lever forks (one print)
-    "wall_top":    "#7E6E8F",  # deeper violet — middle piece (prints inverted)
-    "wall_lock":   "#B4A5C2",  # pale violet — channel lock strip (×4, one part)
     "mount_ring": "#7D8F69",   # sage — desk-mount twist-lock ring
     "axle_top":    "#A6786B",  # clay — axle top half (lip + tenon)
     "axle_separator": "#B0654B",  # rust — bottom axle + separator disk, one
@@ -78,8 +75,6 @@ PARTS = [
     ("frame_top",   frame_top,   "frame_top.step"),
     ("frame_bottom", frame_bottom, "frame_bottom.step"),
     ("mount_ring",  mount_ring,  "mount_ring.step"),
-    ("wall_top",    wall_top,    "wall_top.step"),
-    ("wall_lock",   wall_lock,   "wall_lock.step"),
     ("axle_top",    axle_top,    "axle_top.step"),
     ("axle_separator", axle_separator, "axle_separator.step"),
     ("lid",         lid,         "lid.step"),
@@ -122,14 +117,7 @@ def main():
     asm = (cq.Assembly(name="retractable_cable_spool")
            .add(frame_top,   name="frame_top",   color=color(COLOR["frame_top"]))
            .add(frame_bottom, name="frame_bottom",
-                color=color(COLOR["frame_bottom"]))
-           # wall pieces seated in the beams' T channels (modelled in place)
-           .add(wall_top,    name="wall_top",    color=color(COLOR["wall_top"])))
-    # the channel lock strips (ONE printed part, 4 rotated copies — the
-    # wall_top ring and its +X tenon are back, user's call)
-    for a in (0, 90, 180, 270):
-        asm.add(wall_lock.rotate((0, 0, 0), (0, 0, 1), a),
-                name=f"wall_lock_{a}", color=color(COLOR["wall_lock"]))
+                color=color(COLOR["frame_bottom"])))
     # the desk-mount twist-lock ring, SEATED flush in the arms' arc channels
     asm.add(mount_ring, name="mount_ring", color=color(COLOR["mount_ring"]))
     asm = (asm

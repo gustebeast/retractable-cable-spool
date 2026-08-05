@@ -11,39 +11,34 @@ frame_top — plus spider carrying the 608 IN its own thickness (recessed
     the print TOP, so they close with plain floors — no bridges — and
     the funnel seat prints as a 45° narrowing taper.
 
-frame_bottom — NO bottom plus anymore (user's call, #815): the WALL's
-    lower band is FUSED in as the beams' structural tie, closed by a
-    sparse SPOKED FLOOR (1.6 plate/spokes — the coil chamber's bottom;
-    just enough web that the cable can't dip through and tangle) — the
-    whole stack sits ~11 shorter for it. Four beams rise from the bed to
-    the top plus's underside, carrying the sliding wall pieces' T
-    mortises (channel stops just under the fused band's top) and the arc
-    TENONS on their tops. The v2 LEVER MOUNT simplified to match: with
-    the floor fused, nothing has to drop past the +X arm anymore, so the
-    fans/45°-climbs are gone — the fork COLUMNS stand straight on a foot
-    PAD (floor-thick, wall→frame-extent under the lever bays), with v2's
-    arch struts, gussets, thrust-boss rings and diamond pin bores
-    unchanged. Prints −Z→+Z (floor plate on the bed).
+frame_bottom — NO bottom plus anymore (user's call, #815): the WHOLE
+    WALL BAND is FUSED in (bed → the lid-top plane — wall_top, the lock
+    strips and the beam T channels are all retired, user's call #864),
+    closed by a sparse SPOKED FLOOR (1.6 plate/spokes — the coil
+    chamber's bottom). Four beams rise from the bed to the top plus's
+    underside, carrying the arc TENONS on their tops. The v2 LEVER
+    MOUNT simplified to match: the fork COLUMNS with v2's arch struts,
+    gussets, thrust-boss rings and diamond pin bores (feet wedge-cut
+    for hand access). Prints −Z→+Z (floor plate on the bed).
 
-INSTALL (v2's): wall pieces slide down the beam channels; then frame_top
-rotates on: offset ~20° CCW, z-mate through the open quadrants, rotate CW
-to the angular stops (retraction torque is CW → operation preloads the
-joints; uninstall = CCW against load).
+INSTALL: frame_top rotates straight onto frame_bottom — z-mate through
+the open quadrants, rotate to the angular stops (retraction torque
+preloads the joints; uninstall rotates back against load). Nothing
+slides anymore.
 """
 
 import math
 
 import cadquery as cq
 
-from cadkit.joinery import joint
+from cadkit.joinery import PrintSpec, joint
 from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import cone_solid, cyl, heal
-from .lid_joint import flat_arc_solid, TOPJ_TOP, TOPJ_RD
 from .levers import BRAKE_SWEPT_TOP
 from .mount import mount_channel_cuts
-from .wall import wall_bottom_band
+from .wall import wall_band
 from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
@@ -51,14 +46,14 @@ from .params import (
     ANCH_WIN_W, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
     BRG_SEAT_CONE_Z0, BRG_SEAT_CONE_Z1,
-    WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
+    WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1,
+    BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
     FLOOR_HUB_R, FLOOR_RING_RC,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
     STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE, STUB_TIP_CH,
-    JOINT_SPEC, JOINT_WIDTH, JOINT_DEPTH, JOINT_CLR, JOINT_BACK_CLR,
-    JOINT_SEAT_CLR, MORTISE_L,
-    TOPJ_STEM, TOPJ_FLARE,
+    JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
+    FRAMEJ_W, FRAMEJ_R,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER, TOP_STOP_WALL,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
@@ -67,26 +62,31 @@ from .params import (
     MOUNT_RING_R, MOUNT_TEN_W,
 )
 
-# ── Wall ↔ beam T joint (cadkit — v2's print-proven box) ─────────────────────
-_WALL_JOINT = joint(JOINT_WIDTH, MORTISE_L, tenon=JOINT_SPEC,
-                    mortise=JOINT_SPEC, install="-z", depth=JOINT_DEPTH)
+# ── frame_top ↔ frame_bottom arc joints — cadkit's MUSHROOM arc, now
+# TWO-SIDED (user: v2 halved this joint to one flare for the wall
+# T-channel access; the T is retired, so the second flare returns — a
+# stop sign with its top chopped off). The hosts print in OPPOSITE
+# directions, so the flat top needs no roof geometry: frame_top's
+# cavities open at its print top and close with plain floors, and the
+# mushroom's z-faces run the depth-face clearance (0.30) natively. ─────────
+_DOWN = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="down")
+FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
+                install="-x")
 
-# ── frame_top ↔ frame_bottom arc joints (shared FLAT-TOP profile at the
-# beam-face radius — radially just outside the wall channels' keep-out) ──────
-_TOPJ_R0 = BEAM_IR + _WALL_JOINT.height + JOINT_CLR
-
-assert (BEAM_IR + BEAM_SIZE) - (_TOPJ_R0 + TOPJ_RD) >= 2 * NOZZLE - 1e-9, \
+assert ((BEAM_IR + BEAM_SIZE) - (FRAMEJ_R + FRAMEJ_W / 2.0 + JOINT_CLR)
+        >= 2 * NOZZLE - 1e-9), \
     "arc-joint cavity's outer wall under 1.6 at the flush arm end"
-assert FRAME_RIB - (TOPJ_TOP + JOINT_BACK_CLR) >= 2 * NOZZLE - 1e-9, \
+assert (FRAME_RIB - (FRAME_J.height + JOINT_BACK_CLR)
+        >= 2 * NOZZLE - 1e-9), \
     "arc-joint cavity ceiling under 1.6 in the top plus"
-# the mount ring's THROUGH cavities sit radially INBOARD of the arc-joint
-# cavities — the web between them must hold tier (user placed the ring as
-# far out the arms as this allows)
-assert (_TOPJ_R0 - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
+# the mount ring's cavities sit radially INBOARD of the arc-joint
+# cavities — the web between them must hold tier
+assert ((FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR)
+        - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
     "mount ring cavities reach the frame arc-joint radius"
 
-_R_T = _TOPJ_R0 + (TOPJ_STEM + TOPJ_FLARE) / 2.0
+_R_T = FRAMEJ_R
 _ARM_HALF_A = math.degrees(math.asin((BEAM_SIZE / 2.0) / _R_T))
 _SEAT_A     = math.degrees(TOP_JOINT_SEAT_CLR / _R_T)
 _STOP_A     = math.degrees(TOP_STOP_WALL / _R_T)
@@ -114,23 +114,11 @@ def _beam(angle_deg):
             .rotate((0, 0, 0), (0, 0, 1), angle_deg))
 
 
-def _wall_mortise(angle_deg):
-    """T mortise channel in a beam's inner face: open at the beam top (the
-    sliding wall pieces enter there) to a hard stop JOINT_SEAT_CLR below
-    the fused band's top — wall_top's tenon seats there while its ring
-    face lands on the band."""
-    return (_WALL_JOINT.mortise(drop=2.0)
-            .translate((WALL_OR, 0, WALL_SPLIT_Z - JOINT_SEAT_CLR))
-            .rotate((0, 0, 0), (0, 0, 1), angle_deg))
-
-
 def _arc_tenon(site_deg):
     """Arc tenon on a beam top, root sunk 1.0: its stop-side end where it
-    always was (TOP_STOP_WALL + seat inside the arm's CW face), but its
-    entry-side end now runs FLUSH with the arm's CCW face (user: the
-    retained channel's entry half was sitting empty at seat — same
-    length-fill as the mount joint; the stop arrangement unchanged)."""
-    return (flat_arc_solid(True, _TEN_HALF_A + _ARM_HALF_A, -1.0, _TOPJ_R0)
+    always was (TOP_STOP_WALL + seat inside the arm's CW face), its
+    entry-side end FLUSH with the arm's CCW face (the length-fill)."""
+    return (FRAME_J.tenon_arc(_R_T, _TEN_HALF_A + _ARM_HALF_A, root=1.0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A)
             .translate((0, 0, BEAM_Z1)))
 
@@ -140,10 +128,9 @@ def _arc_mortise(site_deg):
     STOP) sits TOP_STOP_WALL inside the arm's CW face; the CCW end sweeps
     open past the arm's CCW face (the entry — the tenon rotates in CW from
     the open quadrant). In the +z→−z print the cavities open at the print
-    top and close with plain floors — the flat-top profile has no
-    orientation-hostile face here."""
+    top and close with plain floors."""
     sweep = (_TEN_HALF_A + _SEAT_A) + (_ARM_HALF_A + _OVER_A)
-    return (flat_arc_solid(False, sweep, -2.0, _TOPJ_R0)
+    return (FRAME_J.mortise_arc(_R_T, sweep, drop=2.0)
             .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A - _SEAT_A)
             .translate((0, 0, BEAM_Z1)))
 
@@ -229,12 +216,11 @@ def _beam_filler(angle_deg):
     """CRESCENT FILLER at a beam (user's call): the fused band's curved
     outer face pulls up to 0.18 away from the flat beam face across the
     beam's width — fill beam-wide from inside the band out into the beam,
-    over the band's height, ID trimmed to the bore cylinder (curved on
-    the ID, solid into the beam). The T channel's stop cut comes after
-    and re-opens its 0.15 at the filler's top."""
+    over the band's FULL height (bed → the lid-top plane, now that the
+    band is one piece), ID trimmed to the bore cylinder."""
     f = (_box(66.0, BEAM_IR + 1.0, -BEAM_SIZE / 2.0, BEAM_SIZE / 2.0,
-              FLOOR_Z0, WALL_SPLIT_Z)
-         .cut(cyl(2.0 * WALL_IR, (WALL_SPLIT_Z - FLOOR_Z0) + 1.0,
+              FLOOR_Z0, WALL_Z1)
+         .cut(cyl(2.0 * WALL_IR, (WALL_Z1 - FLOOR_Z0) + 1.0,
                   z=FLOOR_Z0 - 0.5)))
     return f.rotate((0, 0, 0), (0, 0, 1), angle_deg)
 
@@ -417,8 +403,8 @@ def _lever_pin_bores():
 
 
 def _build_frame_bottom():
-    fb = wall_bottom_band                 # the fused lower wall (its tenon
-                                          # segments weld it into the beams)
+    fb = wall_band                        # the ONE fused wall band, bed →
+                                          # the lid-top plane (wall.py)
     fb = fb.union(_floor())
     fb = fb.union(_lever_pad())
     fb = fb.union(_bay_web(+1.0)).union(_bay_web(-1.0))
@@ -427,9 +413,6 @@ def _build_frame_bottom():
     fb = fb.union(_lever_mount())
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
-    for a in (0.0, 90.0, 180.0, 270.0):
-        fb = fb.cut(_wall_mortise(a))     # channels for the SLIDING pieces
-                                          # only — they stop at the band top
     return heal(fb)
 
 
