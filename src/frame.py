@@ -54,7 +54,7 @@ from .params import (
     WALL_IR, WALL_OR, WALL_SPLIT_Z, BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
     FLOOR_HUB_R, FLOOR_RING_RC,
-    SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH, CH_TOP_Z,
+    SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
     STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE, STUB_TIP_CH,
     JOINT_SPEC, JOINT_WIDTH, JOINT_DEPTH, JOINT_CLR, JOINT_BACK_CLR,
     JOINT_SEAT_CLR, MORTISE_L,
@@ -250,35 +250,6 @@ def _bay_web(s):
                      z=FLOOR_Z0 - 0.5))
 
 
-def _hand_port(s):
-    """45° HAND PORT through the bay's fork-side block (user's call — the
-    web/column corner still pinched the hand's path to the handles): a
-    window through web + column + pad along Y, its inner edge ON the
-    wall bottom's OD (user: the cuts start there), vertical sides and a
-    single-pitch 45° roof rising toward the wall — every face vertical
-    or 45° in the upright print. The column keeps a full-height foot
-    leg outboard of the port; the web's wall-continuation (inboard of
-    the OD) is untouched, so the wall slot stays sealed above. Each
-    side sets its own eave under its lever's pivot hardware (the
-    fork-roof lesson): the ratchet port rises to the chamber ceiling;
-    the brake port's 45° roof stays 0.8 under its low pivot boss — the
-    binding point is where the roof runs TANGENT to the boss circle,
-    hence the R·√2 term, not R."""
-    w = 8 * NOZZLE                                 # 6.4 — port width
-    x1 = WALL_OR + w
-    eave = (CH_TOP_Z if s > 0 else
-            BRAKE_PIVOT_Z - (LEVER_BOSS_OD / 2.0) * math.sqrt(2.0)
-            - (x1 - LEVER_PIVOT_X) - 0.8)
-    depth = (_SB_Y1 + 1.0) - (RATCHET_LEV_Y1 + LEVER_SIDE_CLR - 0.5)
-    p = (cq.Workplane("XZ")
-         .polyline([(WALL_OR, FLOOR_Z0 - 1.0), (x1, FLOOR_Z0 - 1.0),
-                    (x1, eave), (WALL_OR, eave + w)])
-         .close().extrude(depth))
-    # ("XZ" extrudes toward −y: shift onto the +y block, mirror for −y)
-    p = p.translate((0.0, _SB_Y1 + 1.0, 0.0))
-    return p if s > 0 else p.mirror("XZ")
-
-
 def _hand_wedge():
     """FOOT WEDGE across the WHOLE lever front — all three uprights (both
     fork columns AND the +X beam, user's call): everything below the 45°
@@ -287,7 +258,9 @@ def _hand_wedge():
     grips from outside. The three uprights lose their bed feet and hang
     from the band weld / webs / arches; their 45° undersides are
     self-supporting in the upright print. The T-channel and the fused
-    band's weld tenons live far above the diagonal at these radii."""
+    band's weld tenons live far above the diagonal at these radii.
+    (The earlier windowed ports through the fork blocks are RETIRED —
+    user: the wedge alone is the access story.)"""
     return (cq.Workplane("XZ")
             .polyline([(WALL_OR, FLOOR_Z0 - 1.0), (WALL_OR, FLOOR_Z0),
                        (_R_OUT + 1.0, FLOOR_Z0 + (_R_OUT + 1.0 - WALL_OR)),
@@ -448,7 +421,6 @@ def _build_frame_bottom():
     for a in (0.0, 90.0, 180.0, 270.0):
         fb = fb.union(_beam(a)).union(_arc_tenon(a)).union(_beam_filler(a))
     fb = fb.union(_lever_mount())
-    fb = fb.cut(_hand_port(+1.0)).cut(_hand_port(-1.0))
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     for a in (0.0, 90.0, 180.0, 270.0):
