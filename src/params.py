@@ -578,7 +578,9 @@ MOUNT_PLATE_T = 5 * NOZZLE         # 4.0 — pad/spine thickness: the MINIMUM
 assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
     "mount plate too thin to countersink the wood screw flush"
 
-MOUNT_TEN_W  = 8 * NOZZLE          # 6.4 — joint width (v2's mount size)
+MOUNT_TEN_W  = 6 * NOZZLE          # 4.8 — joint width (down from v2's 6.4,
+                                   # user: the cavities must leave ~50% of
+                                   # the arm's width intact — asserted)
 MOUNT_MATE_Z = FRAME_RIB - MOUNT_PLATE_T           # 6.4 — the joint's mating
                                                    # plane (spine underside)
 MOUNT_THRU_D = MOUNT_MATE_Z + 1.0                  # 7.4 — cavity run past the
@@ -592,9 +594,15 @@ MOUNT_RING2_R = 44 * NOZZLE        # 35.2 — INNER ring at half the diameter
                                    # arc joinery in all four arms; its
                                    # cavities stop exactly one 1.6 web
                                    # inboard of the +x anchor rib (assert)
-MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 3.2 — the spines ARE the mushroom stem:
+MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 2.4 — the spines ARE the mushroom stem:
                                    # they ride the cavities' stem slots with
                                    # zero ledge
+MOUNT_TEN_H = MOUNT_MATE_Z - NOZZLE  # 5.6 — tenons FILL the through cavities
+                                   # (user: don't waste the mortise depth):
+                                   # the extra height rides the waist walls;
+                                   # tips stop one bead above the arms'
+                                   # undersides (the inner ring's tips hover
+                                   # over the spring-flange plane there)
 MOUNT_SPOKE_W  = 4 * NOZZLE        # 3.2 — ring-tie spokes
 MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
                                    # stay over open air at EVERY install
@@ -604,24 +612,30 @@ MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
                                    # quadrants are 90° wide vs ~17° travel)
 MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE     # 10.9 — square screw pads
 # screw pads HUG THE AXES (user: the screws must land on a wooden BEAM
-# running along x OR y — use whichever pad pair matches the beam): the
-# pads sit just past each arm's flank, AXIS-ALIGNED, so each pair's
-# screws lie only ~±12.9 off its axis — inside a nominal 2× beam.
+# running along x OR y — use whichever pad pair matches the beam; the
+# beam just has to be wide enough for both screws of the pair, ~±10.7
+# off-axis here). The pads sit at ZERO gap: seated, each pad's inner
+# edge lands FLAT ON its arm's flank — the pads ARE the seating stop
+# (user's call). The arc joints keep TOP_JOINT_SEAT_CLR (0.15) at
+# their stop ends, so the joinery never bottoms out first.
 MOUNT_PAD_AZ_OFF = math.degrees(math.asin(
-    (BEAM_SIZE / 2.0 + 2 * NOZZLE + MOUNT_PAD_W / 2.0)
-    / MOUNT_RING_R)) + 0.5                          # ≈ 10.4°
+    (BEAM_SIZE / 2.0 + MOUNT_PAD_W / 2.0) / MOUNT_RING_R))   # ≈ 8.6°
 MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
+assert TOP_JOINT_SEAT_CLR > 0.0, \
+    "the pads-stop-first scheme needs a positive joint seat clearance"
 assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE - 1e-9, \
     "mount cavity leaves the arm's side walls under the 1.6 tier"
+assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / BEAM_SIZE >= 0.49, \
+    "mount cavities eat more than ~half the arm's width (user's bound)"
 assert (MOUNT_RING_R + MOUNT_PAD_W * math.sqrt(2.0) / 2.0
         <= FRAME_R_OUT - 1e-9), \
     "mount screw pads poke past the frame's plan silhouette"
 assert (ANCH_IR - (MOUNT_RING2_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
     "inner mount ring's cavities reach the +x anchor rib"
-assert (MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
-        - MOUNT_PAD_W / 2.0 - BEAM_SIZE / 2.0 >= 2 * NOZZLE - 1e-9), \
-    "screw pads graze the arm flanks when seated"
+assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
+           - MOUNT_PAD_W / 2.0 - BEAM_SIZE / 2.0) < 1e-6, \
+    "seated pads must land exactly on the arm flanks (they are the stop)"
 # annular V-GROOVE for the spine over each arm's stop-wall zone (the
 # groove's floor is the roof of the slot in the frame's +z→−z print —
 # vertical walls, then a 45° V closing on a one-bead(+clearance) flat):

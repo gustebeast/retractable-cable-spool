@@ -1208,14 +1208,23 @@ class Joint:
         return _FAMILY_FUNCS[self.family][1](
             self.width, L, self.nozzle, self.clearance, drop)
 
-    def tenon_arc(self, radius, sweep_deg, root=1.0):
+    def tenon_arc(self, radius, sweep_deg, root=1.0, height=None):
         """ROTATIONAL-install tenon: the profile placed at `radius` from the
         Z axis and revolved `sweep_deg` about it — for parts already located
         on a shared axis, where the one free install motion is rotation.
-        The sweep replaces `length` (which may be None at joint())."""
+        The sweep replaces `length` (which may be None at joint()).
+        `height` (THROUGH mushroom sites only): grow the tenon past its
+        minimal profile toward the cavity's exit — the extra rides the
+        waist walls (more flank bearing, fuller cavity); keep it short of
+        the host's far face so nothing pokes out."""
         if self.family == "mushroom" and self.through:
             return _mushroom_tenon_arc(self.width, radius, sweep_deg,
-                                       self.nozzle, self.clearance, root)
+                                       self.nozzle, self.clearance, root,
+                                       height=height)
+        if height is not None:
+            raise ValueError("tenon height override is modelled for the "
+                             "THROUGH mushroom site only (the octagon sizes "
+                             "from `depth` at joint())")
         if self.family != "octagon":
             raise NotImplementedError(
                 "rotational (arc) installs are modelled for the up+up "
