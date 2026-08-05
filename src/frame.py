@@ -53,8 +53,8 @@ from .params import (
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
     STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE, STUB_TIP_CH,
     JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
-    FRAMEJ_W, FRAMEJ_R,
-    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER, TOP_STOP_WALL,
+    FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
+    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
@@ -68,10 +68,18 @@ from .params import (
 # stop sign with its top chopped off). The hosts print in OPPOSITE
 # directions, so the flat top needs no roof geometry: frame_top's
 # cavities open at its print top and close with plain floors, and the
-# mushroom's z-faces run the depth-face clearance (0.30) natively. ─────────
+# mushroom's z-faces run the depth-face clearance (0.30) natively.
+# SITED via cadkit's ring↔arm CROSSING — ONE shared arrangement with the
+# mount's rings (user: share the code; the two joints differ only in
+# profile — flat-top here, full stop sign there): tenon flush at the
+# beam's CCW entry face spanning FRAMEJ_TEN_ARC = half the crossing (the
+# 50% rule now applies here too, user's call), cavity + seat + entry
+# overshoot, and the stop wall is simply the solid CW half of the beam. ──────
 _DOWN = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="down")
 FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
                 install="-x")
+FRAME_X = FRAME_J.crossing(FRAMEJ_R, BEAM_SIZE, FRAMEJ_TEN_ARC,
+                           seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER)
 
 assert ((BEAM_IR + BEAM_SIZE) - (FRAMEJ_R + FRAMEJ_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
@@ -85,13 +93,6 @@ assert ((FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR)
         - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
     "mount ring cavities reach the frame arc-joint radius"
-
-_R_T = FRAMEJ_R
-_ARM_HALF_A = math.degrees(math.asin((BEAM_SIZE / 2.0) / _R_T))
-_SEAT_A     = math.degrees(TOP_JOINT_SEAT_CLR / _R_T)
-_STOP_A     = math.degrees(TOP_STOP_WALL / _R_T)
-_OVER_A     = math.degrees(TOP_ENTRY_OVER / _R_T)
-_TEN_HALF_A = _ARM_HALF_A - _STOP_A - _SEAT_A
 
 _R_OUT   = FRAME_R_OUT
 _BEAM_RC = BEAM_IR + BEAM_SIZE / 2.0
@@ -115,23 +116,23 @@ def _beam(angle_deg):
 
 
 def _arc_tenon(site_deg):
-    """Arc tenon on a beam top, root sunk 1.0: its stop-side end where it
-    always was (TOP_STOP_WALL + seat inside the arm's CW face), its
-    entry-side end FLUSH with the arm's CCW face (the length-fill)."""
-    return (FRAME_J.tenon_arc(_R_T, _TEN_HALF_A + _ARM_HALF_A, root=1.0)
-            .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A)
+    """Arc tenon on a beam top (the cadkit crossing, root sunk 1.0): flush
+    at the beam's CCW entry face, spanning half the crossing inboard —
+    the stop-side half stays solid beam."""
+    return (FRAME_X.tenon(root=1.0)
+            .rotate((0, 0, 0), (0, 0, 1), site_deg)
             .translate((0, 0, BEAM_Z1)))
 
 
 def _arc_mortise(site_deg):
-    """Matching arc channel in frame_top's underside: the CW end wall (the
-    STOP) sits TOP_STOP_WALL inside the arm's CW face; the CCW end sweeps
-    open past the arm's CCW face (the entry — the tenon rotates in CW from
-    the open quadrant). In the +z→−z print the cavities open at the print
-    top and close with plain floors."""
-    sweep = (_TEN_HALF_A + _SEAT_A) + (_ARM_HALF_A + _OVER_A)
-    return (FRAME_J.mortise_arc(_R_T, sweep, drop=2.0)
-            .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A - _SEAT_A)
+    """Matching arc channel in frame_top's underside (the crossing's
+    cavity): its CW end wall — TOP_JOINT_SEAT_CLR shy of the seated tenon
+    — is the angular STOP; the CCW end sweeps open past the arm's CCW
+    face (the entry — the tenon rotates in CW from the open quadrant).
+    In the +z→−z print the cavities open at the print top and close with
+    plain floors."""
+    return (FRAME_X.mortise(drop=2.0)
+            .rotate((0, 0, 0), (0, 0, 1), site_deg)
             .translate((0, 0, BEAM_Z1)))
 
 

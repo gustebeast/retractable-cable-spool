@@ -535,19 +535,27 @@ WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
                                    # (user: wall_top, the 4 lock strips and
                                    # the beam T channels are all RETIRED)
 
-# frame_top ↔ frame_bottom ROTATIONAL arc joints — now cadkit's MUSHROOM
+# frame_top ↔ frame_bottom ROTATIONAL arc joints — cadkit's MUSHROOM
 # arc, TWO-SIDED (user: v2 halved this joint to one flare for T-channel
 # access; the T is retired, so the second flare returns — a stop sign
 # with the top chopped off: the flat top prints fine because the two
-# hosts print in OPPOSITE directions, so no roof geometry is needed)
+# hosts print in OPPOSITE directions, so no roof geometry is needed).
+# SITED via cadkit's ring↔arm CROSSING now, the same arrangement as the
+# mount's rings (user: share the code, differ only in profile): tenon
+# flush at the beam's CCW entry face spanning HALF the crossing — the
+# 50% rule applies here too (user reversed the earlier revert) — so the
+# stop-side half of every beam crossing stays solid; TOP_STOP_WALL is
+# RETIRED (the stop wall is simply the uncut half).
 TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
-TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 FRAMEJ_W = 6 * NOZZLE              # 4.8 — joint width (stem 2.4, cadkit)
 FRAMEJ_R = 99 * NOZZLE             # 79.2 — profile centreline radius on the
                                    # beams: cavity [76.65, 81.75] keeps a
                                    # 1.6+ outer wall and a 2.9 web to the
                                    # mount ring's cavities (frame.py asserts)
+FRAMEJ_TEN_ARC = BEAM_SIZE / 2.0   # 5.2 — engaged tenon arc per site (the
+                                   # 50% rule: the joint takes half the
+                                   # crossing, matching MOUNT_TEN_ARC)
 
 # ── MOUNT — desk/wall TWIST-LOCK RING (v3; v2's validated screw) ─────────────
 # ONE CONTINUOUS ring (user: a one-piece mount can't be screwed down at
@@ -745,7 +753,11 @@ CABLE_EXIT_SPAN_DEG   = (math.degrees(math.asin(CABLE_EXIT_R_HI / WALL_IR))
                          - math.degrees(math.asin(CABLE_EXIT_R_LO / WALL_IR))
                          + 2.0 * CABLE_EXIT_MARGIN_DEG)                 # ≈ 30
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
-CABLE_EXIT_Z1 = LID_Z0 + 0.5                       # −29.9 — port ceiling
+CABLE_EXIT_Z1 = LID_Z0 + 0.5                       # −29.9 — reference ceiling
+                                   # (anchors WALL_SPLIT_Z below; the port
+                                   # itself now cuts OPEN through the band's
+                                   # top rim — user: the sawtooth roof was an
+                                   # unnecessary overhang, leave the top open)
 WALL_SPLIT_Z  = (CABLE_EXIT_Z0 + CABLE_EXIT_Z1) / 2.0   # −32.4 — stack plane
 # Lever WINDOWS at +X (y edges = plate faces + LEVER_SIDE_CLR; the pivot
 # boss never enters the wall's radial band at these numbers — v2's
@@ -772,8 +784,8 @@ RATCHET_WIN_Z0  = (RATCHET_PIVOT_Z + _DX_STOP * _STOP_S
                                                    # for the lever's future
                                                    # stop tab
 # wall verticals — ONE fused band, bed → the LID'S TOP (user's call: the
-# whole wall is frame_bottom now; the bay windows and the exit port close
-# with 45° gables/teeth in its upright print, wall.py)
+# whole wall is frame_bottom now; the bay windows close with 45° gables
+# in its upright print, and the exit port stays OPEN-TOPPED, wall.py)
 WALL_Z1 = LID_Z1                                   # −25.6 — band top = lid top
 # lever-bay window gables: dulled ridge width + the resulting crown of
 # solid ring left above the peaks (the ring band OVER the bays)
@@ -781,13 +793,8 @@ WALL_WIN_TIP  = 3 * NOZZLE                         # 2.4 — dulled gable ridge
 _WIN_RISE = ((LEVER_WIN_Y1 - LEVER_WIN_Y0) - WALL_WIN_TIP) / 2.0   # 5.6
 assert WALL_Z1 - (WALL_SPLIT_Z + _WIN_RISE) >= NOZZLE - 1e-9, \
     "bay-window gables poke through the band's top ring"
-# exit-port ceiling SAWTOOTH: N 45° teeth tile the ~30° span (one gable
-# would need ~19 of rise; 4.3 is available)
-CABLE_EXIT_TEETH = 5
-_EXIT_TOOTH_W = math.radians(CABLE_EXIT_SPAN_DEG / CABLE_EXIT_TEETH) * WALL_IR
-assert (WALL_Z1 - (CABLE_EXIT_Z1 + (_EXIT_TOOTH_W - NOZZLE) / 2.0)
-        >= NOZZLE - 1e-9), \
-    "exit-port sawtooth teeth poke through the band's top ring"
+# (the exit-port sawtooth ceiling is RETIRED — user's call: an
+# unnecessary overhang; the port cuts open through the band's top rim)
 assert (LEVER_PIVOT_X + BOSS_BORE_ID / 2.0 + BOSS_RING_W
         <= BEAM_IR + BEAM_SIZE + 1e-9), \
     "thrust rings poke past the frame's +x face — shrink PIN_SQ_S"
