@@ -114,10 +114,17 @@ SPRING_Z0 = SPRING_Z1 - SPRING_H       # −32
 # the joint must pass through the spring's Ø13.4 flange holes, so the axle
 # splits and each half slides onto the strip from its own end) ───────────────
 MORTISE_TOP_GAP      = 5 * NOZZLE                  # 4.0 — collar top below the spring top
-JOINT_H              = 23.0                        # bore depth = engagement = slit
-                                                   # length (v1 print-proven)
 JOINT_Z1             = SPRING_Z1 - MORTISE_TOP_GAP # −4 — mortise opening
-JOINT_Z0             = JOINT_Z1 - JOINT_H          # −27 — bore bottom = tenon tip
+# the strip zone bounds the joint: the strip starts 4 in from the
+# spring's edges (user 2026-08-05), and the TENON TIP lands exactly at
+# the strip's lower end (user's catch: the old fixed 23 engagement left
+# the tip 5 — not 4 — above the spring bottom)
+STRIP_Z0             = SPRING_Z0 + 4.0             # −28 — strip lower end
+STRIP_Z1             = SPRING_Z1 - 4.0             # −4  — strip upper end (= JOINT_Z1)
+JOINT_Z0             = STRIP_Z0                    # −28 — bore bottom = tenon tip
+JOINT_H              = JOINT_Z1 - JOINT_Z0         # 24 — bore depth = engagement
+                                                   # (was v1's fixed 23; strip-
+                                                   # derived now, 1 more glue)
 JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR  # 8.25 — female bore
 JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — collar,
                                                    # AND the bottom half's one
@@ -130,13 +137,10 @@ SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
 # is FULLY OPEN at its joint-side end and the halves SLIDE ONTO the
 # strip — v2's design: separator open through its +z column top,
 # axle_top open through its tenon bottom.)
-# The strip does NOT span the whole spring: it starts 4 in from the
-# spring's top/bottom edges (user 2026-08-05), so each half's slit only
-# needs to cover the STRIP zone (+ clearance) — the closed ends land
-# just past the strip's ends, and the two slits need to overlap only
-# inside that zone:
-STRIP_Z0   = SPRING_Z0 + 4.0       # −28 — strip lower end
-STRIP_Z1   = SPRING_Z1 - 4.0       # −4  — strip upper end (= JOINT_Z1)
+# Each half's slit covers only the STRIP zone (+ clearance) — the
+# closed ends land just past the strip's ends, and the two slits need
+# to overlap only inside that zone (STRIP_Z0/Z1 defined with the joint
+# above):
 SLIT_Z_CLR = 1.0                   # slit closed-end room past the strip end
 assert STRIP_Z1 + SLIT_Z_CLR <= SPRING_Z1 + 1e-9, \
     "top-axle slit would poke out of the spring (shaft must stay solid " \
