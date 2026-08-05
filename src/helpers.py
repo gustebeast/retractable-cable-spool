@@ -21,6 +21,59 @@ def cone_solid(d_bottom: float, d_top: float, h: float, z_base: float) -> cq.Wor
     )
 
 
+def drop_stray_shells(wp: cq.Workplane) -> cq.Workplane:
+    """Rebuild any solid that carries stranded OPEN shells. A boolean fuse
+    occasionally leaves an orphan internal FACE inside the body as a
+    second, non-closed shell — OCC still reports the solid valid and
+    heal() keeps it, but slicers flag it ('the following shells are not
+    closed', Bambu on axle_separator, build #871: a 1-face shell at one
+    lid-bayonet tenon's fuse seam). Keeps the OUTER shell and any CLOSED
+    inner shells (real voids); drops open ones. The overlap gate audits
+    every component for this."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
+    from OCP.BRepClass3d import BRepClass3d
+    from OCP.TopAbs import TopAbs_SHELL
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+
+    def _n_open(shape):
+        n, ex = 0, TopExp_Explorer(shape, TopAbs_SHELL)
+        while ex.More():
+            if not BRep_Tool.IsClosed_s(TopoDS.Shell_s(ex.Current())):
+                n += 1
+            ex.Next()
+        return n
+
+    # audit the WHOLE shape: the stray may be INSIDE a solid, or a loose
+    # open shell riding beside it in a compound (the #871 case)
+    if _n_open(wp.val().wrapped) == 0:
+        return wp
+    rebuilt = []
+    for sol in wp.solids().vals():
+        closed = []
+        ex = TopExp_Explorer(sol.wrapped, TopAbs_SHELL)
+        while ex.More():
+            sh = TopoDS.Shell_s(ex.Current())
+            if BRep_Tool.IsClosed_s(sh):
+                closed.append(sh)
+            ex.Next()
+        if _n_open(sol.wrapped) == 0:
+            rebuilt.append(sol)
+            continue
+        outer = BRepClass3d.OuterShell_s(TopoDS.Solid_s(sol.wrapped))
+        mk = BRepBuilderAPI_MakeSolid(outer)
+        for sh in closed:
+            if not sh.IsSame(outer):
+                mk.Add(sh)
+        rebuilt.append(cq.Solid(mk.Solid()))
+    # rebuild from the cleaned SOLIDS ONLY — loose shells/faces are dropped
+    out = cq.Workplane("XY")
+    for s in rebuilt:
+        out = out.add(s)
+    return out
+
+
 def heal(wp: cq.Workplane) -> cq.Workplane:
     """Run OCCT's ShapeFix + ShapeUpgrade on a Workplane's underlying shape to
     clean up minor face/edge tolerance issues and merge same-domain adjacent

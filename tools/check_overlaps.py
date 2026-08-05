@@ -79,13 +79,40 @@ def intended(a: str, b: str) -> bool:
     return frozenset((a, b)) in _INTENDED
 
 
+def shell_audit(comps) -> int:
+    """Slicer-facing manifold audit: a boolean fuse occasionally strands
+    an orphan internal face as a second, NON-CLOSED shell — OCC calls
+    the solid valid, but slicers flag it (Bambu: 'the following shells
+    are not closed', axle_separator #871). Any open shell fails the
+    gate; fix at the part with helpers.drop_stray_shells."""
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_SHELL
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+    bad = 0
+    for name, shape in comps:
+        n = 0
+        ex = TopExp_Explorer(shape.wrapped, TopAbs_SHELL)
+        while ex.More():
+            if not BRep_Tool.IsClosed_s(TopoDS.Shell_s(ex.Current())):
+                n += 1
+            ex.Next()
+        if n:
+            print(f"OPEN SHELLS: {name} carries {n} non-closed shell(s)")
+            bad += 1
+    if not bad:
+        print("shell audit: all components closed")
+    return bad
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--all", action="store_true", help="also list intended contacts")
     p.add_argument("--jobs", type=int, default=None)
     args = p.parse_args()
     comps = [(n, wp.val()) for n, wp in collect_components()]
-    return run(comps, intended, jobs=args.jobs, show_all=args.all)
+    rc = run(comps, intended, jobs=args.jobs, show_all=args.all)
+    return rc + shell_audit(comps)
 
 
 if __name__ == "__main__":
