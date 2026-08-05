@@ -59,7 +59,7 @@ from .params import (
     JOINT_SPEC, JOINT_WIDTH, JOINT_DEPTH, JOINT_CLR, JOINT_BACK_CLR,
     JOINT_SEAT_CLR, MORTISE_L,
     TOPJ_STEM, TOPJ_FLARE,
-    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
+    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER, TOP_STOP_WALL,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
@@ -89,16 +89,9 @@ assert (_TOPJ_R0 - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
 _R_T = _TOPJ_R0 + (TOPJ_STEM + TOPJ_FLARE) / 2.0
 _ARM_HALF_A = math.degrees(math.asin((BEAM_SIZE / 2.0) / _R_T))
 _SEAT_A     = math.degrees(TOP_JOINT_SEAT_CLR / _R_T)
+_STOP_A     = math.degrees(TOP_STOP_WALL / _R_T)
 _OVER_A     = math.degrees(TOP_ENTRY_OVER / _R_T)
-# the mount rings' #861 scheme, copied here (user: same clearance
-# figures): the tenon ANCHORS AT THE ARM'S ENTRY FACE and spans HALF
-# the crossing; the cavity is exactly tenon + seat + entry overshoot,
-# so the stop-side half of the crossing stays solid (the stop wall is
-# wherever the cavity ends — no more thin wall + empty channel)
-_TEN_SWEEP_A = math.degrees((BEAM_SIZE / 2.0) / _R_T)
-assert (2.0 * _ARM_HALF_A - _TEN_SWEEP_A - _SEAT_A
-        >= math.degrees(2 * NOZZLE / _R_T) - 1e-9), \
-    "frame arc tenon leaves no stop-side arm material"
+_TEN_HALF_A = _ARM_HALF_A - _STOP_A - _SEAT_A
 
 _R_OUT   = FRAME_R_OUT
 _BEAM_RC = BEAM_IR + BEAM_SIZE / 2.0
@@ -132,25 +125,22 @@ def _wall_mortise(angle_deg):
 
 
 def _arc_tenon(site_deg):
-    """Arc tenon on a beam top, seated ANCHORED at the arm's entry face,
-    spanning half the crossing inboard (#861 scheme), root sunk 1.0."""
-    return (flat_arc_solid(True, _TEN_SWEEP_A, -1.0, _TOPJ_R0)
-            .rotate((0, 0, 0), (0, 0, 1),
-                    site_deg + _ARM_HALF_A - _TEN_SWEEP_A)
+    """Arc tenon on a beam top, seated CENTERED on its arm, root sunk 1.0."""
+    return (flat_arc_solid(True, 2.0 * _TEN_HALF_A, -1.0, _TOPJ_R0)
+            .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A)
             .translate((0, 0, BEAM_Z1)))
 
 
 def _arc_mortise(site_deg):
-    """Matching arc channel in frame_top's underside: exactly tenon +
-    seat + entry overshoot — its far end wall (the STOP) lands about
-    half the crossing in, leaving the rest of the arm solid; the entry
-    end sweeps open past the arm's face (the tenon rotates in from the
-    open quadrant). In the +z→−z print the cavities open at the print
-    top and close with plain floors."""
-    sweep = _TEN_SWEEP_A + _SEAT_A + _OVER_A
+    """Matching arc channel in frame_top's underside: the CW end wall (the
+    STOP) sits TOP_STOP_WALL inside the arm's CW face; the CCW end sweeps
+    open past the arm's CCW face (the entry — the tenon rotates in CW from
+    the open quadrant). In the +z→−z print the cavities open at the print
+    top and close with plain floors — the flat-top profile has no
+    orientation-hostile face here."""
+    sweep = (_TEN_HALF_A + _SEAT_A) + (_ARM_HALF_A + _OVER_A)
     return (flat_arc_solid(False, sweep, -2.0, _TOPJ_R0)
-            .rotate((0, 0, 0), (0, 0, 1),
-                    site_deg + _ARM_HALF_A - _TEN_SWEEP_A - _SEAT_A)
+            .rotate((0, 0, 0), (0, 0, 1), site_deg - _TEN_HALF_A - _SEAT_A)
             .translate((0, 0, BEAM_Z1)))
 
 
