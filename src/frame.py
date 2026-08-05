@@ -64,7 +64,7 @@ from .params import (
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
-    MOUNT_GRV_DEPTH,
+    MOUNT_RING_R, MOUNT_TEN_W,
 )
 
 # ── Wall ↔ beam T joint (cadkit — v2's print-proven box) ─────────────────────
@@ -79,11 +79,12 @@ assert (BEAM_IR + BEAM_SIZE) - (_TOPJ_R0 + TOPJ_RD) >= 2 * NOZZLE - 1e-9, \
     "arc-joint cavity's outer wall under 1.6 at the flush arm end"
 assert FRAME_RIB - (TOPJ_TOP + JOINT_BACK_CLR) >= 2 * NOZZLE - 1e-9, \
     "arc-joint cavity ceiling under 1.6 in the top plus"
-# the mount rail's V-groove crosses the arms' arc-joint zone from above —
-# the web between the groove's V and the cavities' ceilings must hold tier
-assert ((FRAME_RIB - MOUNT_GRV_DEPTH) - (TOPJ_TOP + JOINT_BACK_CLR)
+# the mount ring's THROUGH cavities sit radially INBOARD of the arc-joint
+# cavities — the web between them must hold tier (user placed the ring as
+# far out the arms as this allows)
+assert (_TOPJ_R0 - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE - 1e-9), \
-    "mount rail groove undercuts the arc-joint cavity ceiling"
+    "mount ring cavities reach the frame arc-joint radius"
 
 _R_T = _TOPJ_R0 + (TOPJ_STEM + TOPJ_FLARE) / 2.0
 _ARM_HALF_A = math.degrees(math.asin((BEAM_SIZE / 2.0) / _R_T))

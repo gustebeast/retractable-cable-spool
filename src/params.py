@@ -547,35 +547,28 @@ TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 
-# ── MOUNT — desk/wall mount (v3 flush redesign; v2's validated screw) ────────
-# ONE CONTINUOUS piece (user's call — a one-piece mount cannot be
-# screwed down at the wrong spacing): two bars riding the ±Y arms'
-# channels, tied by a SEMICIRCULAR BYPASS around the centre — the
-# rotating axle caps the centre at 10.2, so nothing can cross it flush,
-# and flush is the point (user: vertical space is precious — assembled,
-# the mount tops sit level with the frame's top face, stack = FRAME_RIB).
-# WORKFLOW (user): (1) screw the mount to the wood; (2) offer the
-# assembly up (tenons through the entry pockets) and slide it +y to the
-# stops (the cable pull's +y component preloads the seat — v2's rule; no
-# lock insert, user's call). Remove: slide −y, drop away.
-# Each arm bar: a mushroom TENON (cadkit joint, THROUGH mortise — both
-# hosts print +z→−z, so the up+up octagon's closure is dead weight; the
-# cavity exits the arm's underside) under a flush SPINE exactly one stem
-# wide (a wider slot would leave a flat floor = a bridge in the frame's
-# print), then a shallow RAIL out to the bypass junction at y = ±ARC_R.
-# +Y arm: entry pocket OUTBOARD of the mortise, stop inboard; −Y arm
-# mirrored — both seat on the same frame +y slide.
-# The BYPASS: every mount member must clear the frame's SWEPT plan (the
-# seated plan ⊕ the 17 slide) at the mount's z-band, and a member may
-# cross an arm ONLY running parallel to the slide (its groove then works
-# at every slide position). Hence the semicircle through +x at ARC_R:
-# it crosses the +X arm slide-parallel (a short V-groove across that
-# arm, radially clear of the anchor rib and the arc-joint cavities) and
-# lands on the rails tangentially at (0, ±ARC_R) (shallow junction
-# notches beside the rail grooves). The two SCREW PADS sit ON the
-# bypass at ±45°, over open quadrant air, INSIDE the frame's footprint
-# (user's call) — driver access is trivial because the mount screws on
-# BEFORE the assembly.
+# ── MOUNT — desk/wall TWIST-LOCK RING (v3; v2's validated screw) ─────────────
+# ONE CONTINUOUS ring (user: a one-piece mount can't be screwed down at
+# the wrong spacing), FLUSH with the frame's top face when assembled
+# (stack stays FRAME_RIB — vertical space is precious). The ring rides
+# arc channels near the arms' ENDS (user: joinery outboard for
+# structural integrity — the largest bead radius whose THROUGH cavities
+# stay radially clear of the frame_top↔bottom arc joints further out,
+# asserted in frame.py). WORKFLOW (user): (1) screw the ring to the
+# wood — both screws sit on quadrant pads INSIDE the frame's footprint,
+# over open air, fully driver-accessible because the assembly isn't
+# there yet; (2) offer the assembly up — the ring's four arc TENONS
+# pass through the OPEN QUADRANTS — and rotate it to the angular stops
+# (the same motion and angular constants as the frame_top↔frame_bottom
+# install: one muscle memory for both). Rotation is what makes the
+# install sweep trivial: the ring maps onto its own circle, so nothing
+# ever sweeps across the centre — the reason a slide-in bypass around
+# the axle could not work. Remove: rotate back, drop away.
+# Joint: the flat-top mushroom ARC (cadkit, THROUGH mortise — both
+# hosts print +z→−z, and the cavities exit the arms' undersides over
+# the open bays), hanging from a flush SPINE ring exactly one stem wide
+# (a wider slot floor would bridge in the frame's print). Over each
+# arm's stop-wall zone the spine rides an annular V-bottom groove.
 WOOD_SCREW_SHAFT_D = 4.0           # v2's validated screw geometry, verbatim
 WOOD_SCREW_HEAD_D  = 9.3           # countersunk-head pocket Ø at the face
 WOOD_SCREW_HEAD_H  = 4.0           # cone depth
@@ -586,59 +579,33 @@ assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
     "mount plate too thin to countersink the wood screw flush"
 
 MOUNT_TEN_W  = 8 * NOZZLE          # 6.4 — joint width (v2's mount size)
-MOUNT_TEN_L  = 20 * NOZZLE         # 16.0 — engagement per bracket
-MOUNT_WALL   = 2 * NOZZLE          # min wall at the channels' radial caps
 MOUNT_MATE_Z = FRAME_RIB - MOUNT_PLATE_T           # 6.4 — the joint's mating
                                                    # plane (spine underside)
 MOUNT_THRU_D = MOUNT_MATE_Z + 1.0                  # 7.4 — cavity run past the
                                                    # mating plane: out the arm's
                                                    # underside → THROUGH
-MOUNT_T0     = 43 * NOZZLE                         # 34.4 — seated tenon start
-MOUNT_TEN_R1 = MOUNT_T0 + MOUNT_TEN_L              # 50.4 — seated tenon end
-MOUNT_MORT_SLACK = 0.5             # cavity runs this past the tenon's free
-                                   # end (v2's pattern)
-MOUNT_POCKET_L = MOUNT_TEN_L + 2.0                 # 18.0 — z-entry pockets
-MOUNT_TRAVEL   = MOUNT_POCKET_L - 1.0              # 17.0 — the seating slide
-MOUNT_CAP_OUT  = BEAM_IR - MOUNT_WALL              # 71.83 — outboard cap
-MOUNT_CAP_IN   = BRG_BOSS_OD / 2.0 + MOUNT_WALL    # 15.9 — inboard cap
-# channel spans per arm, (r0, r1) — tenons modelled SEATED, butting their
-# stops (+Y: the inboard end wall; −Y: the outboard end wall):
-MOUNT_YP_MORT = (MOUNT_T0, MOUNT_TEN_R1 + MOUNT_MORT_SLACK)   # [34.4, 50.9]
-MOUNT_YP_POCK = (MOUNT_YP_MORT[1],
-                 MOUNT_YP_MORT[1] + MOUNT_POCKET_L)           # [50.9, 68.9]
-MOUNT_YM_MORT = (MOUNT_T0 - MOUNT_MORT_SLACK, MOUNT_TEN_R1)   # [33.9, 50.4]
-MOUNT_YM_POCK = (MOUNT_YM_MORT[0] - MOUNT_POCKET_L,
-                 MOUNT_YM_MORT[0])                            # [15.9, 33.9]
-assert MOUNT_YP_POCK[1] <= MOUNT_CAP_OUT + 1e-9, \
-    "+Y mount pocket runs past the outboard cap (arc-joint keep-out)"
-assert MOUNT_YM_POCK[0] >= MOUNT_CAP_IN - 1e-9, \
-    "−Y mount pocket runs into the centre boss's keep-out"
-assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= MOUNT_WALL - 1e-9, \
-    "mount cavity leaves the arm's side walls under the 1.6 tier"
-
+MOUNT_RING_R  = 89 * NOZZLE        # 71.2 — ring centreline radius (near the
+                                   # arm ends, user's call; radial keep-out
+                                   # to the arc joints asserted in frame.py)
 MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 3.2 — the spine IS the mushroom stem:
-                                   # it rides the cavity's stem slot with
+                                   # it rides the cavities' stem slots with
                                    # zero ledge
-MOUNT_RAIL_T  = 3 * NOZZLE         # 2.4 — shallow rail over the arc-joint zone
-MOUNT_RAIL_X0 = MOUNT_TEN_R1 - MOUNT_MORT_SLACK    # 49.9 — spine→rail step:
-                                   # the full-depth spine never leaves the
-                                   # cavity zones in either arm's pose,
-                                   # seated or pre-slide
-MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE     # 10.9 — square screw pad
-# (INTERIM — the one-piece rework is pending a design decision with the
-# user on the centre-bypass topology; the outboard pads below keep the
-# current two-bracket mount building meanwhile.)
-MOUNT_PAD_GAP = NOZZLE             # 0.8 — pad inboard face off the arm tip
-MOUNT_PAD_X0  = FRAME_R_OUT + MOUNT_PAD_GAP        # 84.63
-MOUNT_PAD_X1  = MOUNT_PAD_X0 + MOUNT_PAD_W         # 95.53
-MOUNT_SCREW_X = MOUNT_PAD_X0 + MOUNT_PAD_W / 2.0   # 90.08 — screw at pad centre
-# V-GROOVE for the rail across the cap + arc-joint zone: vertical walls,
-# then a 45° V closing on a one-bead(+clearance) flat — the groove's −z
-# boundary is the roof of the slot in the frame's +z→−z print:
+MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE     # 10.9 — square screw pads
+MOUNT_PAD_AZ  = (135.0, 315.0)     # pad azimuths: open quadrants, away from
+                                   # the +x anchor sector and the exit at 45°
+assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE - 1e-9, \
+    "mount cavity leaves the arm's side walls under the 1.6 tier"
+assert (MOUNT_RING_R + MOUNT_PAD_W * math.sqrt(2.0) / 2.0
+        <= FRAME_R_OUT - 1e-9), \
+    "mount screw pads poke past the frame's plan silhouette"
+# annular V-GROOVE for the spine over each arm's stop-wall zone (the
+# groove's floor is the roof of the slot in the frame's +z→−z print —
+# vertical walls, then a 45° V closing on a one-bead(+clearance) flat):
 MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 3.5 — groove width
-MOUNT_GRV_VERT = MOUNT_RAIL_T + JOINT_CLR          # 2.55 — vertical depth
+MOUNT_GRV_VERT = MOUNT_PLATE_T + JOINT_CLR         # 4.15 — vertical depth
+                                                   # (the spine runs full-T)
 MOUNT_GRV_FLAT = NOZZLE + 2 * JOINT_CLR            # 1.1 — dulled V flat
-MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.75
+MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 5.35
 
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive

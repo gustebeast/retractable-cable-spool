@@ -512,6 +512,36 @@ def _octagon_mortise_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
     return _arc_wire(pts, radius, clearance).revolve(sweep_deg, (0, 0), (0, 1))
 
 
+# Mushroom ARC variants — the rotational-install analogue, same rules as
+# the octagon's (see the octagon-arc section note): profile at `radius`,
+# revolved about Z; angular clearances convert as arc ≈ radius·angle.
+# With `height` (the THROUGH cavity) the swept slot exits the host's far
+# face — the pairing that makes a flush ring mount on a thin plate work.
+
+
+def _mushroom_tenon_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
+                        root=1.0, height=None):
+    """ROTATIONAL-install mushroom TENON: the flat-top section revolved
+    `sweep_deg` about the Z axis at `radius`. Sweeps from plan angle 0
+    toward +Y (rotate about Z to place); mating plane z=0, `root` sunk
+    below for volumetric fusion."""
+    pts, _ = _mushroom_profile(width, nozzle, -abs(root), clearance,
+                               height=height)
+    return _arc_wire(pts, radius).revolve(sweep_deg, (0, 0), (0, 1))
+
+
+def _mushroom_mortise_arc(width, radius, sweep_deg, nozzle=0.8,
+                          clearance=0.1, drop=2.0, height=None):
+    """Cavity CUTTER matching _mushroom_tenon_arc — dilated `clearance`
+    per side (mitred in the radial plane), dropped `drop` below the
+    mating plane, swept over the LONGER arc (engagement + angular entry
+    overshoot + seat). Sweep past the host's open face on the entry
+    side; the far angular end left inside the host is the stop."""
+    pts, _ = _mushroom_profile(width, nozzle, -abs(drop), clearance,
+                               height=height)
+    return _arc_wire(pts, radius, clearance).revolve(sweep_deg, (0, 0), (0, 1))
+
+
 # ──────────── T-SLOT (install ∥ print-Z) slide joint — was the dovetail ──────
 # Third family, unlocked by the INSTALL AXIS rather than a print trick: print
 # orientation alone under-determines a slide joint — the INSTALL direction (the
@@ -1183,10 +1213,13 @@ class Joint:
         Z axis and revolved `sweep_deg` about it — for parts already located
         on a shared axis, where the one free install motion is rotation.
         The sweep replaces `length` (which may be None at joint())."""
+        if self.family == "mushroom" and self.through:
+            return _mushroom_tenon_arc(self.width, radius, sweep_deg,
+                                       self.nozzle, self.clearance, root)
         if self.family != "octagon":
             raise NotImplementedError(
                 "rotational (arc) installs are modelled for the up+up "
-                "install='x' site only")
+                "install='x' sites only (octagon, and the THROUGH mushroom)")
         return _octagon_tenon_arc(self.width, radius, sweep_deg, self.nozzle,
                                   self.clearance, root, height=self.depth)
 
@@ -1194,10 +1227,14 @@ class Joint:
         """Cavity CUTTER matching tenon_arc — sweep it past the host's open
         face on the entry side; the far angular end left inside is the
         stop."""
+        if self.family == "mushroom" and self.through:
+            return _mushroom_mortise_arc(self.width, radius, sweep_deg,
+                                         self.nozzle, self.clearance, drop,
+                                         height=self.depth)
         if self.family != "octagon":
             raise NotImplementedError(
                 "rotational (arc) installs are modelled for the up+up "
-                "install='x' site only")
+                "install='x' sites only (octagon, and the THROUGH mushroom)")
         return _octagon_mortise_arc(self.width, radius, sweep_deg, self.nozzle,
                                     self.clearance, drop, height=self.depth)
 

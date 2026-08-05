@@ -12,7 +12,7 @@ import sys
 from cadkit.overlap_check import run
 
 from src.frame import frame_top, frame_bottom
-from src.mount import mount_bracket
+from src.mount import mount_ring
 from src.wall import wall_top, wall_lock
 from src.axle import axle_top, axle_separator
 from src.lid import lid
@@ -30,9 +30,7 @@ def collect_components():
         *[(f"wall_lock_{a}",
            wall_lock.rotate((0, 0, 0), (0, 0, 1), a))
           for a in (0, 90, 180, 270)],
-        *[(f"mount_bracket_{a}",
-           mount_bracket.rotate((0, 0, 0), (0, 0, 1), a))
-          for a in (90, 270)],
+        ("mount_ring",  mount_ring),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),
         ("lid",         lid),
@@ -77,10 +75,9 @@ _INTENDED = {
 for _a in (0, 90, 180, 270):
     for _p in ("frame_bottom", "wall_top", "frame_top"):
         _INTENDED.add(frozenset((f"wall_lock_{_a}", _p)))
-# each mount bracket: seated in its arm's channel (tenon butting the
-# stop, spine in the slot, rail in the V-groove — face contacts)
-for _a in (90, 270):
-    _INTENDED.add(frozenset((f"mount_bracket_{_a}", "frame_top")))
+# the mount ring: seated in the four arms' arc channels (tenons at the
+# stops, spine in the slots/V-grooves — face contacts)
+_INTENDED.add(frozenset(("mount_ring", "frame_top")))
 
 
 def intended(a: str, b: str) -> bool:
