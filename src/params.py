@@ -788,15 +788,12 @@ RATCHET_WIN_Z0  = (RATCHET_PIVOT_Z + _DX_STOP * _STOP_S
                                                    # for the lever's future
                                                    # stop tab
 # wall verticals — ONE fused band, bed → the LID'S TOP (user's call: the
-# whole wall is frame_bottom now; the bay windows close with 45° gables
-# in its upright print, and the exit port stays OPEN-TOPPED, wall.py)
+# whole wall is frame_bottom now; the bay windows AND the exit port run
+# open through the top rim — only the entry port keeps a roof, wall.py)
 WALL_Z1 = LID_Z1                                   # −25.6 — band top = lid top
-# lever-bay window gables: dulled ridge width + the resulting crown of
-# solid ring left above the peaks (the ring band OVER the bays)
-WALL_WIN_TIP  = 3 * NOZZLE                         # 2.4 — dulled gable ridge
-_WIN_RISE = ((LEVER_WIN_Y1 - LEVER_WIN_Y0) - WALL_WIN_TIP) / 2.0   # 5.6
-assert WALL_Z1 - (WALL_SPLIT_Z + _WIN_RISE) >= NOZZLE - 1e-9, \
-    "bay-window gables poke through the band's top ring"
+# (the lever-bay gable crown is RETIRED — user's call: the ring between
+# the levers and the lid was an overhang; the bay windows now run
+# full-height through the band's top rim, wall.py)
 # (the exit-port sawtooth ceiling is RETIRED — user's call: an
 # unnecessary overhang; the port cuts open through the band's top rim)
 assert (LEVER_PIVOT_X + BOSS_BORE_ID / 2.0 + BOSS_RING_W
