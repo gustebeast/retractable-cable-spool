@@ -545,10 +545,7 @@ WALL_ZB       = FLOOR_Z0           # wall band bottom — FUSED into frame_botto
 # same TOPJ_* profile the lid bayonet uses — angular constants from v2)
 TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
-# (TOP_STOP_WALL retired at #862: both rotational joints — frame arc +
-# mount rings — now anchor their tenons at the entry face and leave the
-# whole stop-side half of the crossing solid; the stop wall is wherever
-# the cavity ends.)
+TOP_STOP_WALL      = 2 * NOZZLE    # stop-wall thickness at each arm face (arc)
 
 # ── MOUNT — desk/wall TWIST-LOCK RING (v3; v2's validated screw) ─────────────
 # ONE CONTINUOUS ring (user: a one-piece mount can't be screwed down at
