@@ -113,18 +113,24 @@ SPRING_Z0 = SPRING_Z1 - SPRING_H       # −32
 # ── Axle two-half glue joint + spring-strip slit (v1/v2-proven design:
 # the joint must pass through the spring's Ø13.4 flange holes, so the axle
 # splits and each half slides onto the strip from its own end) ───────────────
-MORTISE_TOP_GAP      = 5 * NOZZLE                  # 4.0 — collar top below the spring top
-JOINT_Z1             = SPRING_Z1 - MORTISE_TOP_GAP # −4 — mortise opening
-# the strip zone bounds the joint: the strip starts 4 in from the
-# spring's edges (user 2026-08-05), and the TENON TIP lands exactly at
-# the strip's lower end (user's catch: the old fixed 23 engagement left
-# the tip 5 — not 4 — above the spring bottom)
-STRIP_Z0             = SPRING_Z0 + 4.0             # −28 — strip lower end
-STRIP_Z1             = SPRING_Z1 - 4.0             # −4  — strip upper end (= JOINT_Z1)
-JOINT_Z0             = STRIP_Z0                    # −28 — bore bottom = tenon tip
-JOINT_H              = JOINT_Z1 - JOINT_Z0         # 24 — bore depth = engagement
-                                                   # (was v1's fixed 23; strip-
-                                                   # derived now, 1 more glue)
+# The joint's Z DATUM pair (user's rule, converged over #874-876): the
+# spring's strip physically starts 4 in from each spring edge; the
+# slits' closed ends sit SLIT_INSET = 3.2 in (0.8 of shrinkage margin
+# past the strip's ends); and each half's joint-side EXTENT lands
+# exactly ON the other half's slit-end plane — the parts LINE UP, no
+# slit window is ever exposed past the seated mating half:
+#   · axle_top's tenon tip  = the separator's slit floor  (SLIT_ZLO)
+#   · separator's column top = axle_top's slit ceiling     (SLIT_ZHI)
+SLIT_INSET = 4 * NOZZLE            # 3.2 — slit-end inset from the spring edges
+SLIT_ZLO   = SPRING_Z0 + SLIT_INSET   # −28.8 — sep slit floor = tenon tip
+SLIT_ZHI   = SPRING_Z1 - SLIT_INSET   # −3.2 — top slit ceiling = column top
+STRIP_Z0   = SPRING_Z0 + 4.0       # −28 — strip physical lower end (reference)
+STRIP_Z1   = SPRING_Z1 - 4.0       # −4  — strip physical upper end (reference)
+JOINT_Z1   = SLIT_ZHI              # mortise opening = separator column top
+JOINT_Z0   = SLIT_ZLO              # bore bottom = tenon tip
+JOINT_H    = JOINT_Z1 - JOINT_Z0   # 25.6 — bore depth = engagement
+assert SLIT_ZLO <= STRIP_Z0 and STRIP_Z1 <= SLIT_ZHI, \
+    "slits no longer cover the strip's physical span"
 JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR  # 8.25 — female bore
 JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — collar,
                                                    # AND the bottom half's one
@@ -137,14 +143,6 @@ SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
 # is FULLY OPEN at its joint-side end and the halves SLIDE ONTO the
 # strip — v2's design: separator open through its +z column top,
 # axle_top open through its tenon bottom.)
-# Slit closed ends: 3.2 in from the spring's edges — 0.8 of SHRINKAGE
-# margin past the strip's physical 4-inset ends (user's calls, in
-# order: the 1.0 margin cost too much section; then exactly-4 left
-# none; 3.2 is the balance). The two slits need to overlap only inside
-# the strip zone.
-SLIT_INSET = 3.2                   # slit end inset from the spring edges
-SLIT_ZLO = SPRING_Z0 + SLIT_INSET  # −28.8 — separator slit floor
-SLIT_ZHI = SPRING_Z1 - SLIT_INSET  # −3.2 — axle_top slit ceiling
 assert SLIT_ZHI <= SPRING_Z1 - 1e-9, \
     "top-axle slit would poke out of the spring (shaft must stay solid " \
     "through the bearing above)"
