@@ -30,7 +30,7 @@ from cadkit.joinery import PrintSpec, joint
 
 from .params import (
     NOZZLE, FRAME_Z1, FRAME_RIB,
-    MOUNT_TEN_W, MOUNT_THRU_D, MOUNT_PLATE_T, MOUNT_MATE_Z,
+    MOUNT_TEN_W, MOUNT_TEN_H, MOUNT_THRU_D, MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
     MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_AZ,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
@@ -104,9 +104,10 @@ def _build_mount():
     for R in _RINGS:
         ring = _annulus(R - hw, R + hw, MOUNT_MATE_Z, FRAME_Z1)
         _, _, _, _, ten = _angles(R)
-        for site in _SITES:                    # hanging arc tenons, SEATED
-            ring = ring.union(
-                _hang(MOUNT_J.tenon_arc(R, 2.0 * ten, root=2.0))
+        for site in _SITES:                    # hanging arc tenons, SEATED,
+            ring = ring.union(                 # grown to FILL the cavities
+                _hang(MOUNT_J.tenon_arc(R, 2.0 * ten, root=2.0,
+                                        height=MOUNT_TEN_H))
                 .rotate((0, 0, 0), (0, 0, 1), site - ten), clean=False)
         m = ring if m is None else m.union(ring, clean=False)
     # mid-quadrant SPOKES tying the rings (flush slabs over open air)
