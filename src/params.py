@@ -378,8 +378,15 @@ R_OUT_COIL = WRAP_R0 + N_WRAPS * COIL_PITCH    # outermost wrap centre
 # band root; the disk keeps that minimum and simply carries spare coil
 # room — the AXIAL stack still shrinks with capacity, the real win)
 _RIM_COIL = 2.0 * (R_OUT_COIL + CABLE_D / 2.0 + 1.0)
-_RIM_PASS = 2.0 * ((DRUM_OR + NOZZLE + SEP_PASS_W)     # tunnel outer face
-                   + RATCHET_DEPTH + 2 * NOZZLE)       # + tooth band + tier
+# the tunnel's TRUE plan envelope (user-caught at #896: a 45°-tilted
+# tube's plan corners swing wider than its mouth — the old mouth-width
+# floor left only 1.0 to a tooth root): the corner edges reach
+# hypot(R_outer_face, W·√2/2 + RIM_H/2); the tunnel sits FLUSH on the
+# drum wall now (user), and ≥1.6 must survive to the tooth roots
+_RIM_PASS = 2.0 * (math.hypot(DRUM_OR + SEP_PASS_W,
+                              SEP_PASS_W * math.sqrt(2.0) / 2.0
+                              + RIM_H / 2.0)
+                   + RATCHET_DEPTH + 2 * NOZZLE)
 RIM_OD = max(_RIM_COIL, _RIM_PASS)
 
 LID_SEP_GAP = (math.ceil(CABLE_D / NOZZLE - 1e-9)
@@ -436,9 +443,9 @@ LIDJ_Z_CLR      = 0.20             # z-sandwich clearance, THIS joint only
                                    # print-check the seating twist for grab)
                                    # side (arc mm) — drop-in ease
 
-# 45° pass tunnel, RE-DERIVED for the drum (the separator block's comment
-# promised this): mouth just outside the wall, one bead of web to its root
-SEP_PASS_R = DRUM_OR + NOZZLE + SEP_PASS_W / 2.0    # 57.05
+# 45° pass tunnel: FLUSH on the drum wall (user #896 — the old one-bead
+# web served nothing; inward is friendlier to the tooth-root keep-out)
+SEP_PASS_R = DRUM_OR + SEP_PASS_W / 2.0
 
 # lid body: v2 cable_ceiling's pattern — spokes + graded concentric rings
 LID_SPOKE_N   = 24                 # spoke count (v2's call)
@@ -451,10 +458,15 @@ LID_RIM_R0    = LID_OD / 2.0 - 6 * NOZZLE      # 68.1 — solid outer rim (v2's
 LID_MID_W     = 4 * NOZZLE         # 3.2 — mid tie band (v2)
 LID_MID_RC    = (LID_RING_IN_R1 + LID_RIM_R0) / 2.0    # 58.925 — span middle
 
-assert SEP_PASS_R - SEP_PASS_W / 2.0 - DRUM_OR >= NOZZLE - 1e-9, \
+assert SEP_PASS_R - SEP_PASS_W / 2.0 - DRUM_OR >= -1e-9, \
     "pass tunnel undercuts the drum wall's root"
-assert SEP_PASS_R + SEP_PASS_W / 2.0 <= RIM_OD / 2.0 - RATCHET_DEPTH - 2 * NOZZLE + 1e-9, \
-    "pass tunnel reaches the ratchet tooth band"
+# the TRUE swept plan envelope of the tilted tube (its corner edges,
+# not just its mouth) must keep the 1.6 tier to the tooth roots —
+# user-caught: the mouth-only version measured 1.0 on the print model
+assert (math.hypot(SEP_PASS_R + SEP_PASS_W / 2.0,
+                   SEP_PASS_W * math.sqrt(2.0) / 2.0 + RIM_H / 2.0)
+        <= RIM_OD / 2.0 - RATCHET_DEPTH - 2 * NOZZLE + 1e-9), \
+    "pass tunnel's swept envelope reaches within 1.6 of the tooth roots"
 assert DRUM_IR - SPRING_FLANGE_OD / 2.0 >= 2.0, \
     "drum bore too close to the spring flanges (install slide-past)"
 
