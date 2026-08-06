@@ -56,11 +56,15 @@ def _cable_exit():
     the wind range — cut flat between those two y planes), from the
     spool chamber's floor OPEN THROUGH THE BAND'S TOP RIM (no roof, no
     overhang; the old tangential 30° arc is retired)."""
+    # the cutter's x-start tracks the band's chord at the window's far-y
+    # edge (the #890 membrane lesson: a fixed start strands a sliver
+    # where the ring pulls inboard of it)
+    x0 = math.sqrt(max(WALL_IR ** 2 - CABLE_EXIT_Y_HI ** 2, 0.0)) - 1.0
     return (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
-            .polyline([(30.0, CABLE_EXIT_Y_LO),
+            .polyline([(x0, CABLE_EXIT_Y_LO),
                        (WALL_OR + 3.0, CABLE_EXIT_Y_LO),
                        (WALL_OR + 3.0, CABLE_EXIT_Y_HI),
-                       (30.0, CABLE_EXIT_Y_HI)])
+                       (x0, CABLE_EXIT_Y_HI)])
             .close().extrude((WALL_Z1 + 1.0) - CABLE_EXIT_Z0))
 
 
