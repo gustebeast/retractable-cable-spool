@@ -835,6 +835,20 @@ BRAKE_STOP_GAP      = -0.25        # vertical INTERFERENCE at the pad's top
 GUARD_T         = 2 * NOZZLE       # 1.6 — chevron bar section (user)
 GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
                                    # side's swept envelope (user)
+
+# ── CABLE HORN (user #889) — the grab station off the bottom frame at
+# the exit window. Step 1: a SOLID radial pier at the window's
+# mid-azimuth, welded into the band below the sill, running out to the
+# fork blocks' radial extent, top FLUSH with the window bottom (the
+# exiting cable rides straight onto it). Steps to come: curved channel
+# side walls (HORN_CH_W wide, open top for drop-in) + a sliding
+# mortise/tenon lock cap as its own part.
+HORN_CH_W  = (math.ceil(1.5 * CABLE_D / NOZZLE - 1e-9)
+              * NOZZLE)            # 6.4 — channel width: 1.5 × cable Ø,
+                                   # rounded UP to the bead grid (user)
+HORN_WALL_T = 3 * NOZZLE           # 2.4 — channel side walls
+HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier width
+# (HORN_Z1 = the window bottom — set beside CABLE_EXIT_Z0 below)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud
@@ -918,6 +932,8 @@ CABLE_EXIT_SPAN_DEG   = (math.degrees(math.asin(CABLE_EXIT_R_HI / WALL_IR))
                          - math.degrees(math.asin(CABLE_EXIT_R_LO / WALL_IR))
                          + 2.0 * CABLE_EXIT_MARGIN_DEG)                 # ≈ 30
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
+HORN_Z1 = CABLE_EXIT_Z0            # cable-horn pier top = the window bottom
+                                   # (user #889; HORN_* block above)
 CABLE_EXIT_Z1 = LID_Z0 + 0.5                       # −29.9 — reference ceiling
                                    # (anchors WALL_SPLIT_Z below; the port
                                    # itself now cuts OPEN through the band's

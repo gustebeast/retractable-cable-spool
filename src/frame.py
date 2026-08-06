@@ -64,6 +64,7 @@ from .params import (
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
     BRAKE_STOP_TOP_T, GUARD_T,
+    CABLE_EXIT_ANGLE_DEG, HORN_W, HORN_Z1,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -332,6 +333,21 @@ def _ratchet_stop():
     return prism.cut(corbel)
 
 
+def _cable_horn():
+    """CABLE HORN pier (user #889, step 1 of the grab station): a SOLID
+    radial prism at the exit window's mid-azimuth — welded into the
+    band below the sill, running out to the fork blocks' radial extent
+    (the part's +x reach), top FLUSH with the window's bottom so the
+    exiting cable rides straight onto it. Prints with the frame from
+    the bed: plain verticals, no overhangs. (Next steps: the curved
+    channel side walls + the sliding lock cap.)"""
+    return (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
+            .center((WALL_IR + _R_OUT) / 2.0, 0.0)
+            .rect(_R_OUT - WALL_IR, HORN_W)
+            .extrude(HORN_Z1 - FLOOR_Z0)
+            .rotate((0, 0, 0), (0, 0, 1), CABLE_EXIT_ANGLE_DEG))
+
+
 def _cable_guard(s):
     """^ CABLE-GUARD chevron for one lever bay (s=+1 ratchet, −1 brake;
     heights pinned in levers.py, user #887): the full-height windows
@@ -515,6 +531,7 @@ def _build_frame_bottom():
     # inboard) blankets that bay's wall line from z −38.7 to the floor —
     # no static fence can exist there; see the #887 report
     fb = fb.union(_cable_guard(-1.0))
+    fb = fb.union(_cable_horn())
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     return heal(fb)
