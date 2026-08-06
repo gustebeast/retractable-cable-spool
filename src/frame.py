@@ -65,7 +65,7 @@ from .params import (
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
     BRAKE_STOP_TOP_T, GUARD_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_ROOF_T,
-    HORN_BLOCK_L, HORN_BELL_R, HORN_ENTRY_CH, HORN_YC,
+    HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -341,16 +341,16 @@ def _cable_horn():
     out to the part's +x edge, top FLUSH with the window bottom so the
     exiting cable rides straight onto it; root trimmed to the band's
     bore, welded through the band's below-sill ring. The TUNNEL BLOCK:
-    a second prism ON the pier at its +x end, shaped by three cuts —
+    a second prism ON the pier at its +x end, shaped by cuts —
       · the TUNNEL: a round HORN_CH_W bore along x, its floor tangent
         to the pier top (the cable slides on at deck level, no step);
-      · the EXIT BELL: a quarter-round trumpet revolved a FULL CIRCLE
-        around the bore axis at the +x face — tangent to the bore and
-        to the face, so the free cable can be pulled in ANY direction
-        without biting an edge (it scoops into the pier top below);
-      · the ENTRY CHAMFER: 45° in PLAN VIEW only, both sides of the
-        −x mouth — inside, the cable is locked to the spool's flat
-        plane and only its in-plane approach angle wanders."""
+      · a MOUTH BELL at EACH end: a quarter-round trumpet revolved a
+        FULL CIRCLE around the bore axis, tangent to the bore and to
+        the face (they scoop into the pier top below). The +x exit
+        needs it — the free cable pulls in any direction with no edge
+        to bite; the −x entry reuses it unchanged for simplicity
+        (user: the spool-plane cable never technically needs the
+        top/bottom quadrants there)."""
     yc = HORN_YC
     ch2 = HORN_CH_W / 2.0
     zc = HORN_Z1 + ch2             # tunnel axis: bore floor = pier top
@@ -378,33 +378,23 @@ def _cable_horn():
         cq.Workplane("YZ").workplane(offset=xb0 - 1.0)
         .center(yc, zc).circle(ch2)
         .extrude(HORN_BLOCK_L + 2.0))
-    # cut 2 — the EXIT BELL: quarter-round profile (tangent to the bore
-    # wall, tangent to the +x face) revolved 360° around the bore axis
+    # cuts 2+3 — a MOUTH BELL at each end: quarter-round profile
+    # (tangent to the bore wall, tangent to the face) revolved 360°
+    # around the bore axis; s = which way the mouth opens
     r = HORN_BELL_R
-    bell = (cq.Workplane("XZ")
-            .moveTo(_R_OUT - r, ch2)
-            .threePointArc(
-                (_R_OUT - r * (1.0 - math.sin(math.radians(45.0))),
-                 ch2 + r * (1.0 - math.cos(math.radians(45.0)))),
-                (_R_OUT, ch2 + r))
-            .lineTo(_R_OUT + 1.0, ch2 + r)
-            .lineTo(_R_OUT + 1.0, ch2)
-            .close()
-            .revolve(360.0, (0.0, 0.0), (1.0, 0.0))
-            .translate((0.0, yc, zc)))
-    p = p.cut(bell)
-    # cut 3 — the ENTRY CHAMFER: 45° trapezoid in plan over the bore's
-    # z-band, flaring the −x mouth in ±y only
-    c = HORN_ENTRY_CH
-    ent = (cq.Workplane("XY")
-           .polyline([(xb0 - 1.0, yc - ch2 - c),
-                      (xb0 + c, yc - ch2),
-                      (xb0 + c, yc + ch2),
-                      (xb0 - 1.0, yc + ch2 + c)])
-           .close()
-           .extrude(HORN_CH_W)
-           .translate((0.0, 0.0, HORN_Z1)))
-    p = p.cut(ent)
+    s45 = math.sin(math.radians(45.0))
+    for x_f, s in ((_R_OUT, +1.0), (xb0, -1.0)):
+        bell = (cq.Workplane("XZ")
+                .moveTo(x_f - s * r, ch2)
+                .threePointArc(
+                    (x_f - s * r * (1.0 - s45), ch2 + r * (1.0 - s45)),
+                    (x_f, ch2 + r))
+                .lineTo(x_f + s * 1.0, ch2 + r)
+                .lineTo(x_f + s * 1.0, ch2)
+                .close()
+                .revolve(360.0, (0.0, 0.0), (1.0, 0.0))
+                .translate((0.0, yc, zc)))
+        p = p.cut(bell)
     return p
 
 

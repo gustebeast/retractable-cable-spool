@@ -855,12 +855,12 @@ GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
 # exiting cable rides straight onto it). Step 2 REDESIGNED at #903
 # (user: the IDEAL cable model first, printability/installation set
 # aside — the open-top guide walls + roof-cap plan are DROPPED): a
-# second prism sits ON the pier near its +x end and three cuts shape
-# it — a round through-TUNNEL for the cable, a FULL-CIRCLE bell at the
-# +x exit (the free cable can be pulled in any direction — no edge to
-# bite anywhere around the mouth), and a HORIZONTAL-only chamfer at
-# the −x entry (inside, the cable is locked to the spool's flat plane;
-# only its in-plane approach angle wanders with the wind state).
+# second prism sits ON the pier near its +x end, shaped by cuts —
+# a round through-TUNNEL for the cable and a FULL-CIRCLE bell at EACH
+# mouth (kept identical for simplicity, user: the +x exit needs the
+# full circle — the free cable pulls in any direction with no edge to
+# bite — and the −x entry just reuses it, though the spool-plane cable
+# never technically needs the top/bottom quadrants there).
 HORN_CH_W  = (math.ceil(1.5 * CABLE_D / NOZZLE - 1e-9)
               * NOZZLE)            # 6.4 — tunnel bore Ø: 1.5 × cable Ø,
                                    # rounded UP to the bead grid (user)
@@ -869,16 +869,14 @@ HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier/block width
 HORN_ROOF_T = 3 * NOZZLE           # 2.4 — meat above the tunnel; block
                                    # height = HORN_CH_W + HORN_ROOF_T
 HORN_BLOCK_L = 16 * NOZZLE         # 12.8 — tunnel block length along x,
-                                   # flush with the +x frame edge: bell +
-                                   # entry chamfer + straight middle
-HORN_BELL_R = 2 * NOZZLE           # 1.6 — exit bell: quarter-round
-                                   # trumpet revolved around the tunnel
-                                   # axis (tangent to the bore, tangent
-                                   # to the face); leaves NOZZLE dull
-                                   # flats at the block's side faces
-HORN_ENTRY_CH = 2 * NOZZLE         # 1.6 — entry mouth's 45° plan-view
-                                   # chamfer, each side (horizontal
-                                   # only); same NOZZLE flats
+                                   # flush with the +x frame edge: two
+                                   # bells + straight middle
+HORN_BELL_R = 2 * NOZZLE           # 1.6 — mouth bell, BOTH ends: a
+                                   # quarter-round trumpet revolved
+                                   # around the tunnel axis (tangent to
+                                   # the bore, tangent to the face);
+                                   # leaves NOZZLE dull flats at the
+                                   # block's side faces
 # (HORN_YC — the horn's centreline — is defined AFTER the exit window:
 # the WINDOW derives purely from the cable/coil geometry, and the horn
 # then sits at its midway point — user's design order, #899)
