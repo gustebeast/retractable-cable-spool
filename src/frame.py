@@ -66,6 +66,8 @@ from .params import (
     BRAKE_STOP_TOP_T, GUARD_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_ROOF_T,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
+    HORNJ_W, HORNJ_X_OFF, HORN_STOP_T, HORN_STOP_DROP, HORN_WALL_T,
+    JOINT_BACK_CLR,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -357,7 +359,18 @@ def _cable_horn():
     — stays on frame_bottom and prints upright overhang-free; the
     upper half is the HORN CAP, its own part (flat top face on the
     bed, trough up — also overhang-free). The cable lays into the
-    trough from above and the cap closes the circle."""
+    trough from above and the cap closes the circle.
+    ATTACHMENT (user #906, params HORNJ_*/HORN_STOP_*): cadkit
+    MUSHROOM rails, the cap sliding on − to + y. Two rails at ±
+    HORNJ_X_OFF off the block's x middle: four TENON segments rise
+    off the trough strips' tops (up-printed: 45° flares, no bridge);
+    the cap takes a through-CAVITY per rail (down-printed host: the
+    wide flat end is its first supported layers — no bridge), open at
+    the +y face for entry. The STOP FLANGE on the cap's trailing −y
+    end hangs past the equator and lands on the trough's −y face —
+    it, not the cavity end wall (relieved JOINT_BACK_CLR deeper),
+    defines seating and blocks +y over-travel; it rides in free air
+    (the exit window's band) for the whole slide."""
     yc = HORN_YC
     ch2 = HORN_CH_W / 2.0
     zc = HORN_Z1 + ch2             # tunnel axis: bore floor = pier top
@@ -408,7 +421,40 @@ def _cable_horn():
              .center((xb0 + _R_OUT) / 2.0, yc)
              .rect(HORN_BLOCK_L + 4.0, HORN_W + 4.0)
              .extrude(HORN_CH_W + HORN_ROOF_T))
-    return p.cut(upper), p.intersect(upper)
+    bottom, cap = p.cut(upper), p.intersect(upper)
+    # STOP FLANGE on the cap's trailing −y end (extra material on the
+    # CAP only — the bottom prism keeps its size, user)
+    y_face = yc - HORN_W / 2.0
+    cap = cap.union(
+        cq.Workplane("XY").workplane(offset=zc - HORN_STOP_DROP)
+        .center((xb0 + _R_OUT) / 2.0, y_face - HORN_STOP_T / 2.0)
+        .rect(HORN_BLOCK_L, HORN_STOP_T)
+        .extrude(HORN_STOP_DROP + HORN_CH_W + HORN_ROOF_T))
+    # MUSHROOM rails (cadkit): local +X (the slide) → global −y — the
+    # CAP travels +y over the fixed tenons; local Y → global +x
+    hj = joint(HORNJ_W, HORN_WALL_T, tenon=JOINT_SPEC, mortise=_DOWN,
+               install="+x")
+    assert (HORN_CH_W + HORN_ROOF_T) - (hj.height + JOINT_BACK_CLR) \
+        >= NOZZLE - 1e-9, "horn cap roof over the rail cavities"
+    x_mid = (xb0 + _R_OUT) / 2.0
+    assert (2.0 * HORNJ_X_OFF - (HORNJ_W + 2.0 * hj.clearance)
+            >= 2.0 * NOZZLE - 1e-9
+            and HORNJ_X_OFF + HORNJ_W / 2.0 + hj.clearance
+            <= HORN_BLOCK_L / 2.0 - HORN_BELL_R), \
+        "horn rail windows: quality wall between cavities, clear of bells"
+    m_len = HORN_W + JOINT_BACK_CLR + 1.0
+    for dx in (-HORNJ_X_OFF, +HORNJ_X_OFF):
+        for y_top in (yc - HORN_W / 2.0 + HORN_WALL_T,
+                      yc + HORN_W / 2.0):
+            bottom = bottom.union(
+                hj.tenon(root=1.0)
+                .rotate((0, 0, 0), (0, 0, 1), -90.0)
+                .translate((x_mid + dx, y_top, zc)))
+        cap = cap.cut(
+            hj.mortise(drop=1.0, length=m_len)
+            .rotate((0, 0, 0), (0, 0, 1), -90.0)
+            .translate((x_mid + dx, yc + HORN_W / 2.0 + 1.0, zc)))
+    return bottom, cap
 
 
 def _cable_guard(s):

@@ -877,6 +877,29 @@ HORN_BELL_R = 2 * NOZZLE           # 1.6 — mouth bell, BOTH ends: a
                                    # the bore, tangent to the face);
                                    # leaves NOZZLE dull flats at the
                                    # block's side faces
+# cap ATTACHMENT (user #906): cadkit MUSHROOM rails (hosts print in
+# opposite z directions), install sliding − to + y. TENONS rise off the
+# trough strips' tops (2.4 engagement each, rooted in the pier meat);
+# the CAP carries one through-CAVITY per rail across its full width —
+# open at the +y face (entry), 0.3 into the stop flange at the far end
+# so the FLANGE, not the cavity wall, defines seating. The flange: extra
+# material on the CAP ONLY (user: don't grow the bottom prism), at its
+# trailing −y end, hanging past the equator to catch the trough's −y
+# face and stop +y over-travel. Backing out −y has no shape retention
+# yet (cadkit doctrine: stop one way, preload the other).
+HORNJ_W      = 4 * NOZZLE          # 3.2 — joint width room (across x);
+                                   # mushroom height 4.06, cap swallow
+                                   # 4.36 — roof left 1.24
+HORNJ_X_OFF  = 2.8                 # TWO rails at ± this off the block's
+                                   # x middle (pitch-locks the cap). A
+                                   # POSITION, not a bead — the one slot
+                                   # between the quality-tier wall floor
+                                   # (cavity gap 2.1 ≥ 1.6) and the
+                                   # bell-free window (edges 0.25 clear)
+HORN_STOP_T    = 3 * NOZZLE        # 2.4 — stop flange thickness (y)
+HORN_STOP_DROP = 3 * NOZZLE        # 2.4 — flange catch depth below the
+                                   # equator plane (contact patch on the
+                                   # trough's −y face)
 # (HORN_YC — the horn's centreline — is defined AFTER the exit window:
 # the WINDOW derives purely from the cable/coil geometry, and the horn
 # then sits at its midway point — user's design order, #899)
