@@ -961,37 +961,20 @@ _WALL_TOP_BAND_RETIRED = 4 * NOZZLE   # (kept only for the comment trail —
 # the pinned chirality), collect the WALL-CROSSING y values on both
 # wall faces, add cable margins, and cut the wall STRAIGHT between
 # those two y planes:
-_HORN_PX = FRAME_R_OUT - HORN_GUIDE_L          # the guide's entry mouth
-_exit_ys = []
-_R_WIND_MAX = RIM_OD / 2.0 - RATCHET_DEPTH     # the PHYSICAL outer bound
-                                   # (user #895: the cable can wind all the
-                                   # way to the start of the ratchet teeth
-                                   # — not just to design capacity, which
-                                   # is smaller now that the rim is
-                                   # tunnel-floored)
-# aim at BOTH channel-wall edges (the cable can settle against either),
-# not just the centreline
-for _py in (HORN_YC - HORN_CH_W / 2.0, HORN_YC + HORN_CH_W / 2.0):
-    _pr = math.hypot(_HORN_PX, _py)
-    _pa = math.atan2(_py, _HORN_PX)
-    for _i in range(21):
-        _r = WRAP_R0 + (_R_WIND_MAX - WRAP_R0) * _i / 20.0
-        _ta = _pa + math.acos(_r / _pr)        # tangency (CW-driving side)
-        _tx, _ty = _r * math.cos(_ta), _r * math.sin(_ta)
-        _dx, _dy = _HORN_PX - _tx, _py - _ty
-        for _rw in (WALL_IR, WALL_OR):
-            # line-circle crossing: |T + t·D| = rw, t in (0, 1)
-            _a2 = _dx * _dx + _dy * _dy
-            _b2 = 2.0 * (_tx * _dx + _ty * _dy)
-            _c2 = _tx * _tx + _ty * _ty - _rw * _rw
-            _t = ((-_b2 + math.sqrt(_b2 * _b2 - 4.0 * _a2 * _c2))
-                  / (2.0 * _a2))
-            _exit_ys.append(_ty + _t * _dy)
-# margins: the EXACT take-up band (user #895: cut precisely what the
-# cable's surface can occupy — centreline crossings ± the half-width,
-# NO buffer; any buffer gets added explicitly later if wanted)
-CABLE_EXIT_Y_LO = min(_exit_ys) - CABLE_D / 2.0
-CABLE_EXIT_Y_HI = max(_exit_ys) + CABLE_D / 2.0
+# THE MODEL (user's drawing, #898 — the PARALLEL EXIT): the cable
+# peels at the top of its wind circle, (0, r), and runs straight along
+# +x at y = r through the horn's guide. One line per wind state, so
+# the window is simply the band between the innermost and the
+# outermost winds' tangent lines, ± the cable's half-width — the EXACT
+# take-up band, no buffer (any buffer gets added explicitly later).
+# The outer bound is PHYSICAL: the cable can wind to the start of the
+# ratchet teeth (not just design capacity — the rim is tunnel-floored).
+_R_WIND_MAX = RIM_OD / 2.0 - RATCHET_DEPTH
+CABLE_EXIT_Y_LO = WRAP_R0 - CABLE_D / 2.0
+CABLE_EXIT_Y_HI = _R_WIND_MAX + CABLE_D / 2.0
+# (the taut-line alternative — cable aimed at the guide mouth rather
+# than parallel — dips ~1.6 further −y at the empty-spool end; add it
+# as explicit buffer later if the print shows the taut path matters)
 assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
     "exit window's low-y edge reaches the +X beam"
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
