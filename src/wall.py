@@ -27,7 +27,7 @@ from .helpers import cyl, heal
 from .params import (
     WALL_IR, WALL_OR, WALL_Z1, WALL_ZB,
     LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
-    CABLE_EXIT_ANGLE_DEG, CABLE_EXIT_SPAN_DEG, CABLE_EXIT_Z0,
+    CABLE_EXIT_Y_LO, CABLE_EXIT_Y_HI, CABLE_EXIT_Z0,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
     PERF_D, PERF_WEB, CH_TOP_Z,
 )
@@ -50,22 +50,18 @@ def _lever_window(y0, y1, z0):
 
 
 def _cable_exit():
-    """The cable exit PORT — an arc wedge at (+x,+y) from the spool
-    chamber's floor OPEN THROUGH THE BAND'S TOP RIM (user's call: the
-    old sawtooth ceiling was an unnecessary overhang — nothing needs the
-    crown closed over this span, so the port has no roof at all and
-    prints trivially). The span covers exit tangencies from the bare
-    drum wall to design capacity (v2's math, params)."""
-    a0 = math.radians(CABLE_EXIT_ANGLE_DEG - CABLE_EXIT_SPAN_DEG / 2.0)
-    a1 = math.radians(CABLE_EXIT_ANGLE_DEG + CABLE_EXIT_SPAN_DEG / 2.0)
-    n = 12
-    r_arc = (WALL_OR + 3.0) / math.cos((a1 - a0) / n / 2.0)
-    pts = [(0.0, 0.0)]
-    pts += [(r_arc * math.cos(a0 + (a1 - a0) * i / n),
-             r_arc * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
+    """The cable exit WINDOW — a straight Y-SLAB cut through the band's
+    +x side (user #893: the window is the Y-BAND the cable can take up
+    between the coil and the horn's guide mouth — swept in params over
+    the wind range — cut flat between those two y planes), from the
+    spool chamber's floor OPEN THROUGH THE BAND'S TOP RIM (no roof, no
+    overhang; the old tangential 30° arc is retired)."""
     return (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
-            .polyline(pts).close()
-            .extrude((WALL_Z1 + 1.0) - CABLE_EXIT_Z0))
+            .polyline([(30.0, CABLE_EXIT_Y_LO),
+                       (WALL_OR + 3.0, CABLE_EXIT_Y_LO),
+                       (WALL_OR + 3.0, CABLE_EXIT_Y_HI),
+                       (30.0, CABLE_EXIT_Y_HI)])
+            .close().extrude((WALL_Z1 + 1.0) - CABLE_EXIT_Z0))
 
 
 def _entry_port():

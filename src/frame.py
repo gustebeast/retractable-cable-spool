@@ -64,8 +64,8 @@ from .params import (
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
     BRAKE_STOP_TOP_T, GUARD_T,
-    CABLE_EXIT_ANGLE_DEG, HORN_W, HORN_Z1, HORN_CH_W, HORN_WALL_H,
-    HORN_FLARE_R, HORN_GUIDE_L,
+    HORN_W, HORN_Z1, HORN_CH_W, HORN_WALL_H,
+    HORN_FLARE_R, HORN_GUIDE_L, HORN_YC,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -343,8 +343,7 @@ def _cable_horn():
     nothing intrudes into the coil chamber — welding through the
     band's solid below-sill ring. Prints with the frame off the bed:
     plain verticals. (Next: the channel side walls + the lock cap.)"""
-    yc = ((WALL_IR + WALL_OR) / 2.0
-          * math.sin(math.radians(CABLE_EXIT_ANGLE_DEG)))
+    yc = HORN_YC
     p = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
          .center((44.0 + _R_OUT) / 2.0, yc)
          .rect(_R_OUT - 44.0, HORN_W)
