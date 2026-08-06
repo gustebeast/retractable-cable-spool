@@ -863,12 +863,14 @@ HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier width
 HORN_WALL_H = 6 * NOZZLE           # 4.8 — channel wall height off the deck:
                                    # the Ø3.85 cable + headroom, and the
                                    # lock cap's landing (step 3)
-HORN_GUIDE_L = 16 * NOZZLE         # 12.8 — the walls live ONLY at the
+HORN_GUIDE_L = 32 * NOZZLE         # 25.6 — the walls live ONLY at the
                                    # pier's +x END (user #892: between the
                                    # drum and there the cable angles freely
                                    # across the open deck with the wind
-                                   # state; the short guide channels it
-                                   # just at the grab point)
+                                   # state). Doubled at #902 (user): long
+                                   # enough to host the ROOF piece's slide
+                                   # joinery — engagement + stop + entry
+                                   # overshoot (the cap is step 3)
 # (HORN_YC — the horn's centreline — is defined AFTER the exit window:
 # the WINDOW derives purely from the cable/coil geometry, and the horn
 # then sits at its midway point — user's design order, #899)
