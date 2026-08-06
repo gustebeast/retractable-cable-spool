@@ -429,7 +429,8 @@ def _cable_horn():
         cq.Workplane("XY").workplane(offset=zc - HORN_STOP_DROP)
         .center((xb0 + _R_OUT) / 2.0, y_face - HORN_STOP_T / 2.0)
         .rect(HORN_BLOCK_L, HORN_STOP_T)
-        .extrude(HORN_STOP_DROP + HORN_CH_W + HORN_ROOF_T))
+        .extrude(HORN_STOP_DROP + ch2 + HORN_ROOF_T))   # flush with the
+                                                        # cap's top face
     # MUSHROOM rails (cadkit): local +X (the slide) → global −y — the
     # CAP travels +y over the fixed tenons; local Y → global +x
     hj = joint(HORNJ_W, HORN_WALL_T, tenon=JOINT_SPEC, mortise=_DOWN,
