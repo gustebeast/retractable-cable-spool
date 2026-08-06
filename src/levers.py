@@ -46,7 +46,7 @@ from .params import (
     PAD_FLANGE_H, PAD_FLANGE_T,
     LEVER_PIN_L, PIN_TIP_END_Y, LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L,
     WALL_IR, WALL_OR, BRAKE_STOP_GAP, RATCHET_OPEN_CLR, LEVER_SIDE_CLR,
-    BEAM_IR,
+    BEAM_IR, GUARD_T, GUARD_LEVER_CLR,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -518,6 +518,42 @@ def _build_brake_pad(h=None):
 def brake_pad_tall_demo(h):
     """DEMO ONLY (viewer poses): the pad at a forced height, top edge kept."""
     return _build_brake_pad(h)
+
+
+# ── CABLE-GUARD peak (user #887, params block): the ^ chevrons fence
+# the bay windows at the wall line; the peak sits GUARD_LEVER_CLR under
+# the BRAKE side's swept envelope within the guard's radial window (the
+# pad's bottom corners dive there at full pull), and both bays share
+# the height. Rotation about y is y-independent in (x, z), and z' is
+# linear along edges, so sweeping the profile CORNERS is exact. ──────────────
+GUARD_X0 = math.sqrt(WALL_IR ** 2 - (LEVER_Y_IN - LEVER_SIDE_CLR) ** 2)
+_G_X1 = GUARD_X0 + GUARD_T
+_g_pts = []
+for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
+    for _zc in (Z_BOT_C, PAD_FLANGE_BOT, Z_TOP_C):
+        _g_pts.append(_rest_xz(_x_band_plane(_y) - 0.5, _zc))
+        _g_pts.append(_rest_xz(_x_face2(_y), _zc))
+_g_pts.append(_rest_xz(LEVER_PIVOT_X + _HW + 2.0, PAD_FLANGE_BOT))
+_g_pts.append(_rest_xz(LEVER_PIVOT_X - _HW, PAD_FLANGE_BOT))
+_g_low = 1e9
+for _i in range(0, int(LEVER_TRAVEL_DEG * 10) + 1):
+    _ga = math.radians(_i / 10.0)                  # pull = − rotation
+    _gc, _gs = math.cos(_ga), math.sin(_ga)
+    for _gx, _gz in _g_pts:
+        _gdx, _gdz = _gx - LEVER_PIVOT_X, _gz - BRAKE_PIVOT_Z
+        _xr = LEVER_PIVOT_X + _gdx * _gc - _gdz * _gs
+        _zr = BRAKE_PIVOT_Z + _gdx * _gs + _gdz * _gc
+        if GUARD_X0 - 0.5 <= _xr <= _G_X1 + 0.5:
+            _g_low = min(_g_low, _zr)
+assert _g_low < 0.0, "A_GUARD: no brake point crosses the guard window?"
+GUARD_PEAK_Z = _g_low - GUARD_LEVER_CLR
+# the chevron's wall ends (peak − half-span − bury, minus the bar) must
+# stay above the grip zone or the fingers lose their doorway
+_g_half = ((RATCHET_LEV_Y1 + LEVER_SIDE_CLR)
+           - (LEVER_Y_IN - LEVER_SIDE_CLR)) / 2.0
+assert (GUARD_PEAK_Z - (_g_half + 1.0) - GUARD_T * math.sqrt(2.0)
+        >= HANDLE_Z_BOT + LEVER_HANDLE_W / 2.0 + 2.0 - 1e-9), (
+    "A_GUARD_HAND: the chevron's wall ends reach down into the grip zone")
 
 
 # ── Kinematic assertions — fire at import ────────────────────────────────────

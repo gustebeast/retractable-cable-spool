@@ -826,6 +826,15 @@ BRAKE_STOP_GAP      = -0.25        # vertical INTERFERENCE at the pad's top
 # (BRAKE_STOP_TIP_OVER retired at #886 — the corbel's reach past the
 # contact plane is TOP_T − NOZZLE now: the 45° underside ends on a
 # vertical one-bead face instead of a knife point, user's call)
+# CABLE-GUARD chevrons (user #887): a ^ of GUARD_T square section
+# fences each lever bay window at the wall line — the full-height
+# windows that let fingers in would also let a slack coil escape into
+# the levers; the open V underneath keeps the finger room. The peak
+# clears the BRAKE side's swept envelope by GUARD_LEVER_CLR and BOTH
+# bays share the height (user); peak z derives in levers.py.
+GUARD_T         = 2 * NOZZLE       # 1.6 — chevron bar section (user)
+GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
+                                   # side's swept envelope (user)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud

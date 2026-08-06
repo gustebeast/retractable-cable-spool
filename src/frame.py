@@ -41,7 +41,8 @@ from cadkit.holes import teardrop_hole
 from .helpers import cone_solid, cyl, heal
 from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
                      RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_SLOPE,
-                     RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT)
+                     RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT,
+                     GUARD_X0, GUARD_PEAK_Z)
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
@@ -62,7 +63,7 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
-    BRAKE_STOP_TOP_T,
+    BRAKE_STOP_TOP_T, GUARD_T,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -331,6 +332,30 @@ def _ratchet_stop():
     return prism.cut(corbel)
 
 
+def _cable_guard(s):
+    """^ CABLE-GUARD chevron for one lever bay (s=+1 ratchet, −1 brake;
+    heights pinned in levers.py, user #887): the full-height windows
+    that give fingers access would also let a slack coil escape into
+    the levers. A GUARD_T-square bar fences the window at the wall
+    line — 45° legs off both side walls (the beam-side band strip and
+    the bay web), peak on the bay's centreline, the V underneath left
+    open for the fingers. The peak clears the brake side's swept
+    envelope by GUARD_LEVER_CLR and BOTH bays share the height."""
+    y0 = RSTOP_Y_ROOT                        # 5.2 — window's beam-side edge
+    y1 = _SB_Y0                              # 18.8 — web face
+    mid = (y0 + y1) / 2.0
+    t = GUARD_T * math.sqrt(2.0)             # ⊥ bar = GUARD_T on the 45°
+    pts = [(y0 - 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0),
+           (mid, GUARD_PEAK_Z),
+           (y1 + 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0),
+           (y1 + 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0 - t),
+           (mid, GUARD_PEAK_Z - t),
+           (y0 - 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0 - t)]
+    return (cq.Workplane("YZ")
+            .polyline([(s * y, z) for y, z in pts]).close()
+            .extrude(GUARD_T).translate((GUARD_X0, 0.0, 0.0)))
+
+
 def _floor():
     """The SPOKED coil-chamber floor (user's design): 1.6 plate — centre
     hub disc, FLOOR_SPOKE_N radial spokes, two tie rings under the coil
@@ -485,6 +510,11 @@ def _build_frame_bottom():
     fb = fb.union(_lever_mount())
     fb = fb.union(_brake_rest_stop())
     fb = fb.union(_ratchet_stop())
+    # BRAKE bay only (probed): the ratchet's pin-install swing
+    # (+PIN_PRETWIST, its high pivot leaning the full-height handle far
+    # inboard) blankets that bay's wall line from z −38.7 to the floor —
+    # no static fence can exist there; see the #887 report
+    fb = fb.union(_cable_guard(-1.0))
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     return heal(fb)
