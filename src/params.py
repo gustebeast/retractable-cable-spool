@@ -60,11 +60,15 @@ CABLE_CAPACITY = 6.0 * 304.8 # 1828.8 — 6 ft of wrapped cable (user's call)
 
 # ── Axle (rotating arbor) ────────────────────────────────────────────────────
 AXLE_D       = 8.0                   # nominal — the 608's bore
-AXLE_PRINT_D = AXLE_D - 0.05         # 7.95 — 0.025/side under the bore (v2-proven)
-AXLE_LIP_W   = 2 * NOZZLE            # retention lip radial protrusion
-AXLE_LIP_OD  = AXLE_PRINT_D + 2 * AXLE_LIP_W   # 11.15 — rests on the inner race
-AXLE_LIP_H   = 2 * NOZZLE            # lip axial height (tops out under the
-                                     # frame face — flat assembly top)
+AXLE_PRINT_D = AXLE_D                # 8.0 — printed AT the 608's nominal bore
+                                     # (user: v2's 7.95 measured a touch loose
+                                     # in both bearings — top shaft AND stub)
+# (the retention LIP/head is RETIRED — user, post-swap: with the mortise
+# collar at the axle's bottom, a head on top left NO installable
+# direction through the bearing. The shaft is now plain: axle_top
+# installs from BELOW — up through the spring and into the 608 — and
+# the rotating stack's weight rides the BOTTOM bearing via the
+# separator; the top shaft only locates radially.)
 
 # ── Frame top — v2's plus spider, now hosting the bearing ────────────────────
 FRAME_RIB   = 13 * NOZZLE    # 10.4 — plus-arm section (was v2's 10.0 even;
@@ -213,7 +217,9 @@ AXLE_ROOT_CONE_H = SHOULDER_Z - SEP_Z1 # 1.9 — 45° column→disk root cone: i
                                        # Ø8.7 hole is there, sexes swapped)
 
 AXLE_Z_BOT = SEP_Z0                    # the column runs flush through the disk
-AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
+AXLE_Z_TOP = BRG_Z1 + 2 * NOZZLE       # 10.2 — shaft top, 1.6 proud of the
+                                       # bearing, UNDER the frame face (the
+                                       # flipped print's bed face)
 
 # ── Spring-strip TENSION-TRAP anchor (user's v3 design — retires the ported
 # v2 two-block gate + drop-in insert; zero extra parts) ──────────────────────
@@ -259,48 +265,60 @@ ANCH_OR = ANCH_IR + ANCH_T                           # 42.55 — same as before
 # at −y (HOLD — the 16 head cannot pass 12; escape means travelling
 # back AGAINST the spring's pull). The width is FORCED at PASS − HOLD:
 # the 45° floor must climb the full entry-to-bay height difference.
-# The ENTRY (the tall half) is centred on the strip line (user's call —
-# the head threads at its natural z). The BAY therefore sits HIGH of
-# the strip line, sharing the flat top edge: at rest the neck rides UP
-# into it within the spring's own z-float (asserted below). Retention
-# is by SIZE (16 vs 12), wherever the bites land.
-_SPRING_ZC  = (SPRING_Z0 + SPRING_Z1) / 2.0          # −16 — strip centreline
-ANCH_ZC     = _SPRING_ZC           # ENTRY wall centred on the strip line
-ANCH_WIN_HOLD = 15 * NOZZLE        # 12.0 — bay height (head-blocking)
-ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing:
-                                   # 1.2 around the head at its natural z)
-ANCH_WIN_Z1  = ANCH_ZC + ANCH_WIN_PASS / 2.0         # −6.8 — flat top edge
-ANCH_WIN_Z0  = ANCH_ZC - ANCH_WIN_PASS / 2.0         # −25.2 — the VIRTUAL
+# The BAY is SNUG on the neck now (user #879: the old 12 bay was "too
+# long to make a trustworthy seal" — bay height = the 9 neck), and the
+# bay's z DERIVES from the strip's feasible float (a snug bay must sit
+# where the neck can actually ride): bay centre ANCH_BAY_BIAS below the
+# strip's highest feasible centreline. The head still threads the tall
+# entry within the same float band (asserted).
+# the strip's feasible z-band inside the spring (22 body between the
+# flange inner faces):
+_STRIP_C_LO = SPRING_Z0 + SPRING_FLANGE_T + STRIP_BODY_W / 2.0   # −18.6
+_STRIP_C_HI = SPRING_Z1 - SPRING_FLANGE_T - STRIP_BODY_W / 2.0   # −13.4
+ANCH_WIN_HOLD = STRIP_NECK_W       # 9.0 — bay height = the neck (user:
+                                   # snug by design, a trustworthy seat)
+ANCH_WIN_PASS = 23 * NOZZLE        # 18.4 — entry-wall height (head-passing)
+ANCH_BAY_BIAS = 0.3                # bay centre bias below the float's top
+ANCH_WIN_Z1  = (_STRIP_C_HI + ANCH_WIN_HOLD / 2.0
+                - ANCH_BAY_BIAS)                     # −9.2 — flat top edge
+ANCH_WIN_Z0  = ANCH_WIN_Z1 - ANCH_WIN_PASS           # −27.6 — the VIRTUAL
                                    # apex at the +y entry wall: the 45°
                                    # floor aims here, but the tip is
                                    # DULLED (user's call) —
-ANCH_TIP_Z   = ANCH_WIN_Z0 + NOZZLE                  # −24.4 — a 0.8 flat
+ANCH_TIP_Z   = ANCH_WIN_Z0 + NOZZLE                  # −26.8 — a 0.8 flat
                                    # truncates the corner: one bead
                                    # bridges it in print
-ANCH_HOLD_Z0 = ANCH_WIN_Z1 - ANCH_WIN_HOLD           # −18.8 — bay bottom (−y)
-ANCH_WIN_W   = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 6.4 — width: 45° floor
+ANCH_HOLD_Z0 = ANCH_WIN_Z1 - ANCH_WIN_HOLD           # −18.2 — bay bottom
+ANCH_WIN_W   = ANCH_WIN_PASS - ANCH_WIN_HOLD         # 9.4 — width: 45° floor
                                                      # bay-corner → virtual apex
-ANCH_Z0      = ANCH_TIP_Z - 4 * NOZZLE               # −27.6 — wall bottom
+                                                     # (wider with the 9 bay —
+                                                     # the wall grows with it)
+ANCH_Z0      = ANCH_TIP_Z - 4 * NOZZLE               # −30.0 — wall bottom
                                    # (3.2 sill under the dulled tip)
-# the strip's feasible z-band inside the spring (22 body between the
-# flange inner faces) must reach far enough UP to seat the neck in the
-# bay, and the head must thread the entry somewhere in the same band:
-_STRIP_C_LO = SPRING_Z0 + SPRING_FLANGE_T + STRIP_BODY_W / 2.0   # −18.6
-_STRIP_C_HI = SPRING_Z1 - SPRING_FLANGE_T - STRIP_BODY_W / 2.0   # −13.4
-assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_NECK_W / 2.0)
-        - max(_STRIP_C_LO, ANCH_HOLD_Z0 + STRIP_NECK_W / 2.0)
-        >= 0.5 - 1e-9), \
-    "no feasible strip z seats the neck in the holding bay"
+# the snug bay's centre must sit INSIDE the strip's float band
+assert (_STRIP_C_LO + ANCH_BAY_BIAS - 1e-9
+        <= ANCH_WIN_Z1 - ANCH_WIN_HOLD / 2.0
+        <= _STRIP_C_HI - ANCH_BAY_BIAS + 1e-9), \
+    "snug holding bay unreachable by the neck within the strip's float"
 assert (min(_STRIP_C_HI, ANCH_WIN_Z1 - STRIP_HEAD_W / 2.0 - 0.2)
         - max(_STRIP_C_LO, ANCH_TIP_Z + STRIP_HEAD_W / 2.0 + 0.2)
         >= 0.5 - 1e-9), \
     "no feasible strip z threads the head through the entry"
-# SWEEP: centred on the +X arm — window + a 6-bead pier each side (the
-# wall chord still overhangs the 10.4 arm a touch each side; in the
-# +z→−z print the outboard blades root on the BED like the old gate
-# wall's open span did).
-ANCH_HALF_A = math.degrees(math.asin(
-    (ANCH_WIN_W / 2.0 + 6 * NOZZLE) / ANCH_IR))      # ≈ 11.5°
+# PLACEMENT (user #879: "the force is all applied at the short side —
+# line that up with the beam"): the HOLD edge sits at the +X arm's +y
+# face, so the loaded pier — the wall just −y of the bay, which takes
+# the strip's whole −y pull — is backed by the arm's full 10.4
+# footprint. The window runs +y from there; the wall sector is
+# ASYMMETRIC: from the arm's −y face out past the entry wall + a
+# 6-bead pier.
+ANCH_WIN_Y0 = FRAME_RIB / 2.0      # 5.2 — HOLD edge, on the beam's +y face
+ANCH_A_NEG = math.degrees(math.asin((FRAME_RIB / 2.0) / ANCH_IR))    # 7.4°
+ANCH_A_POS = math.degrees(math.asin(
+    (ANCH_WIN_Y0 + ANCH_WIN_W + 3 * NOZZLE) / ANCH_IR))              # ≈ 25.1°
+                                   # (+y pier 3 beads — 6 put the wing at
+                                   # 28.9° where a mount SPOKE clipped it
+                                   # at the install-overshoot margin; the
+                                   # LOADED pier is the beam-backed side)
 
 # The pass/block mechanism IS these inequalities:
 assert ANCH_WIN_Z1 - ANCH_TIP_Z >= STRIP_HEAD_W + 0.4 - 1e-9, \
@@ -310,8 +328,8 @@ assert (NOZZLE + (ANCH_WIN_Z1 - ANCH_TIP_Z) - (STRIP_HEAD_W + 0.4)
     "entry zone too narrow to thread the head by hand"
 assert ANCH_WIN_HOLD <= STRIP_HEAD_W - 3.0 + 1e-9, \
     "head escapes the holding bay"
-assert ANCH_WIN_HOLD >= STRIP_NECK_W + 0.4 - 1e-9, \
-    "neck binds in the holding bay"
+assert ANCH_WIN_HOLD >= STRIP_NECK_W - 1e-9, \
+    "holding bay smaller than the neck (snug-by-design is the floor, user)"
 assert STRIP_NECK_L >= ANCH_T + 1.0 - 1e-9, \
     "neck too short — the head can't fully clear the wall"
 assert ANCH_WIN_Z1 <= SPRING_Z1 - SPRING_FLANGE_T - 0.5 + 1e-9, \
@@ -371,8 +389,11 @@ LID_Z1  = LID_Z0 + LID_T                       # −25.6 — lid top
 assert ((max(_STRIP_C_LO, ANCH_HOLD_Z0 + STRIP_NECK_W / 2.0)
          - STRIP_HEAD_W / 2.0) - LID_Z1 >= 2 * NOZZLE - 1e-9), \
     "the seated strip's protruding head reaches the rotating lid"
-assert (ANCH_TIP_Z + 0.2) - LID_Z1 >= 0.5 - 1e-9, \
-    "threading the strip head would scrape the rotating lid"
+# (the old threading-vs-lid assert is RETIRED — the snug 9 bay pushes
+# the window's tip below the lid's top plane, and that's fine by
+# ASSEMBLY ORDER: the strip threads the anchor on the BENCH, spring +
+# frame_top alone, before frame_top ever meets the lid. Only the
+# SEATED strip must clear the rotating lid — asserted above.)
 DRUM_Z1 = LID_Z0                   # wall top — the seated lid rests on it;
                                    # the wall is a short 4-tall collar now,
                                    # and the joint cavities burrow on
@@ -453,7 +474,9 @@ CH_BOT_Z = CH_TOP_Z - AXIAL_STACK - 1.0        # ≈ −70.9 — chamber floor p
 # SPOKED FLOOR (user's call, replacing BOTH v2's separate coil cup AND
 # the bottom plus: the fused wall band + floor + beams ARE the bottom
 # frame now — and the stack got ~11 shorter for it)
-FLOOR_T   = 2 * NOZZLE             # 1.6 — floor plate thickness (user)
+FLOOR_T   = 3 * NOZZLE             # 2.4 — floor plate thickness (user: 1.6
+                                   # flexed along z under centre pressure —
+                                   # ALL the bottom webbing went to 2.4)
 FLOOR_Z1  = CH_BOT_Z               # ≈ −70.9 — floor top = the chamber floor
 FLOOR_Z0  = FLOOR_Z1 - FLOOR_T     # ≈ −72.5 — the part's bed plane
 FLOOR_SPOKE_N = 16                 # doubled from 8 (user's call): the hub
@@ -461,12 +484,13 @@ FLOOR_SPOKE_N = 16                 # doubled from 8 (user's call): the hub
                                    # (stub → bottom 608 → separator), so
                                    # the floor is weight-bearing, not just
                                    # anti-tangle webbing
-FLOOR_SPOKE_W = 2 * NOZZLE         # 1.6 — spoke width (user)
+FLOOR_SPOKE_W = 3 * NOZZLE         # 2.4 — spoke width (user: stiffen the
+                                   # bottom webbing, with the plate)
 FLOOR_HUB_R   = 22 * NOZZLE        # 17.6 — centre disc tying the spokes AND
                                    # landing the sleeve's flared root (was
                                    # 9.6 before the sleeve arrived)
-FLOOR_RING_RC = (33.6, 56.0)       # two 1.6-wide tie rings under the coil
-                                   # span (42 / 70 beads)
+FLOOR_RING_RC = (33.6, 56.0)       # two spoke-width tie rings under the
+                                   # coil span (42 / 70 beads)
 BEAM_Z0 = FLOOR_Z0                 # beams stand on the bed with the floor
 BEAM_Z1 = FRAME_Z0                 # beams end at the top plus underside
 
@@ -546,8 +570,8 @@ BOT_SEAT_CONE_Z0 = (BOT_BRG_Z1 - BEARING_INNER_CH
 BOT_CONE_CAP_Z = SEP_Z1 - 2 * NOZZLE           # −36.0 — flat cap: exactly the
                                                # quality web under the disk top
 BOT_CONE_CAP_D = BRG_BORE - 2.0 * (BOT_CONE_CAP_Z - BOT_SEAT_CONE_Z0)  # 19.4
-STUB_D       = AXLE_PRINT_D        # 7.95 — the proven 608 slip fit
-STUB_BOSS_D  = AXLE_LIP_OD         # 11.15 — inner-race seat shoulder (lands
+STUB_D       = AXLE_PRINT_D        # 8.0 — at the 608's nominal bore (user)
+STUB_BOSS_D  = STUB_D + 4 * NOZZLE # 11.2 — inner-race seat shoulder (lands
                                    # on the face annulus, same as the top)
 STUB_BOSS_Z1 = BOT_BRG_Z0          # boss shoulder top = inner race bottom
 STUB_Z1      = BOT_BRG_Z1          # stub tip flush with the bearing top
@@ -562,6 +586,18 @@ assert STUB_BOSS_D <= BEARING_IRACE_OD, \
     "stub shoulder must land fully on the inner race's face annulus"
 assert STUB_BOSS_D / 2.0 + STUB_FLARE < (SLEEVE_OD - 2 * SLEEVE_T) / 2.0, \
     "stub base flare reaches the guide sleeve's bore"
+
+# ── Separator DISC POCKET (user #880: save material) — the disc inside
+# the lid-joinery ring is hollowed to a SEP_POCKET_FLOOR_T plate; a
+# central BOSS keeps the bearing seat walled, and the axle's root cone
+# now runs CONTINUOUSLY to the Ø8 post (the old one topped at the fat
+# column's Ø with a flat ring — user: strength lost; the 45° must stop
+# below the spring's Ø8.7 hole, so it completes at the shoulder plane) ───────
+SEP_POCKET_R       = DRUM_IR       # 43.35 — pocket out to the drum bore
+SEP_POCKET_FLOOR_T = 3 * NOZZLE    # 2.4 — plate left at the disc bottom (user)
+SEP_BOSS_D = BOT_CONE_CAP_D + 2 * 3 * NOZZLE   # 24.2 — bearing-cavity walls
+assert SEP_BOSS_D / 2.0 < SEP_POCKET_R - 1.0, \
+    "separator bearing boss meets the pocket's outer wall"
 assert LOOP_D_TIGHT / 2.0 >= CABLE_BEND_R_MIN - 1e-9, \
     "tight coil's centreline under the cable's bend radius"
 assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
@@ -656,16 +692,23 @@ MOUNT_RING2_R = 44 * NOZZLE        # 35.2 — INNER ring at half the diameter
                                    # arc joinery in all four arms; its
                                    # cavities stop exactly one 1.6 web
                                    # inboard of the +x anchor rib (assert)
-MOUNT_SPINE_W = MOUNT_TEN_W / 2.0  # 2.0 — the spines ARE the octagon stem
-                                   # (cadkit's width/2 optimum): they ride
-                                   # the cavities' stem slots with zero ledge
+MOUNT_SPINE_W = 3 * NOZZLE         # 2.4 — ring section (user: one square
+                                   # 2.4 x 2.4 for rings/spokes/tails; the
+                                   # spine no longer threads the cavities'
+                                   # 2.3 stem slots — the V-grooves run
+                                   # FULL CIRCLE now, carrying the rings
+                                   # over every crossing, cavities incl.)
 MOUNT_TEN_ARC = BEAM_SIZE / 2.0    # 5.2 — engaged tenon ARC LENGTH per site
                                    # (user: trim the joint from the STOP
                                    # side — the tenon anchors at the arm's
                                    # ENTRY face and spans half the crossing,
                                    # leaving the other half solid arm;
                                    # mirrors the ~50% width rule)
-MOUNT_SPOKE_W  = 4 * NOZZLE        # 3.2 — ring-tie spokes
+MOUNT_SPOKE_W  = 3 * NOZZLE        # 2.4 — ring-tie spokes (user: ONE
+                                   # consistent 2.4 × 2.4 square section
+                                   # for rings, spokes and the screw-pad
+                                   # guide tails; spokes ride the rings'
+                                   # own z-band now, not the full plate)
 MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
                                    # stay over open air at EVERY install
                                    # angle (rotation keeps the rings on
@@ -737,11 +780,15 @@ PIN_PRETWIST_DEG = 12.0            # install pre-twist = seating preload (v2)
 # corbel face) IS the catch face: the pad's preload arc has no
 # y-component, so it lands square on it. Height anchor derived in
 # levers.py (BRAKE_STOP_ZC); solid in frame.py.
-BRAKE_STOP_GAP      = 0.15         # vertical gap over the pad's top inner
-                                   # corner at plumb → rest settles ~1.3°
-                                   # past vertical (≈10.7° preload kept;
-                                   # tilt asserted small in levers.py)
-BRAKE_STOP_TIP_OVER = 1.5          # reach past the pad's inner end face
+BRAKE_STOP_GAP      = -0.25        # vertical INTERFERENCE at the pad's top
+                                   # inner corner at plumb (user: the 0.15
+                                   # gap version never made contact on the
+                                   # print — TPU corner rounding + slop ate
+                                   # it; now the soft corner presses 0.25
+                                   # into the 45° face at plumb, a designed
+                                   # squish — the gate whitelists the pair)
+BRAKE_STOP_TIP_OVER = 2.5          # reach past the pad's inner end face
+                                   # (was 1.5 — more line, same story)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud
@@ -776,6 +823,13 @@ LEVER_BOSS_OD  = ((PIN_SQ_S + 2.0 * PIN_SQ_LEVER_CLR) * math.sqrt(2.0)
 RATCHET_PIVOT_Z = SEP_Z1 + 10.0                    # −24.4
 BRAKE_PIVOT_Z   = SEP_Z0 - 5.5                     # −49.5 — below the band
 LEVER_TRAVEL_DEG = 20.0            # equal pull travel, both levers (v2)
+RATCHET_OPEN_CLR = 3 * NOZZLE      # 2.4 — the OVER-PULL STOP pose (user):
+                                   # the pull angle where the pawl clears
+                                   # the tooth tips by this much is where
+                                   # the frame's shelf catches the pawl —
+                                   # no more levering the axle by yanking
+                                   # the ratchet (RATCHET_OPEN_DEG derives
+                                   # in levers.py; shelf in frame.py)
 HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −69.5 — grip-disc
                                    # centre placed so the handles' round
                                    # ends land FLUSH with the assembly's
@@ -867,10 +921,10 @@ assert ((BEAM_IR + BEAM_SIZE)
     "under 1.6 of beam between the diamond bore and the frame's +x face"
 
 # ── Consistency guards (fire at import) ──────────────────────────────────────
-assert AXLE_PRINT_D < BEARING_ID, \
+assert AXLE_PRINT_D <= BEARING_ID, \
     "printed axle must be undersized vs the metal bearing bore"
-assert BEARING_ID + 1.0 < AXLE_LIP_OD <= BEARING_IRACE_OD, \
-    "axle lip must land fully on the inner race's face annulus"
+assert BEARING_ID + 1.0 < STUB_BOSS_D <= BEARING_IRACE_OD, \
+    "stub boss shoulder must land fully on the inner race's face annulus"
 assert BRG_LIP_ID < BEARING_OD - 1.0, \
     "frame lip must lap the outer race by a real margin"
 assert BRG_LIP_H >= STRUCT_WALL, \

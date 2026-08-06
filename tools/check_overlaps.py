@@ -73,6 +73,10 @@ for _a in (0, 90, 180, 270):
 # the mount ring: seated in the four arms' arc channels (tenons at the
 # stops, spine in the slots/V-grooves — face contacts)
 _INTENDED.add(frozenset(("mount_ring", "frame_top")))
+# the brake pad at plumb PRESSES the rest-stop corbel by design (user:
+# the gap version never made contact on the print — BRAKE_STOP_GAP is a
+# negative, TPU-squish interference now)
+_INTENDED.add(frozenset(("brake_pad_tpu", "frame_bottom")))
 
 
 def intended(a: str, b: str) -> bool:

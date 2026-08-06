@@ -37,7 +37,7 @@ from .params import (
     NOZZLE,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     SEP_Z0, SEP_Z1, BRAKE_H, R_OUT_COIL, CABLE_D,
-    LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG, RATCHET_STOP_DEG,
+    LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
     RATCHET_LEV_Y0, RATCHET_LEV_Y1, BRAKE_LEV_Y0, BRAKE_LEV_Y1,
     RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HANDLE_Z_BOT,
     PIN_SQ_S, PIN_SQ_LEVER_CLR, LEVER_BOSS_OD,
@@ -45,7 +45,8 @@ from .params import (
     PAD_JOINT_CLR, PAD_SPEC, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
     PAD_FLANGE_H, PAD_FLANGE_T,
     LEVER_PIN_L, PIN_TIP_END_Y, LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L,
-    WALL_IR, WALL_OR, BRAKE_STOP_GAP,
+    WALL_IR, WALL_OR, BRAKE_STOP_GAP, RATCHET_OPEN_CLR, LEVER_SIDE_CLR,
+    BEAM_IR,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -142,6 +143,17 @@ def _build_ratchet_lever():
                    (0.0, RATCHET_BAND_Z1 + 0.5)])
         .close().revolve(360.0, (0, 0), (0, 1)))
 
+    # OVER-PULL WING (user stop rework #880): a chunk extending past the
+    # handle's y-band into the bay's outer air strip — the ONLY y where
+    # static frame material can catch the lever (the full-height handle
+    # sweeps everything inside y0..y1 during the ±swing). Its flat
+    # bottom lands on the column's shelf at RATCHET_OPEN_DEG.
+    horiz = horiz.union(
+        cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
+        .polyline([(RWING_X0, RWING_Y0 - 1.0), (RWING_X1, RWING_Y0 - 1.0),
+                   (RWING_X1, RWING_Y1), (RWING_X0, RWING_Y1)])
+        .close().extrude(PAWL_Z_HI - PAWL_Z_LO))
+
     vert_top = RATCHET_PIVOT_Z + _HW
     vert = (cq.Workplane("XZ")
             .polyline([(LEVER_PIVOT_X - _HW, HANDLE_Z_BOT),
@@ -163,10 +175,11 @@ def _build_ratchet_lever():
 PAD_Y_MID = (BRAKE_LEV_Y0 + BRAKE_LEV_Y1) / 2.0   # −12
 
 
-def _ratchet_pawl_clear_angle():
-    """Pull angle at which the pawl just clears the tooth tips (v2 math)."""
+def _ratchet_pawl_clear_angle(target_r=R_RIM):
+    """Pull angle at which the pawl just clears radius `target_r` (v2
+    math; default = the tooth tips)."""
     x_pawl_rest = math.sqrt(R_ROOT ** 2 - PAWL_Y_MID ** 2)
-    target_x    = math.sqrt(R_RIM ** 2 - PAWL_Y_MID ** 2)
+    target_x    = math.sqrt(target_r ** 2 - PAWL_Y_MID ** 2)
     dx = x_pawl_rest - LEVER_PIVOT_X
     dz = PAWL_Z_MID - RATCHET_PIVOT_Z
     A, B = dx, -dz
@@ -180,6 +193,74 @@ def _ratchet_pawl_clear_angle():
 RATCHET_PAWL_CLEAR_DEG  = _ratchet_pawl_clear_angle()
 BRAKE_CONTACT_DELAY_DEG = 3.0                     # dead zone after pawl-clear
 BRAKE_CONTACT_DEG = RATCHET_PAWL_CLEAR_DEG + BRAKE_CONTACT_DELAY_DEG
+
+# ── RATCHET OVER-PULL STOP anchor (user: nothing stopped a hard pull —
+# the lever could swing on and lever the axle). frame.py grows a SHELF
+# out of the bay's beam-side wall edge, under the pawl block's inner
+# end; the pawl's BOTTOM lands on it — full-face — at the pose where
+# the pawl clears the tooth tips by RATCHET_OPEN_CLR. Geometry pinned
+# HERE (the kinematics live here); the numbers below are all world mm.
+RATCHET_OPEN_DEG = _ratchet_pawl_clear_angle(R_RIM + RATCHET_OPEN_CLR)
+_RO = math.radians(RATCHET_OPEN_DEG)
+_RS_DZ = PAWL_Z_LO - RATCHET_PIVOT_Z
+
+
+def _pawl_bottom_open(x_world):
+    """z of the pawl's bottom plane at the OPEN pose, at world x."""
+    dx = ((x_world - LEVER_PIVOT_X + _RS_DZ * math.sin(_RO))
+          / math.cos(_RO))
+    return RATCHET_PIVOT_Z + dx * math.sin(_RO) + _RS_DZ * math.cos(_RO)
+
+
+# 2.4 of radial clearance costs ~20° (near tangency the gap grows
+# slowly with angle) — the shelf pose IS the design travel limit now
+# (the kinematics suite below is run AT this angle; the old sill-era
+# RATCHET_STOP_DEG 15 reference is superseded)
+assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
+    "A_RSTOP_TRAVEL: the 2.4-clearance pose exceeds the modeled travel"
+
+# THE CATCH ARCHITECTURE (#880 rework after the sweep audit + user's
+# three corrections — ≥1.6 geometry, weld to the side wall, reach the
+# lever): NOTHING static may live inside the lever's own y-band (7..17)
+# at the catch zone — the full-height handle sweeps all of it between
+# the axle-install pose (+PIN_PRETWIST) and full pull. So the PAWL
+# grows a WING sideways past the handle's y, into the bay's outer air
+# strip, and the fork COLUMN's inner face grows the SHELF it lands on:
+# chunky, welded across its whole width, up at lever height. Contact =
+# the wing's flat bottom on the shelf's matched sloped top, full-face,
+# at RATCHET_OPEN_DEG. At rest (and through every working click) the
+# wing sits x-INBOARD of the shelf; it swings out-and-down onto it.
+RWING_Y0 = RATCHET_LEV_Y1                        # 17 — wing root (block face)
+RWING_Y1 = RATCHET_LEV_Y1 + 1.3                  # 18.3 — tip, 0.5 off the web
+RWING_X0 = 69.5                                  # inner edge (r 71.5 at rest)
+RWING_X1 = 73.5
+_ROC, _ROS = math.cos(_RO), math.sin(_RO)
+
+
+def _open_xz(x, z):
+    """A lever point at the OPEN pose (rotated −RATCHET_OPEN_DEG)."""
+    dx, dz = x - LEVER_PIVOT_X, z - RATCHET_PIVOT_Z
+    return (LEVER_PIVOT_X + dx * _ROC - dz * _ROS,
+            RATCHET_PIVOT_Z + dx * _ROS + dz * _ROC)
+
+
+_RW_OB0 = _open_xz(RWING_X0, PAWL_Z_LO)          # wing bottom-inner at open
+_RW_OB1 = _open_xz(RWING_X1, PAWL_Z_LO)          # wing bottom-outer at open
+RSTOP_SLOPE = math.tan(_RO)
+RSTOP_X0 = _RW_OB0[0] + 0.25                     # shelf under the wing's
+RSTOP_X1 = _RW_OB1[0] - 0.25                     # open-pose footprint
+RSTOP_ZT0 = _RW_OB0[1] + RSTOP_SLOPE * (RSTOP_X0 - _RW_OB0[0])
+RSTOP_Y_ROOT = LEVER_Y_IN + LEVER_T + LEVER_SIDE_CLR   # 18.8 — column face
+RSTOP_Y_TIP = RWING_Y0 + 0.3                     # 17.3 — overlaps the wing 1.0
+RSTOP_ZBOT = RSTOP_ZT0 - (RSTOP_Y_ROOT - RSTOP_Y_TIP) - 1.6
+assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE - 1e-9, \
+    "A_RSTOP_WIDTH: wing/shelf contact face under 3 beads"
+assert RSTOP_X0 >= RWING_X1 + 0.5 - 1e-9, \
+    "A_RSTOP_REST: the resting wing overlaps the shelf in x"
+assert RSTOP_X0 >= BEAM_IR - 1e-9, \
+    "A_RSTOP_WELD: shelf starts inboard of the column's inner-x face"
+assert math.hypot(RWING_X0, RWING_Y1) >= R_RIM + 0.8 - 1e-9, \
+    "A_RSTOP_RIM: the wing reaches within 0.8 of the separator's rim"
 
 # ── Contact-frame geometry (v2's closed form) ────────────────────────────────
 _AC_RAD     = math.radians(BRAKE_CONTACT_DEG)
@@ -269,12 +350,13 @@ BRAKE_STOP_ZC = _BRS_Z + BRAKE_STOP_GAP
 assert WALL_IR + 0.1 <= _BRS_X <= WALL_OR - 0.3, (
     f"A_BRS_WINDOW: the pad's top inner corner rests at x {_BRS_X:.2f}, "
     f"off the stop corbel's radial window [{WALL_IR:.2f}, {WALL_OR:.2f}]")
-# the gap converts to rest tilt at the corner's rise rate (pivot_x −
-# corner_x per radian); it must stay a small bite out of the pretwist
-_BRS_TILT = math.degrees(BRAKE_STOP_GAP / (LEVER_PIVOT_X - _BRS_X))
+# the gap (or, negative, the designed TPU squish) converts to rest tilt
+# at the corner's rise rate (pivot_x − corner_x per radian); either way
+# it must stay a small bite out of the pretwist
+_BRS_TILT = math.degrees(abs(BRAKE_STOP_GAP) / (LEVER_PIVOT_X - _BRS_X))
 assert _BRS_TILT <= 0.3 * PIN_PRETWIST_DEG - 1e-9, (
-    f"A_BRS_TILT: stop gap costs {_BRS_TILT:.2f} deg of the "
-    f"{PIN_PRETWIST_DEG} deg pretwist — tighten BRAKE_STOP_GAP")
+    f"A_BRS_TILT: stop gap/squish costs {_BRS_TILT:.2f} deg of the "
+    f"{PIN_PRETWIST_DEG} deg pretwist — shrink BRAKE_STOP_GAP")
 # (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
 # whole wall stack, so there is no cap over the swinging pad anymore; the
 # nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays
@@ -431,7 +513,7 @@ _PAD_BAND_CORNERS = brake_pad_rect_corners()[1]
 
 KIN = assert_kinematics(
     ratchet_pivot_x=LEVER_PIVOT_X, ratchet_pivot_z=RATCHET_PIVOT_Z,
-    ratchet_stop_deg=RATCHET_STOP_DEG,
+    ratchet_stop_deg=RATCHET_OPEN_DEG,     # the SHELF is the stop now
     pawl_y_mid=PAWL_Y_MID, pawl_z_mid=PAWL_Z_MID,
     brake_pivot_x=LEVER_PIVOT_X, brake_pivot_z=BRAKE_PIVOT_Z,
     brake_travel_deg=LEVER_TRAVEL_DEG,

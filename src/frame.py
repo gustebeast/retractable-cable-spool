@@ -39,14 +39,16 @@ from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import cone_solid, cyl, heal
-from .levers import BRAKE_SWEPT_TOP, BRAKE_STOP_ZC
+from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
+                     RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_SLOPE,
+                     RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT)
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
     NOZZLE,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
-    ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_HALF_A,
-    ANCH_WIN_W, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
+    ANCH_IR, ANCH_OR, ANCH_T, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
+    ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
     BRG_SEAT_CONE_Z0, BRG_SEAT_CONE_Z1,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1,
@@ -296,6 +298,34 @@ def _brake_rest_stop():
             .translate((WALL_IR, 0.0, 0.0)))
 
 
+def _ratchet_stop():
+    """RATCHET OVER-PULL STOP shelf (user's three corrections at #880;
+    numbers pinned in levers.py): the pawl's WING (the lever's chunk
+    past the handle's y-band — nothing static may live INSIDE that
+    band, the full-height handle sweeps it during the ±swing) lands
+    FULL-FACE here at RATCHET_OPEN_DEG, where the pawl clears the
+    teeth by RATCHET_OPEN_CLR. The shelf grows out of the fork
+    COLUMN's inner face — welded across its whole width — chunky
+    (≥1.6 everywhere), its top matched to the wing's open-pose bottom
+    plane; the usual 45° corbel underside carries its reach."""
+    top1 = RSTOP_ZT0 + RSTOP_SLOPE * (RSTOP_X1 - RSTOP_X0)
+    prism = (cq.Workplane("XZ")
+             .polyline([(RSTOP_X0, RSTOP_ZT0), (RSTOP_X1, top1),
+                        (RSTOP_X1, RSTOP_ZBOT), (RSTOP_X0, RSTOP_ZBOT)])
+             .close().extrude((RSTOP_Y_ROOT + 1.0) - RSTOP_Y_TIP))
+    # whichever way the XZ plane extruded, land the y-span at
+    # [TIP, ROOT + 1 (buried into the column face)]
+    prism = prism.translate(
+        (0.0, (RSTOP_Y_ROOT + 1.0) - prism.val().BoundingBox().ymax, 0.0))
+    corbel = (cq.Workplane("YZ")
+              .polyline([(RSTOP_Y_ROOT, RSTOP_ZBOT),
+                         (RSTOP_Y_ROOT - 12.0, RSTOP_ZBOT + 12.0),
+                         (RSTOP_Y_ROOT - 12.0, RSTOP_ZBOT - 8.0),
+                         (RSTOP_Y_ROOT, RSTOP_ZBOT - 8.0)])
+              .close().extrude(40.0).translate((50.0, 0.0, 0.0)))
+    return prism.cut(corbel)
+
+
 def _floor():
     """The SPOKED coil-chamber floor (user's design): 1.6 plate — centre
     hub disc, FLOOR_SPOKE_N radial spokes, two tie rings under the coil
@@ -449,34 +479,42 @@ def _build_frame_bottom():
         fb = fb.union(_beam(a)).union(_arc_tenon(a)).union(_beam_filler(a))
     fb = fb.union(_lever_mount())
     fb = fb.union(_brake_rest_stop())
+    fb = fb.union(_ratchet_stop())
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     return heal(fb)
 
 
 def _anchor_wall():
-    """Spring-strip TENSION-TRAP anchor (params block): a short wall
-    sector centred under the +X arm, ANCH_Z0 up THROUGH the frame (the
-    over-frame band is the arm rib and the wall's bed-rooted print seat
-    in the +z→−z print — the gate wall's proven pattern). The window
-    follows the user's print rule for this part: FLAT +z edge (a plain
-    floor face as printed), 45° −z boundary — the single 45° floor
-    descending from the −y bay corner to the DULLED one-bead tip flat
-    at the +y entry wall (the roof of the hole as printed; no
-    knife-edge void)."""
+    """Spring-strip TENSION-TRAP anchor (params block): a wall sector
+    under the +X arm, ANCH_Z0 up THROUGH the frame (the over-frame band
+    is the arm rib and the wall's bed-rooted print seat in the +z→−z
+    print). ASYMMETRIC sector now (user #879): the loaded HOLD edge
+    sits ON the arm's +y face — the pier taking the strip's −y pull is
+    the arm's own footprint — and the sector runs from the arm's −y
+    face out past the +y entry wall. The window keeps the print rule:
+    FLAT +z edge, one 45° floor descending to the DULLED one-bead tip
+    at the +y entry wall; the bay is SNUG on the 9 neck (user: a
+    trustworthy seat — the old 12 bay wobbled)."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
                     (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
-         .close().revolve(2.0 * ANCH_HALF_A, (0, 0), (0, 1))
-         .rotate((0, 0, 0), (0, 0, 1), -ANCH_HALF_A))
-    hw = ANCH_WIN_W / 2.0
-    win = (cq.Workplane("YZ").workplane(offset=ANCH_IR - 1.0)
-           .polyline([(-hw, ANCH_HOLD_Z0),      # −y bay bottom corner
-                      (-hw, ANCH_WIN_Z1),       # bay wall up to the flat top
-                      (hw, ANCH_WIN_Z1),        # flat top edge
-                      (hw, ANCH_TIP_Z),         # +y entry wall down to...
-                      (hw - NOZZLE, ANCH_TIP_Z)])   # ...the dulled tip flat
-           .close().extrude(ANCH_T + 2.0))      # (close = the 45° floor)
+         .close().revolve(ANCH_A_NEG + ANCH_A_POS, (0, 0), (0, 1))
+         .rotate((0, 0, 0), (0, 0, 1), -ANCH_A_NEG))
+    y0 = ANCH_WIN_Y0                             # HOLD edge (beam's +y face)
+    y1 = ANCH_WIN_Y0 + ANCH_WIN_W                # entry wall
+    # the cutter must start INBOARD of the wall's inner skin at the
+    # window's FAR-y end — the revolved wall's chord pulls in with y
+    # (x = √(r² − y²)), which stranded a membrane when the window moved
+    # off-centre (user-caught, #880)
+    x_in = math.sqrt(ANCH_IR ** 2 - y1 ** 2) - 1.0
+    win = (cq.Workplane("YZ").workplane(offset=x_in)
+           .polyline([(y0, ANCH_HOLD_Z0),        # bay bottom corner (loaded)
+                      (y0, ANCH_WIN_Z1),         # bay wall up to the flat top
+                      (y1, ANCH_WIN_Z1),         # flat top edge
+                      (y1, ANCH_TIP_Z),          # +y entry wall down to...
+                      (y1 - NOZZLE, ANCH_TIP_Z)])    # ...the dulled tip flat
+           .close().extrude((ANCH_OR - x_in) + 1.0))   # (close = the 45° floor)
     return w.cut(win)
 
 

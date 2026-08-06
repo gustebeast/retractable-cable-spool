@@ -22,7 +22,8 @@ from .axle import axle_top, axle_separator
 from .lid import lid
 from .levers import (
     ratchet_lever, brake_lever, brake_pad_tpu, lever_pin,
-    lever_pin_in_place, brake_pad_tall_demo, BRAKE_CONTACT_DEG, KIN,
+    lever_pin_in_place, brake_pad_tall_demo, BRAKE_CONTACT_DEG,
+    RATCHET_OPEN_DEG, KIN,
 )
 from .params import RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, LEVER_PIVOT_X
 from .dummies import bearing_608, bearing_608_bottom, spring
@@ -33,7 +34,9 @@ from .dummies import bearing_608, bearing_608_bottom, spring
 # oversized viewer-only pad (None = the real one).
 BRAKE_PAD_DEMO_H = None
 BRAKE_POSE_DEG = 0.0
-RATCHET_POSE_DEG = 0.0
+RATCHET_POSE_DEG = RATCHET_OPEN_DEG   # REVERT TO 0.0 — user asked to see
+                                      # the ratchet FULLY OPEN, parked on
+                                      # the new over-pull stop shelf
 
 
 def _brake_pose(part):
