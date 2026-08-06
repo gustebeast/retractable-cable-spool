@@ -64,8 +64,8 @@ from .params import (
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
     BRAKE_STOP_TOP_T, GUARD_T,
-    HORN_W, HORN_Z1, HORN_CH_W, HORN_WALL_H,
-    HORN_FLARE_R, HORN_GUIDE_L, HORN_YC,
+    HORN_W, HORN_Z1, HORN_CH_W, HORN_ROOF_T,
+    HORN_BLOCK_L, HORN_BELL_R, HORN_ENTRY_CH, HORN_YC,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -335,49 +335,76 @@ def _ratchet_stop():
 
 
 def _cable_horn():
-    """CABLE HORN pier (user #889, corrected #890: STRAIGHT ALONG +X,
-    not radial): a solid prism from the exit window's midway point
-    running x-parallel out to the part's +x edge (the fork blocks'
-    plane), top FLUSH with the window's bottom so the exiting cable
-    rides straight onto it. Its root is trimmed to the band's BORE —
-    nothing intrudes into the coil chamber — welding through the
-    band's solid below-sill ring. Prints with the frame off the bed:
-    plain verticals. (Next: the channel side walls + the lock cap.)"""
+    """CABLE HORN (user #889, redesigned #903 — the IDEAL cable model,
+    printability/installation deliberately set aside). The PIER: a
+    solid prism from the exit window's midway point running x-parallel
+    out to the part's +x edge, top FLUSH with the window bottom so the
+    exiting cable rides straight onto it; root trimmed to the band's
+    bore, welded through the band's below-sill ring. The TUNNEL BLOCK:
+    a second prism ON the pier at its +x end, shaped by three cuts —
+      · the TUNNEL: a round HORN_CH_W bore along x, its floor tangent
+        to the pier top (the cable slides on at deck level, no step);
+      · the EXIT BELL: a quarter-round trumpet revolved a FULL CIRCLE
+        around the bore axis at the +x face — tangent to the bore and
+        to the face, so the free cable can be pulled in ANY direction
+        without biting an edge (it scoops into the pier top below);
+      · the ENTRY CHAMFER: 45° in PLAN VIEW only, both sides of the
+        −x mouth — inside, the cable is locked to the spool's flat
+        plane and only its in-plane approach angle wanders."""
     yc = HORN_YC
-    # the prism's x-start tracks the band's bore chord at the pier's
-    # FAR-y edge (user #901: a fixed start left the +y side short of
-    # the drum after the horn moved; the bore cut below trims the rest)
+    ch2 = HORN_CH_W / 2.0
+    zc = HORN_Z1 + ch2             # tunnel axis: bore floor = pier top
+    xb0 = _R_OUT - HORN_BLOCK_L
+    # the pier's x-start tracks the band's bore chord at its FAR-y edge
+    # (user #901: a fixed start left the +y side short of the drum
+    # after the horn moved; the bore cut below trims the rest)
     x0 = math.sqrt(max(WALL_IR ** 2 - (yc + HORN_W / 2.0) ** 2, 0.0)) - 1.0
     p = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
          .center((x0 + _R_OUT) / 2.0, yc)
          .rect(_R_OUT - x0, HORN_W)
          .extrude(HORN_Z1 - FLOOR_Z0))
-    # CHANNEL SIDE WALLS (step 2; user #892: at the pier's +x END only —
-    # between the drum and here the cable angles freely across the open
-    # deck with the wind state): HORN_WALL_T bars rising HORN_WALL_H
-    # off the deck over the last HORN_GUIDE_L, the HORN_CH_W channel
-    # between them, OPEN-TOPPED (the cable drops in from above)
-    x_g0 = _R_OUT - HORN_GUIDE_L
-    for s in (+1.0, -1.0):
-        y_in = yc + s * HORN_CH_W / 2.0
-        y_out = yc + s * HORN_W / 2.0
-        p = p.union(
-            cq.Workplane("XY").workplane(offset=HORN_Z1)
-            .center((x_g0 + _R_OUT) / 2.0, (y_in + y_out) / 2.0)
-            .rect(_R_OUT - x_g0, abs(y_out - y_in))
-            .extrude(HORN_WALL_H))
     # root trimmed to the band's bore (nothing intrudes into the coil
     # chamber; the below-sill band ring is the weld)
     p = p.cut(cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0,
                   z=FLOOR_Z0 - 0.5))
-    # curved MOUTH FLARES (user: minimal friction): cylindrical cuts
-    # bell the guide's inner faces out at both ends — the drum-facing
-    # mouth (the approach angle wanders with the wind) and the grab end
-    for x_m in (x_g0, _R_OUT):
-        p = p.cut(
-            cq.Workplane("XY").workplane(offset=HORN_Z1 + 0.05)
-            .center(x_m, yc).circle(HORN_FLARE_R)
-            .extrude(HORN_WALL_H + 1.0))
+    # TUNNEL BLOCK on the pier top, flush with the +x edge
+    p = p.union(
+        cq.Workplane("XY").workplane(offset=HORN_Z1)
+        .center((xb0 + _R_OUT) / 2.0, yc)
+        .rect(_R_OUT - xb0, HORN_W)
+        .extrude(HORN_CH_W + HORN_ROOF_T))
+    # cut 1 — the TUNNEL (round; the overhang is accepted, user #903)
+    p = p.cut(
+        cq.Workplane("YZ").workplane(offset=xb0 - 1.0)
+        .center(yc, zc).circle(ch2)
+        .extrude(HORN_BLOCK_L + 2.0))
+    # cut 2 — the EXIT BELL: quarter-round profile (tangent to the bore
+    # wall, tangent to the +x face) revolved 360° around the bore axis
+    r = HORN_BELL_R
+    bell = (cq.Workplane("XZ")
+            .moveTo(_R_OUT - r, ch2)
+            .threePointArc(
+                (_R_OUT - r * (1.0 - math.sin(math.radians(45.0))),
+                 ch2 + r * (1.0 - math.cos(math.radians(45.0)))),
+                (_R_OUT, ch2 + r))
+            .lineTo(_R_OUT + 1.0, ch2 + r)
+            .lineTo(_R_OUT + 1.0, ch2)
+            .close()
+            .revolve(360.0, (0.0, 0.0), (1.0, 0.0))
+            .translate((0.0, yc, zc)))
+    p = p.cut(bell)
+    # cut 3 — the ENTRY CHAMFER: 45° trapezoid in plan over the bore's
+    # z-band, flaring the −x mouth in ±y only
+    c = HORN_ENTRY_CH
+    ent = (cq.Workplane("XY")
+           .polyline([(xb0 - 1.0, yc - ch2 - c),
+                      (xb0 + c, yc - ch2),
+                      (xb0 + c, yc + ch2),
+                      (xb0 - 1.0, yc + ch2 + c)])
+           .close()
+           .extrude(HORN_CH_W)
+           .translate((0.0, 0.0, HORN_Z1)))
+    p = p.cut(ent)
     return p
 
 
