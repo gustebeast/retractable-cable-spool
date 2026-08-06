@@ -37,11 +37,12 @@ import cadquery as cq
 from cadkit.joinery import PrintSpec, joint
 
 from .params import (
-    NOZZLE, FRAME_Z1, FRAME_RIB,
+    NOZZLE, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
     MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
     MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_AZ,
+    MOUNT_PAD_AZ_OFF,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
@@ -129,15 +130,15 @@ def _build_mount():
                 .rotate((0, 0, 0), (0, 0, 1), site),
                 clean=False)
         m = ring if m is None else m.union(ring, clean=False)
-    # mid-quadrant SPOKES tying the rings (full plate depth — they hang
-    # below the shallow spine level, over open quadrant air)
+    # mid-quadrant SPOKES tying the rings — the same 2.4 × 2.4 square as
+    # the rings, riding the rings' own z-band (user: consistent section)
     for az in MOUNT_SPOKE_AZ:
         m = m.union(
-            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PLATE_T)
+            cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
             .center((MOUNT_RING_R + MOUNT_RING2_R) / 2.0, 0.0)
             .rect(MOUNT_RING_R - MOUNT_RING2_R + MOUNT_SPINE_W,
                   MOUNT_SPOKE_W)
-            .extrude(MOUNT_PLATE_T)
+            .extrude(MOUNT_SPINE_T)
             .rotate((0, 0, 0), (0, 0, 1), az), clean=False)
     # AXIS-ALIGNED screw pads hugging the arms (use the pair on your
     # beam's axis); screws at the outer ring line
@@ -148,6 +149,22 @@ def _build_mount():
             cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PLATE_T)
             .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
             .extrude(MOUNT_PLATE_T), clean=False)
+    # GUIDE TAILS (user, corrected #880: AXIS-ALIGNED, hugging the arm's
+    # flank — not radial at the pad's offset azimuth): a 2.4 × 2.4 bar
+    # running parallel to the wood beam from each pad's outboard end to
+    # the top frame's outer radius, flush along the arm-flank plane the
+    # pad seats against. Screw the bare mount to the beam and the tail
+    # tips mark exactly how far the assembled frame will reach.
+    for axis_az in (0.0, 90.0, 180.0, 270.0):
+        pad_cx = MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+        x0 = pad_cx + MOUNT_PAD_W / 2.0 - 0.5      # buried into the pad
+        m = m.union(
+            cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
+            .center((x0 + FRAME_R_OUT) / 2.0,
+                    -(FRAME_RIB / 2.0 + MOUNT_SPINE_W / 2.0))
+            .rect(FRAME_R_OUT - x0, MOUNT_SPINE_W)
+            .extrude(MOUNT_SPINE_T)
+            .rotate((0, 0, 0), (0, 0, 1), axis_az), clean=False)
     for az in MOUNT_PAD_AZ:
         x = MOUNT_RING_R * math.cos(math.radians(az))
         y = MOUNT_RING_R * math.sin(math.radians(az))
@@ -174,11 +191,12 @@ def _v_groove_arc(R, a0, a1):
 
 def mount_channel_cuts():
     """frame_top's cutters — per arm, per ring: the crossing's retained
-    arc CAVITY (open past the arm's CCW face — the entry; its CW end
-    wall, seat-shy of the seated tenon, is the stop — the frame arc
-    joints' arrangement verbatim, same seating rotation) plus the
-    spine's V-groove over the stop-wall zone so the rings pass at every
-    install angle."""
+    arc CAVITY (open past the arm's entry face; its far end wall,
+    seat-shy of the seated tenon, is the stop) plus ONE FULL-CIRCLE
+    V-groove per ring (user's 2.4-square rings are wider than the
+    cavities' 2.3 stem slots, so the groove carries the rings over
+    EVERY crossing — the cavity zones included; it only rebates the
+    neck walls' top 0.9, far above the flare engagement)."""
     cuts = []
     for R in _RINGS:
         c = _CROSS[R]
@@ -186,10 +204,7 @@ def mount_channel_cuts():
             cuts.append(
                 _hang(c.mortise(drop=MOUNT_SPINE_T + 0.5))
                 .rotate((0, 0, 0), (0, 0, 1), site))
-            # hand="ccw" mirror of the groove span: entry overshoot on
-            # the arm's CCW (+) side now, stop-wall zone on the CW side
-            cuts.append(_v_groove_arc(R, site - c.arm + c.ten + c.seat - 0.1,
-                                      site + c.arm + c.over))
+        cuts.append(_v_groove_arc(R, 0.0, 360.0))
     return cuts
 
 
