@@ -848,6 +848,14 @@ HORN_CH_W  = (math.ceil(1.5 * CABLE_D / NOZZLE - 1e-9)
                                    # rounded UP to the bead grid (user)
 HORN_WALL_T = 3 * NOZZLE           # 2.4 — channel side walls
 HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier width
+HORN_WALL_H = 6 * NOZZLE           # 4.8 — channel wall height off the deck:
+                                   # the Ø3.85 cable + headroom, and the
+                                   # lock cap's landing (step 3)
+HORN_FLARE_R = HORN_CH_W / 2.0 + 5 * NOZZLE    # 7.2 — mouth flare radius:
+                                   # cylindrical cuts bell both mouths out
+                                   # (the exit tangency wanders across the
+                                   # port span — curved walls, no corner
+                                   # for the cable to drag on)
 # (HORN_Z1 = the window bottom — set beside CABLE_EXIT_Z0 below)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section

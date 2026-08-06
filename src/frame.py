@@ -64,7 +64,8 @@ from .params import (
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
     BRAKE_STOP_TOP_T, GUARD_T,
-    CABLE_EXIT_ANGLE_DEG, HORN_W, HORN_Z1,
+    CABLE_EXIT_ANGLE_DEG, HORN_W, HORN_Z1, HORN_CH_W, HORN_WALL_H,
+    HORN_FLARE_R,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -348,8 +349,32 @@ def _cable_horn():
          .center((44.0 + _R_OUT) / 2.0, yc)
          .rect(_R_OUT - 44.0, HORN_W)
          .extrude(HORN_Z1 - FLOOR_Z0))
-    return p.cut(cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0,
-                     z=FLOOR_Z0 - 0.5))
+    # CHANNEL SIDE WALLS (step 2, user #891): HORN_WALL_T bars rising
+    # HORN_WALL_H off the deck, the HORN_CH_W channel between them,
+    # OPEN-TOPPED (the cable drops in from above)
+    for s in (+1.0, -1.0):
+        y_in = yc + s * HORN_CH_W / 2.0
+        y_out = yc + s * HORN_W / 2.0
+        p = p.union(
+            cq.Workplane("XY").workplane(offset=HORN_Z1)
+            .center((44.0 + _R_OUT) / 2.0, (y_in + y_out) / 2.0)
+            .rect(_R_OUT - 44.0, abs(y_out - y_in))
+            .extrude(HORN_WALL_H))
+    # root trimmed to the band's bore (nothing intrudes into the coil
+    # chamber; the below-sill band ring is the weld)
+    p = p.cut(cyl(2.0 * WALL_IR, (HORN_Z1 + HORN_WALL_H - FLOOR_Z0) + 1.0,
+                  z=FLOOR_Z0 - 0.5))
+    # curved MOUTH FLARES (user: minimal friction): cylindrical cuts
+    # bell the walls' inner faces out at both ends — the window end
+    # (where the exit tangency wanders across the port span) and the
+    # grab end
+    x_entry = math.sqrt(WALL_OR ** 2 - yc ** 2)
+    for x_m in (x_entry, _R_OUT):
+        p = p.cut(
+            cq.Workplane("XY").workplane(offset=HORN_Z1 + 0.05)
+            .center(x_m, yc).circle(HORN_FLARE_R)
+            .extrude(HORN_WALL_H + 1.0))
+    return p
 
 
 def _cable_guard(s):
