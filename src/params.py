@@ -851,6 +851,12 @@ HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier width
 HORN_WALL_H = 6 * NOZZLE           # 4.8 — channel wall height off the deck:
                                    # the Ø3.85 cable + headroom, and the
                                    # lock cap's landing (step 3)
+HORN_GUIDE_L = 16 * NOZZLE         # 12.8 — the walls live ONLY at the
+                                   # pier's +x END (user #892: between the
+                                   # drum and there the cable angles freely
+                                   # across the open deck with the wind
+                                   # state; the short guide channels it
+                                   # just at the grab point)
 HORN_FLARE_R = HORN_CH_W / 2.0 + 5 * NOZZLE    # 7.2 — mouth flare radius:
                                    # cylindrical cuts bell both mouths out
                                    # (the exit tangency wanders across the
