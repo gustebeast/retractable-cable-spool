@@ -823,8 +823,9 @@ BRAKE_STOP_GAP      = -0.25        # vertical INTERFERENCE at the pad's top
                                    # it; now the soft corner presses 0.25
                                    # into the 45° face at plumb, a designed
                                    # squish — the gate whitelists the pair)
-BRAKE_STOP_TIP_OVER = 2.5          # reach past the pad's inner end face
-                                   # (was 1.5 — more line, same story)
+# (BRAKE_STOP_TIP_OVER retired at #886 — the corbel's reach past the
+# contact plane is TOP_T − NOZZLE now: the 45° underside ends on a
+# vertical one-bead face instead of a knife point, user's call)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
 POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud

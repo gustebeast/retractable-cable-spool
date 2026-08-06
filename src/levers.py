@@ -143,15 +143,16 @@ def _build_ratchet_lever():
                    (0.0, RATCHET_BAND_Z1 + 0.5)])
         .close().revolve(360.0, (0, 0), (0, 1)))
 
-    # OVER-PULL WING (user stop rework #880): a chunk extending past the
-    # handle's y-band into the bay's outer air strip — the ONLY y where
-    # static frame material can catch the lever (the full-height handle
-    # sweeps everything inside y0..y1 during the ±swing). Its flat
-    # bottom lands on the column's shelf at RATCHET_OPEN_DEG.
+    # OVER-PULL WING (user stop rework #880, flipped to −y at #886: the
+    # lever prints − to + y, so the nub TOPS the print on the inner
+    # side): a chunk extending past the handle's y-band into the bay's
+    # inner air strip — outside the handle's swept y, the only place
+    # static frame material can catch the lever. Its flat bottom lands
+    # on the beam-flank shelf at RATCHET_OPEN_DEG.
     horiz = horiz.union(
         cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
-        .polyline([(RWING_X0, RWING_Y0 - 1.0), (RWING_X1, RWING_Y0 - 1.0),
-                   (RWING_X1, RWING_Y1), (RWING_X0, RWING_Y1)])
+        .polyline([(RWING_X0, RWING_Y_TIP), (RWING_X1, RWING_Y_TIP),
+                   (RWING_X1, y0 + 1.0), (RWING_X0, y0 + 1.0)])
         .close().extrude(PAWL_Z_HI - PAWL_Z_LO))
 
     vert_top = RATCHET_PIVOT_Z + _HW
@@ -230,12 +231,16 @@ assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
 # the wing's flat bottom on the shelf's matched sloped top, full-face,
 # at RATCHET_OPEN_DEG. At rest (and through every working click) the
 # wing sits x-INBOARD of the shelf; it swings out-and-down onto it.
-RWING_Y0 = RATCHET_LEV_Y1                        # 17 — wing root (block face)
-RWING_Y1 = RATCHET_LEV_Y1 + 1.3                  # 18.3 — tip, 0.5 off the web
+# the nub rides the lever's −y (INNER) side (user #886: the lever
+# prints − to + y — outer face on the bed — so the nub must TOP the
+# print, not hang under the bed plane); the inner air strip (window
+# edge 5.2 → lever face 7) is just as handle-free as the outer one,
+# and the shelf gets a better root: the +X beam's flank
+RWING_Y_TIP = RATCHET_LEV_Y0 - 1.3               # 5.7 — tip, 0.5 off the
+                                                 # window edge / beam flank
 # inner edge at the separator-rim clearance limit (rim-derived so the
-# wing tracks cable/capacity resizes — a hard-coded 69.5 broke at the
-# Ø3.85 cable bump); 4.0 of chunk outboard of it
-RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y1 ** 2) + 0.05
+# wing tracks cable/capacity resizes); 4.0 of chunk outboard of it
+RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y_TIP ** 2) + 0.05
 RWING_X1 = RWING_X0 + 4.0
 _ROC, _ROS = math.cos(_RO), math.sin(_RO)
 
@@ -253,16 +258,20 @@ RSTOP_SLOPE = math.tan(_RO)
 RSTOP_X0 = _RW_OB0[0] + 0.25                     # shelf under the wing's
 RSTOP_X1 = _RW_OB1[0] - 0.25                     # open-pose footprint
 RSTOP_ZT0 = _RW_OB0[1] + RSTOP_SLOPE * (RSTOP_X0 - _RW_OB0[0])
-RSTOP_Y_ROOT = LEVER_Y_IN + LEVER_T + LEVER_SIDE_CLR   # 18.8 — column face
-RSTOP_Y_TIP = RWING_Y0 + 0.3                     # 17.3 — overlaps the wing 1.0
-RSTOP_ZBOT = RSTOP_ZT0 - (RSTOP_Y_ROOT - RSTOP_Y_TIP) - 1.6
+RSTOP_Y_ROOT = LEVER_Y_IN - LEVER_SIDE_CLR       # 5.2 — the beam's +y flank
+RSTOP_Y_TIP = RWING_Y_TIP + 1.0                  # 6.7 — overlaps the wing
+                                                 # 1.0, clear of the lever
+                                                 # face by 0.3
+RSTOP_ZBOT = RSTOP_ZT0 - (RSTOP_Y_TIP - RSTOP_Y_ROOT) - 1.6
 assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE - 1e-9, \
     "A_RSTOP_WIDTH: wing/shelf contact face under 3 beads"
 assert RSTOP_X0 >= RWING_X1 + 0.5 - 1e-9, \
     "A_RSTOP_REST: the resting wing overlaps the shelf in x"
 assert RSTOP_X0 >= BEAM_IR - 1e-9, \
-    "A_RSTOP_WELD: shelf starts inboard of the column's inner-x face"
-assert math.hypot(RWING_X0, RWING_Y1) >= R_RIM + 0.8 - 1e-9, \
+    "A_RSTOP_WELD: shelf starts inboard of the beam's inner-x face"
+assert RSTOP_X1 <= BEAM_IR + BEAM_SIZE - 0.5 + 1e-9, \
+    "A_RSTOP_WELD2: shelf runs past the beam flank's x extent"
+assert math.hypot(RWING_X0, RWING_Y_TIP) >= R_RIM + 0.8 - 1e-9, \
     "A_RSTOP_RIM: the wing reaches within 0.8 of the separator's rim"
 
 # ── Contact-frame geometry (v2's closed form) ────────────────────────────────
