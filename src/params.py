@@ -857,6 +857,12 @@ HORN_GUIDE_L = 16 * NOZZLE         # 12.8 — the walls live ONLY at the
                                    # across the open deck with the wind
                                    # state; the short guide channels it
                                    # just at the grab point)
+HORN_YC = ((WALL_IR + WALL_OR) / 2.0
+           * math.sin(math.radians(45.0)))     # 49.7 — the horn's centreline
+                                   # (frozen at the historical grab line;
+                                   # the EXIT WINDOW derives FROM this now,
+                                   # not the other way round — see the
+                                   # wall-openings block)
 HORN_FLARE_R = HORN_CH_W / 2.0 + 5 * NOZZLE    # 7.2 — mouth flare radius:
                                    # cylindrical cuts bell both mouths out
                                    # (the exit tangency wanders across the
@@ -935,16 +941,34 @@ _WALL_TOP_BAND_RETIRED = 4 * NOZZLE   # (kept only for the comment trail —
                                    # runs to LID_Z1 and the openings close
                                    # with 45° gables/teeth instead) (user's
                                    # call; was 1.6)
-# cable EXIT port at (+x,+y): the cable leaves tangent to its current
-# wrap, so the port spans tangency angles from the bare drum wall out to
-# design capacity (v2's cable_retainer math), centered on 45°.
-CABLE_EXIT_ANGLE_DEG  = 45.0
-CABLE_EXIT_R_LO       = DRUM_OR                    # innermost tangency (empty)
-CABLE_EXIT_R_HI       = R_OUT_COIL                 # outermost (full)
-CABLE_EXIT_MARGIN_DEG = math.degrees((CABLE_D / 2.0 + 1.0) / WALL_IR)   # ≈ 2.0
-CABLE_EXIT_SPAN_DEG   = (math.degrees(math.asin(CABLE_EXIT_R_HI / WALL_IR))
-                         - math.degrees(math.asin(CABLE_EXIT_R_LO / WALL_IR))
-                         + 2.0 * CABLE_EXIT_MARGIN_DEG)                 # ≈ 30
+# cable EXIT window at (+x,+y) — RE-DERIVED for the HORN (user #893:
+# v2's 30° arc assumed a free tangential fly-off; the horn REDIRECTS
+# every exit through its guide mouth). Defined the user's way: the
+# Y-BAND the cable can take up — sweep the wind range, take each
+# state's tangent line to the mouth (tangency on the CW-driving side,
+# the pinned chirality), collect the WALL-CROSSING y values on both
+# wall faces, add cable margins, and cut the wall STRAIGHT between
+# those two y planes:
+_HORN_PX = FRAME_R_OUT - HORN_GUIDE_L          # the guide's entry mouth
+_HORN_PR = math.hypot(_HORN_PX, HORN_YC)
+_HORN_PA = math.atan2(HORN_YC, _HORN_PX)
+_exit_ys = []
+for _i in range(21):
+    _r = WRAP_R0 + (R_OUT_COIL - WRAP_R0) * _i / 20.0
+    _ta = _HORN_PA + math.acos(_r / _HORN_PR)  # tangency (CW-driving side)
+    _tx, _ty = _r * math.cos(_ta), _r * math.sin(_ta)
+    _dx, _dy = _HORN_PX - _tx, HORN_YC - _ty
+    for _rw in (WALL_IR, WALL_OR):
+        # line-circle crossing: |T + t·D| = rw, t in (0, 1)
+        _a2 = _dx * _dx + _dy * _dy
+        _b2 = 2.0 * (_tx * _dx + _ty * _dy)
+        _c2 = _tx * _tx + _ty * _ty - _rw * _rw
+        _t = (-_b2 + math.sqrt(_b2 * _b2 - 4.0 * _a2 * _c2)) / (2.0 * _a2)
+        _exit_ys.append(_ty + _t * _dy)
+CABLE_EXIT_Y_LO = min(_exit_ys) - (CABLE_D / 2.0 + 1.0)
+CABLE_EXIT_Y_HI = max(_exit_ys) + (CABLE_D / 2.0 + 1.0)
+assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
+    "exit window's low-y edge reaches the +X beam"
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
 HORN_Z1 = CABLE_EXIT_Z0            # cable-horn pier top = the window bottom
                                    # (user #889; HORN_* block above)
