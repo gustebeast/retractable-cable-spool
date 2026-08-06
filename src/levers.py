@@ -232,8 +232,11 @@ assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
 # wing sits x-INBOARD of the shelf; it swings out-and-down onto it.
 RWING_Y0 = RATCHET_LEV_Y1                        # 17 — wing root (block face)
 RWING_Y1 = RATCHET_LEV_Y1 + 1.3                  # 18.3 — tip, 0.5 off the web
-RWING_X0 = 69.5                                  # inner edge (r 71.5 at rest)
-RWING_X1 = 73.5
+# inner edge at the separator-rim clearance limit (rim-derived so the
+# wing tracks cable/capacity resizes — a hard-coded 69.5 broke at the
+# Ø3.85 cable bump); 4.0 of chunk outboard of it
+RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y1 ** 2) + 0.05
+RWING_X1 = RWING_X0 + 4.0
 _ROC, _ROS = math.cos(_RO), math.sin(_RO)
 
 
