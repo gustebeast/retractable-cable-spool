@@ -44,21 +44,22 @@ def _build_bearing_608(z0):
 
 
 def _build_spring():
-    """The UNMODIFIED spring (v2 ran it with the flange rims cut off):
-    Ø SPRING_BODY_OD coil body between two Ø SPRING_FLANGE_OD ×
-    SPRING_FLANGE_T flanges, SPRING_H total. The arbor holes DIFFER
-    (user-measured): Ø8.7 through the TOP flange (bare shaft only),
-    Ø13.4 through the bottom flange + body (the joint collar's entry).
-    Top flange against the frame underside (the body gets fixed to the
-    frame later)."""
+    """The UNMODIFIED spring, installed UPSIDE DOWN (user #878: the axle
+    spins in v3, flipping the wind chirality): Ø SPRING_BODY_OD coil
+    body between two Ø SPRING_FLANGE_OD × SPRING_FLANGE_T flanges,
+    SPRING_H total. The arbor holes DIFFER (user-measured), and the
+    flip puts the BIG one on top: Ø13.4 through the TOP flange + body
+    (the mortise collar's entry, from above), Ø8.7 through the bottom
+    flange (the bare tenon post only). Top flange against the frame
+    underside (the body gets fixed to the frame later)."""
     s = cyl(SPRING_BODY_OD, SPRING_H, z=SPRING_Z0)
     s = s.union(cyl(SPRING_FLANGE_OD, SPRING_FLANGE_T, z=SPRING_Z0))
     s = s.union(cyl(SPRING_FLANGE_OD, SPRING_FLANGE_T,
                     z=SPRING_Z1 - SPRING_FLANGE_T))
-    s = s.cut(cyl(SPRING_BORE_TOP_D, SPRING_H + 1.0, z=SPRING_Z0 - 0.5))
-    s = s.cut(cyl(SPRING_BORE_BOT_D,
-                  (SPRING_Z1 - SPRING_FLANGE_T) - (SPRING_Z0 - 0.5),
-                  z=SPRING_Z0 - 0.5))
+    s = s.cut(cyl(SPRING_BORE_BOT_D, SPRING_H + 1.0, z=SPRING_Z0 - 0.5))
+    s = s.cut(cyl(SPRING_BORE_TOP_D,
+                  (SPRING_Z1 + 0.5) - (SPRING_Z0 + SPRING_FLANGE_T),
+                  z=SPRING_Z0 + SPRING_FLANGE_T))
     return heal(s)
 
 

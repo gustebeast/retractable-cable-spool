@@ -11,17 +11,24 @@ v2's design): the separator's slit runs open through its +z column top
 (the mortise mouth is split), axle_top's runs open through its tenon
 bottom (the tenon tip is split).
 
-  * TOP half — retention lip at the very top (rests on the 608's inner
-    race: the axle can't pass down through the bearing; with the bearing
-    recessed in the frame the lip tops out UNDER the frame face — flat
-    assembly top), shaft through the bearing and the spring's top
-    flange, tenon + strip slit at the bottom. Prints FLIPPED (lip disc on
-    the bed — every diameter shrinks going up, no overhangs; v2's call).
-  * BOTTOM half = axle_separator — ONE printed part (user's call): the
-    constant Ø JOINT_MORTISE_OD column (r 5.725 clears the Ø13.4 bottom
-    flange hole by 0.975/side; mortise bore + slit window at the top)
-    fused into v2's SEPARATOR, now a SOLID disk (no bore, no key slots —
-    it turns with the axle) sitting STATIC_MOVE_CLR under the spring.
+SEXES SWAPPED (user, #878: the spring installs UPSIDE DOWN in v3 — the
+axle spins instead of being fixed, which flips the wind chirality — so
+the Ø13.4 flange hole is on TOP now and the Ø8.7 on the bottom):
+
+  * TOP half — the MORTISE half: retention lip at the very top (rests
+    on the 608's inner race; tops out UNDER the frame face — flat
+    assembly top), Ø7.95 shaft through the bearing, then a 45° cone to
+    the Ø11.45 MORTISE COLLAR entering the spring through the top
+    Ø13.4 hole, bore + open-bottom strip slit down to the datum plane.
+    Prints FLIPPED (lip disc on the bed; the shaft→collar cone widens
+    going up in print — 45°, support-free).
+  * BOTTOM half = axle_separator — the TENON half, ONE printed part
+    (user's call): Ø11.45 base column through the disk, 45° root cone
+    topping at the SHOULDER (the fat section can't pass the Ø8.7
+    bottom hole, so it stops TENON_SHOULDER_CLR under the spring),
+    then the Ø7.95 TENON POST up through the bottom flange hole to the
+    top datum plane, open-top strip slit. Fused into v2's SEPARATOR, a
+    SOLID disk sitting SEP_SPRING_CLR under the spring.
     The rims are v2's unchanged — knurled brake band + phased ratchet
     star — but stacked brake-DOWN: the part prints UPRIGHT (disk on the
     bed, column rising), and with the full knurl ring bed-side the teeth
@@ -40,6 +47,7 @@ from .params import (
     AXLE_PRINT_D, AXLE_LIP_OD, AXLE_LIP_H, AXLE_Z_BOT, AXLE_Z_TOP,
     BRG_Z1,
     JOINT_H, JOINT_Z0, JOINT_Z1, JOINT_MORTISE_HOLE_D, JOINT_MORTISE_OD,
+    TOP_CONE_Z0, TOP_CONE_Z1, SHOULDER_Z,
     SLIT_W, SLIT_ZLO, SLIT_ZHI,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     BRAKE_H, RIM_H, KNURL_N, KNURL_DEPTH,
@@ -67,15 +75,25 @@ def _slit(z0, z1):
 
 
 def _build_top():
-    t = cyl(AXLE_PRINT_D, AXLE_Z_TOP - JOINT_Z0, z=JOINT_Z0)
+    """The MORTISE half now (sexes swapped — see the module docstring):
+    lip → Ø7.95 shaft through the bearing → 45° cone (inside the top
+    flange's Ø13.4 hole zone) → Ø11.45 collar down to the datum plane,
+    carrying the female bore and the open-bottom strip slit."""
+    t = cyl(AXLE_PRINT_D, AXLE_Z_TOP - TOP_CONE_Z1, z=TOP_CONE_Z1)
     t = t.union(cyl(AXLE_LIP_OD, AXLE_LIP_H, z=BRG_Z1))   # lip on the inner race
-    # slit OPEN through the tenon bottom (the axle slides DOWN onto the
-    # fixed strip); the closed top end sits 3.2 in from the spring's
-    # edge — 0.8 of shrinkage margin past the strip's 4-inset upper end
-    # (user) — a print floor in this half's flipped print; the shaft is
-    # SOLID from there up through the bearing
+    t = t.union(cone_solid(d_bottom=JOINT_MORTISE_OD, d_top=AXLE_PRINT_D,
+                           h=TOP_CONE_Z1 - TOP_CONE_Z0, z_base=TOP_CONE_Z0))
+    t = t.union(cyl(JOINT_MORTISE_OD, TOP_CONE_Z0 - JOINT_Z0, z=JOINT_Z0))
+    # female bore, opening DOWN at the collar bottom (= the datum plane
+    # shared with the separator's slit floor); ceiling at JOINT_Z1
+    t = t.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H + 0.5, z=JOINT_Z0 - 0.5))
+    # slit OPEN through the collar bottom (the axle slides DOWN onto the
+    # fixed strip; the mortise mouth splits into two C-halves); the
+    # closed top end sits 3.2 in from the spring's edge — a print floor
+    # in this half's flipped print; the shaft is SOLID from there up
+    # through the bearing
     t = t.cut(_slit(JOINT_Z0 - 1.0, SLIT_ZHI))
-    return heal(t)
+    return drop_stray_shells(heal(t))
 
 
 def _ratchet_star(z_lo, z_hi):
@@ -153,25 +171,31 @@ def _drum_wall():
 
 
 def _build_axle_separator():
-    b = cyl(JOINT_MORTISE_OD, JOINT_Z1 - AXLE_Z_BOT, z=AXLE_Z_BOT)
+    """The TENON half now (sexes swapped — see the module docstring):
+    fat base column through the disk, root cone topping at the
+    SHOULDER, Ø7.95 tenon post up through the spring's Ø8.7 bottom
+    hole to the top datum plane, open-top strip slit."""
+    b = cyl(JOINT_MORTISE_OD, SHOULDER_Z - AXLE_Z_BOT, z=AXLE_Z_BOT)
+    b = b.union(cyl(AXLE_PRINT_D, JOINT_Z1 - SHOULDER_Z,
+                    z=SHOULDER_Z))                # the TENON POST — its tip
+                                                  # at JOINT_Z1 = the top
+                                                  # half's slit ceiling plane
     # 45° ROOT CONE stiffening the column↔disk junction (user's call):
-    # flares at 45° from the column Ø down onto the disk top, AXLE_ROOT_
-    # CONE_H tall (bead grid — spans the FULL gap; its top rim meets the
-    # spring's face plane at just the column Ø, inside the Ø13.4 flange
-    # hole, so nothing touches). Widens TOWARD the bed in the upright
-    # print — self-supporting.
+    # flares at 45° from the column Ø down onto the disk top; its top IS
+    # the column→tenon SHOULDER now (the fat section stops
+    # TENON_SHOULDER_CLR under the spring — the Ø8.7 hole is above).
+    # Widens TOWARD the bed in the upright print — self-supporting; the
+    # shoulder's flat annulus faces UP: no overhang either.
     b = b.union(cone_solid(d_bottom=JOINT_MORTISE_OD + 2.0 * AXLE_ROOT_CONE_H,
                            d_top=JOINT_MORTISE_OD,
                            h=AXLE_ROOT_CONE_H, z_base=SEP_Z1))
     b = b.union(_knurl_band(SEP_Z0, SEP_Z0 + BRAKE_H))       # brake band on the bed
     b = b.union(_ratchet_star(SEP_Z0 + BRAKE_H, SEP_Z1))     # teeth grow on the ring
     b = b.union(_drum_wall())
-    b = b.cut(cyl(JOINT_MORTISE_HOLE_D, JOINT_H, z=JOINT_Z0))
-    # slit OPEN through the +z column top (the separator slides UP onto
-    # the fixed strip; the mortise mouth splits into two C-halves —
-    # v2's design); the closed bottom end sits 3.2 in from the spring's
-    # edge — 0.8 of shrinkage margin past the strip's 4-inset lower end
-    # (user) — a print floor, keeping the column solid above the root cone
+    # slit OPEN through the +z tenon tip (the separator slides UP onto
+    # the fixed strip — v2's design); the closed bottom end sits 3.2 in
+    # from the spring's edge — 0.8 of shrinkage margin past the strip's
+    # 4-inset lower end (user) — a print floor above the root cone
     b = b.cut(_slit(SLIT_ZLO, JOINT_Z1 + 1.0))
     for i in range(LIDJ_SITES):                # lid-bayonet tenons STANDING on
         b = b.union(sep_tenon(i * 360.0 / LIDJ_SITES))   # the wall top (user:
