@@ -11,7 +11,7 @@ import sys
 
 from cadkit.overlap_check import run
 
-from src.frame import frame_top, frame_bottom
+from src.frame import frame_top, frame_bottom, horn_cap
 from src.mount import mount_ring
 from src.axle import axle_top, axle_separator
 from src.lid import lid
@@ -26,6 +26,7 @@ def collect_components():
         ("frame_top",   frame_top),
         ("frame_bottom", frame_bottom),
         ("mount_ring",  mount_ring),
+        ("horn_cap",    horn_cap),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),
         ("lid",         lid),
@@ -58,6 +59,8 @@ _INTENDED = {
                                                    # race on the boss shoulder
         ("ratchet_lever", "axle_separator"),  # pawl MESHED in the teeth at
                                               # rest (exact-negative edge)
+        ("horn_cap", "frame_bottom"),  # cap seated flat on the trough
+                                       # half at the bore's equator
         ("brake_pad_tpu", "brake_lever"),     # hook slide joint seated
         ("ratchet_pin", "frame_bottom"),      # keyed diamond bores
         ("brake_pin",   "frame_bottom"),

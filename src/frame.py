@@ -335,10 +335,10 @@ def _ratchet_stop():
 
 
 def _cable_horn():
-    """CABLE HORN (user #889, redesigned #903 — the IDEAL cable model,
-    printability/installation deliberately set aside). The PIER: a
-    solid prism from the exit window's midway point running x-parallel
-    out to the part's +x edge, top FLUSH with the window bottom so the
+    """CABLE HORN (user #889, redesigned #903 — the ideal cable model
+    first; SPLIT for printability/install at #905). The PIER: a solid
+    prism from the exit window's midway point running x-parallel out
+    to the part's +x edge, top FLUSH with the window bottom so the
     exiting cable rides straight onto it; root trimmed to the band's
     bore, welded through the band's below-sill ring. The TUNNEL BLOCK:
     a second prism ON the pier at its +x end, shaped by cuts —
@@ -350,7 +350,14 @@ def _cable_horn():
         needs it — the free cable pulls in any direction with no edge
         to bite; the −x entry reuses it unchanged for simplicity
         (user: the spool-plane cable never technically needs the
-        top/bottom quadrants there)."""
+        top/bottom quadrants there).
+    Returns (bottom, cap) SPLIT at the bore's equator plane (user
+    #905, printability + install): the bottom half — an open
+    semicircular trough whose walls steepen to vertical at the plane
+    — stays on frame_bottom and prints upright overhang-free; the
+    upper half is the HORN CAP, its own part (flat top face on the
+    bed, trough up — also overhang-free). The cable lays into the
+    trough from above and the cap closes the circle."""
     yc = HORN_YC
     ch2 = HORN_CH_W / 2.0
     zc = HORN_Z1 + ch2             # tunnel axis: bore floor = pier top
@@ -395,7 +402,13 @@ def _cable_horn():
                 .revolve(360.0, (0.0, 0.0), (1.0, 0.0))
                 .translate((0.0, yc, zc)))
         p = p.cut(bell)
-    return p
+    # SPLIT at the bore equator (z = zc): everything above becomes the
+    # horn cap, its own printed part
+    upper = (cq.Workplane("XY").workplane(offset=zc)
+             .center((xb0 + _R_OUT) / 2.0, yc)
+             .rect(HORN_BLOCK_L + 4.0, HORN_W + 4.0)
+             .extrude(HORN_CH_W + HORN_ROOF_T))
+    return p.cut(upper), p.intersect(upper)
 
 
 def _cable_guard(s):
@@ -581,7 +594,7 @@ def _build_frame_bottom():
     # inboard) blankets that bay's wall line from z −38.7 to the floor —
     # no static fence can exist there; see the #887 report
     fb = fb.union(_cable_guard(-1.0))
-    fb = fb.union(_cable_horn())
+    fb = fb.union(_HORN_BOTTOM)
     fb = fb.cut(_hand_wedge())
     fb = fb.cut(_lever_pin_bores())
     return heal(fb)
@@ -640,5 +653,10 @@ def _build_frame_top():
     return heal(ft)
 
 
+# horn split once (bottom half fuses into frame_bottom; the cap is its
+# own printed part, exported from build.py)
+_HORN_BOTTOM, _HORN_CAP = _cable_horn()
+
 frame_bottom = _build_frame_bottom()
 frame_top = _build_frame_top()
+horn_cap = heal(_HORN_CAP)
