@@ -49,7 +49,7 @@ from .params import (
     AXLE_PRINT_D, AXLE_Z_TOP,
     JOINT_H, JOINT_Z0, JOINT_Z1, JOINT_MORTISE_HOLE_D, JOINT_MORTISE_OD,
     TOP_CONE_Z0, TOP_CONE_Z1, SHOULDER_Z,
-    SEP_POCKET_R, SEP_POCKET_FLOOR_T, SEP_BOSS_D,
+    SEP_POCKET_R, SEP_POCKET_FLOOR_T, SEP_BOSS_D, SEP_BOSS_FLARE,
     SLIT_W, SLIT_ZLO, SLIT_ZHI,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     BRAKE_H, RIM_H, KNURL_N, KNURL_DEPTH,
@@ -211,6 +211,10 @@ def _build_axle_separator():
             z=SEP_Z0 + SEP_POCKET_FLOOR_T)
         .cut(cyl(SEP_BOSS_D,
                  (SEP_Z1 - SEP_Z0) + 2.0, z=SEP_Z0 - 0.5)))
+    # 45° skirt tying the boss into the pocket floor (user)
+    b = b.union(cone_solid(d_bottom=SEP_BOSS_D + 2.0 * SEP_BOSS_FLARE,
+                           d_top=SEP_BOSS_D, h=SEP_BOSS_FLARE,
+                           z_base=SEP_Z0 + SEP_POCKET_FLOOR_T))
     # BOTTOM-BEARING SEAT in the disk's underside (user's design): the
     # bearing sits FLUSH with the disk face; the 45° cone rising off the
     # pocket bore IS the seat (the race's factory OD-edge chamfer
