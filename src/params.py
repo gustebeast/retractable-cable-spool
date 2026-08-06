@@ -965,7 +965,12 @@ for _i in range(21):
         _c2 = _tx * _tx + _ty * _ty - _rw * _rw
         _t = (-_b2 + math.sqrt(_b2 * _b2 - 4.0 * _a2 * _c2)) / (2.0 * _a2)
         _exit_ys.append(_ty + _t * _dy)
-CABLE_EXIT_Y_LO = min(_exit_ys) - (CABLE_D / 2.0 + 1.0)
+# margins: the window is the cable's TAKE-UP band (user #894: the −y
+# edge was too far out — the innermost wind's line pins it, so that
+# side gets the cable's half-width + a whisker, no extra play; the +y
+# side keeps 1.0 of play since the crossings genuinely wander there
+# with the wind state)
+CABLE_EXIT_Y_LO = min(_exit_ys) - (CABLE_D / 2.0 + 0.2)
 CABLE_EXIT_Y_HI = max(_exit_ys) + (CABLE_D / 2.0 + 1.0)
 assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
     "exit window's low-y edge reaches the +X beam"
