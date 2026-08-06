@@ -344,9 +344,13 @@ def _cable_horn():
     band's solid below-sill ring. Prints with the frame off the bed:
     plain verticals. (Next: the channel side walls + the lock cap.)"""
     yc = HORN_YC
+    # the prism's x-start tracks the band's bore chord at the pier's
+    # FAR-y edge (user #901: a fixed start left the +y side short of
+    # the drum after the horn moved; the bore cut below trims the rest)
+    x0 = math.sqrt(max(WALL_IR ** 2 - (yc + HORN_W / 2.0) ** 2, 0.0)) - 1.0
     p = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
-         .center((44.0 + _R_OUT) / 2.0, yc)
-         .rect(_R_OUT - 44.0, HORN_W)
+         .center((x0 + _R_OUT) / 2.0, yc)
+         .rect(_R_OUT - x0, HORN_W)
          .extrude(HORN_Z1 - FLOOR_Z0))
     # CHANNEL SIDE WALLS (step 2; user #892: at the pier's +x END only —
     # between the drum and here the cable angles freely across the open
