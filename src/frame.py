@@ -62,7 +62,7 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
-    BRAKE_STOP_TIP_OVER, BRAKE_STOP_TOP_T,
+    BRAKE_STOP_TOP_T,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -287,12 +287,15 @@ def _brake_rest_stop():
     (all probed)."""
     zc = BRAKE_STOP_ZC
     y_c = BRAKE_LEV_Y1                        # −7 — the contact plane
-    y_tip = y_c - BRAKE_STOP_TIP_OVER         # −8.5
+    # the 45° underside now meets a vertical ONE-BEAD end face instead
+    # of running to a knife point (user #886) — which also shortens the
+    # −y reach to TOP_T − 0.8 past the contact plane
+    y_tip = y_c - (BRAKE_STOP_TOP_T - NOZZLE)
     y_root = -4.5                             # buried into the band strip
     z_top = zc + BRAKE_STOP_TOP_T
     return (cq.Workplane("YZ")
             .polyline([(y_root, zc + (y_c - y_root)),
-                       (y_tip, zc + (y_c - y_tip)),
+                       (y_tip, z_top - NOZZLE),
                        (y_tip, z_top), (y_root, z_top)])
             .close().extrude(WALL_OR - WALL_IR)
             .translate((WALL_IR, 0.0, 0.0)))
@@ -304,23 +307,25 @@ def _ratchet_stop():
     past the handle's y-band — nothing static may live INSIDE that
     band, the full-height handle sweeps it during the ±swing) lands
     FULL-FACE here at RATCHET_OPEN_DEG, where the pawl clears the
-    teeth by RATCHET_OPEN_CLR. The shelf grows out of the fork
-    COLUMN's inner face — welded across its whole width — chunky
-    (≥1.6 everywhere), its top matched to the wing's open-pose bottom
-    plane; the usual 45° corbel underside carries its reach."""
+    teeth by RATCHET_OPEN_CLR. The wing rides the lever's −y INNER
+    side since #886 (the lever prints − to + y, so the nub must TOP
+    the print), and the shelf grows out of the +X BEAM's flank —
+    welded across its whole width — chunky (≥1.6 everywhere), its top
+    matched to the wing's open-pose bottom plane; the usual 45° corbel
+    underside carries its reach."""
     top1 = RSTOP_ZT0 + RSTOP_SLOPE * (RSTOP_X1 - RSTOP_X0)
     prism = (cq.Workplane("XZ")
              .polyline([(RSTOP_X0, RSTOP_ZT0), (RSTOP_X1, top1),
                         (RSTOP_X1, RSTOP_ZBOT), (RSTOP_X0, RSTOP_ZBOT)])
-             .close().extrude((RSTOP_Y_ROOT + 1.0) - RSTOP_Y_TIP))
+             .close().extrude(RSTOP_Y_TIP - (RSTOP_Y_ROOT - 1.0)))
     # whichever way the XZ plane extruded, land the y-span at
-    # [TIP, ROOT + 1 (buried into the column face)]
+    # [ROOT − 1 (buried into the beam's flank), TIP]
     prism = prism.translate(
-        (0.0, (RSTOP_Y_ROOT + 1.0) - prism.val().BoundingBox().ymax, 0.0))
+        (0.0, RSTOP_Y_TIP - prism.val().BoundingBox().ymax, 0.0))
     corbel = (cq.Workplane("YZ")
               .polyline([(RSTOP_Y_ROOT, RSTOP_ZBOT),
-                         (RSTOP_Y_ROOT - 12.0, RSTOP_ZBOT + 12.0),
-                         (RSTOP_Y_ROOT - 12.0, RSTOP_ZBOT - 8.0),
+                         (RSTOP_Y_ROOT + 12.0, RSTOP_ZBOT + 12.0),
+                         (RSTOP_Y_ROOT + 12.0, RSTOP_ZBOT - 8.0),
                          (RSTOP_Y_ROOT, RSTOP_ZBOT - 8.0)])
               .close().extrude(40.0).translate((50.0, 0.0, 0.0)))
     return prism.cut(corbel)
