@@ -43,9 +43,14 @@ SPRING_FLANGE_OD = 78.3      # flange Ø, top and bottom
 SPRING_FLANGE_T  = 2.4       # flange thickness, each
 SPRING_BODY_OD   = 56.3      # coil body Ø between the flanges
 SPRING_H         = 32.0      # TOTAL height, flanges included
-SPRING_BORE_TOP_D = 8.7      # top-flange arbor hole (user-measured 2026-08-03) —
-                             # only the bare shaft passes; the joint collar CAN'T
-SPRING_BORE_BOT_D = 13.4     # bottom-flange hole — the mortise collar enters here
+# The spring installs UPSIDE DOWN in v3 (user 2026-08-05: the axle spins
+# instead of being fixed, which flips the required wind chirality) — so
+# the big Ø13.4 hole is on TOP now and the small Ø8.7 on the BOTTOM:
+# the MORTISE collar therefore rides the TOP axle half (enters from
+# above) and the separator carries the TENON post (the sexes swapped).
+SPRING_BORE_TOP_D = 13.4     # top-flange hole — the mortise collar enters here
+SPRING_BORE_BOT_D = 8.7      # bottom-flange hole (user-measured) — only the
+                             # bare Ø7.95 tenon post passes; the collar CAN'T
 SPRING_STRIP_T   = 0.2       # strip steel thickness (v2-measured)
 SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 
@@ -111,32 +116,48 @@ SPRING_Z1 = FRAME_Z0                   # top flange against the frame underside
 SPRING_Z0 = SPRING_Z1 - SPRING_H       # −32
 
 # ── Axle two-half glue joint + spring-strip slit (v1/v2-proven design:
-# the joint must pass through the spring's Ø13.4 flange holes, so the axle
-# splits and each half slides onto the strip from its own end) ───────────────
-# The joint's Z DATUM pair (user's rule, converged over #874-876): the
+# the joint's fat collar can only pass the spring's Ø13.4 flange hole,
+# so the axle splits and each half slides onto the strip from its own
+# end. SEXES SWAPPED at #878 — the flipped spring puts the Ø13.4 hole
+# on TOP: the TOP half carries the MORTISE collar now, the separator
+# carries the TENON post) ────────────────────────────────────────────────────
+# The joint's Z DATUM pair (user's rule, converged over #874-877): the
 # spring's strip physically starts 4 in from each spring edge; the
 # slits' closed ends sit SLIT_INSET = 3.2 in (0.8 of shrinkage margin
 # past the strip's ends); and each half's joint-side EXTENT lands
 # exactly ON the other half's slit-end plane — the parts LINE UP, no
 # slit window is ever exposed past the seated mating half:
-#   · axle_top's tenon tip  = the separator's slit floor  (SLIT_ZLO)
-#   · separator's column top = axle_top's slit ceiling     (SLIT_ZHI)
+#   · axle_top's collar bottom (mortise opening) = the separator's
+#     slit floor (SLIT_ZLO)
+#   · separator's tenon tip = axle_top's slit ceiling (SLIT_ZHI)
 SLIT_INSET = 4 * NOZZLE            # 3.2 — slit-end inset from the spring edges
-SLIT_ZLO   = SPRING_Z0 + SLIT_INSET   # −28.8 — sep slit floor = tenon tip
-SLIT_ZHI   = SPRING_Z1 - SLIT_INSET   # −3.2 — top slit ceiling = column top
+SLIT_ZLO   = SPRING_Z0 + SLIT_INSET   # −28.8 — sep slit floor = collar bottom
+SLIT_ZHI   = SPRING_Z1 - SLIT_INSET   # −3.2 — top slit ceiling = tenon tip
 STRIP_Z0   = SPRING_Z0 + 4.0       # −28 — strip physical lower end (reference)
 STRIP_Z1   = SPRING_Z1 - 4.0       # −4  — strip physical upper end (reference)
-JOINT_Z1   = SLIT_ZHI              # mortise opening = separator column top
-JOINT_Z0   = SLIT_ZLO              # bore bottom = tenon tip
+JOINT_Z1   = SLIT_ZHI              # bore ceiling = tenon tip
+JOINT_Z0   = SLIT_ZLO              # mortise opening = collar bottom
 JOINT_H    = JOINT_Z1 - JOINT_Z0   # 25.6 — bore depth = engagement
 assert SLIT_ZLO <= STRIP_Z0 and STRIP_Z1 <= SLIT_ZHI, \
     "slits no longer cover the strip's physical span"
 JOINT_MORTISE_HOLE_D = AXLE_PRINT_D + 2 * FIT_CLR  # 8.25 — female bore
-JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — collar,
-                                                   # AND the bottom half's one
-                                                   # constant section end to end
-                                                   # (user's call — no narrowing
-                                                   # below the collar)
+JOINT_MORTISE_OD     = JOINT_MORTISE_HOLE_D + 2 * STRUCT_WALL  # 11.45 — the
+                                                   # TOP half's collar (and the
+                                                   # separator's base column OD)
+# the TOP half's shaft→collar 45° transition (print-safe both ways: in
+# the flipped print the cone widens going up); it lives inside the top
+# flange's Ø13.4 hole zone
+TOP_CONE_Z1 = -0.5                 # cone top (shaft Ø) — under the frame face
+TOP_CONE_Z0 = TOP_CONE_Z1 - (JOINT_MORTISE_OD - AXLE_PRINT_D) / 2.0  # −2.25 —
+                                                   # full collar from here down
+assert TOP_CONE_Z0 >= SPRING_Z1 - SPRING_FLANGE_T - 1e-9, \
+    "collar cone reaches below the top flange's hole zone"
+assert JOINT_Z1 <= TOP_CONE_Z0 - NOZZLE + 1e-9, \
+    "no web between the bore ceiling and the collar cone"
+# the separator's column→tenon SHOULDER: the fat column cannot pass the
+# (now bottom) Ø8.7 hole, so it stops under the spring with a rotating gap
+TENON_SHOULDER_CLR = 0.5
+SHOULDER_Z = SPRING_Z0 - TENON_SHOULDER_CLR        # −32.5 — column top / post root
 SLIT_W               = 2 * NOZZLE                  # spring-strip slit width
 # (SLIT_END_CAP is RETIRED — user's call reversed: the spring's central
 # strip is FIXED and cannot thread a closed window, so each half's slit
@@ -181,14 +202,15 @@ SEP_PASS_ANGLE_DEG = 30.0          # azimuth (v2's spot; arbitrary now — the
 
 SEP_SPRING_CLR = 3 * NOZZLE        # 2.4 — separator↔spring gap (was v2's 3.2
                                    # static↔moving standard; user: overkill)
-AXLE_ROOT_CONE_H = 3 * NOZZLE      # 2.4 — 45° column→disk root cone height =
-                                   # the FULL gap (user's call): the cone top
-                                   # lands exactly on the spring's face plane,
-                                   # where it is still only the column Ø —
-                                   # inside the Ø13.4 flange hole, no contact
+# (AXLE_ROOT_CONE_H is set right below — it needs SEP_Z1)
 SEP_Z1 = SPRING_Z0 - SEP_SPRING_CLR    # −34.4 — disk top, right under the
                                        # (frame-fixed, static) spring
 SEP_Z0 = SEP_Z1 - RIM_H                # −44.4 — disk bottom = the bed face
+AXLE_ROOT_CONE_H = SHOULDER_Z - SEP_Z1 # 1.9 — 45° column→disk root cone: its
+                                       # top IS the column→tenon shoulder now
+                                       # (the fat column can't approach the
+                                       # spring's bottom face anymore — the
+                                       # Ø8.7 hole is there, sexes swapped)
 
 AXLE_Z_BOT = SEP_Z0                    # the column runs flush through the disk
 AXLE_Z_TOP = BRG_Z1 + AXLE_LIP_H       # 10.2 — lip top, UNDER the frame face
@@ -369,9 +391,15 @@ TOPJ_NECK  = 2 * NOZZLE            # 1.6 — neck height under the flare
 TOPJ_TIP   = NOZZLE                # 0.8 — vertical tip face above the flare
                                    # (then the FLAT top)
 LIDJ_SITES      = 4                # joint sites (90° pitch)
-LIDJ_TEN_SWEEP  = 20.0             # tenon arc sweep (deg)
+LIDJ_TEN_SWEEP  = 30.0             # tenon arc sweep (deg) — was 20 (user:
+                                   # lid↔sep too loose; the drum rim has
+                                   # free arc, so the engagement grew 1.5×)
 LIDJ_SEAT_CLR   = 0.15             # seating clearance at each stop (arc mm)
 LIDJ_ENTRY_OVER = 1.0              # pocket overshoot past the tenon, each
+LIDJ_Z_CLR      = 0.20             # z-sandwich clearance, THIS joint only
+                                   # (user: drop the vertical slack a bit —
+                                   # under the GF 0.30 depth-face policy;
+                                   # print-check the seating twist for grab)
                                    # side (arc mm) — drop-in ease
 
 # 45° pass tunnel, RE-DERIVED for the drum (the separator block's comment
@@ -849,14 +877,15 @@ assert BRG_LIP_H >= STRUCT_WALL, \
     "bearing lip thinner than the quality tier"
 assert AXLE_Z_TOP <= FRAME_Z1, \
     "axle lip pokes above the frame top — the assembly top must stay flat"
-assert (SPRING_BORE_BOT_D - JOINT_MORTISE_OD) / 2.0 >= 0.5, \
-    "mortise collar under 0.5/side rotating clearance in the bottom flange hole"
-assert (SPRING_BORE_TOP_D - AXLE_PRINT_D) / 2.0 >= 0.3, \
-    "shaft under 0.3/side rotating clearance in the top flange hole"
-assert JOINT_Z1 <= SPRING_Z1 - SPRING_FLANGE_T, \
-    "mortise opening pokes above the spring's top flange interior"
+# (sexes swapped with the upside-down spring: collar on TOP, tenon below)
+assert (SPRING_BORE_TOP_D - JOINT_MORTISE_OD) / 2.0 >= 0.5, \
+    "mortise collar under 0.5/side rotating clearance in the top flange hole"
+assert (SPRING_BORE_BOT_D - AXLE_PRINT_D) / 2.0 >= 0.3, \
+    "tenon post under 0.3/side rotating clearance in the bottom flange hole"
 assert JOINT_Z0 >= SPRING_Z0 + SPRING_FLANGE_T - 1e-9, \
-    "joint bore reaches below the spring's bottom flange interior"
+    "collar bottom (mortise opening) reaches below the bottom flange interior"
+assert SHOULDER_Z <= SPRING_Z0 - 1e-9, \
+    "separator's column shoulder touches the spring's bottom face"
 assert AXLE_ROOT_CONE_H <= SEP_SPRING_CLR, \
     "axle root cone pokes past the spring's bottom face"
 # strip-zone coverage: the separator's slit floor (shrinkage margin

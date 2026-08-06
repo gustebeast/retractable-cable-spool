@@ -1,6 +1,6 @@
-"""SHARED flat-top arc-joint profile + the SEPARATOR ↔ LID rotational
-bayonet (both arc-joint consumers call THIS module; the coupon rule:
-never re-model the joint per part).
+"""The SEPARATOR ↔ LID rotational bayonet's flat-top arc profile (the
+frame arc joints moved onto cadkit's mushroom crossing — this module's
+only consumer is the bayonet now).
 
 PROFILE (user's call — replaces v2's half-arrowhead angled top, which
 existed for hosts whose cavity had to close on an inclined roof): flat
@@ -21,7 +21,10 @@ membrane over the tenon tip; the slots sit over the drum wall,
 radially inside WRAP_R0, so no cable ever meets them; the lid prints
 +z→−z and every slot wall is vertical or 45°). Drop the lid so the
 tenons pass the entry pockets, then rotate it CW (viewed +Z) until the
-tenons meet the cavities' stop walls. NOTE: back-rotation is only
+tenons meet the cavities' stop walls. TIGHTENED at user's call (#878:
+lid↔sep too loose): the z-sandwich runs LIDJ_Z_CLR (0.20, under the
+GF 0.30 policy) and the tenons sweep 30° (was 20 — free rim arc spent
+on engagement). NOTE: back-rotation is only
 friction-blocked for now — if the working torque direction lands CCW
 once the cable chirality is final, add a small lock (v2 mount_lock
 style).
@@ -32,9 +35,9 @@ import math
 import cadquery as cq
 
 from .params import (
-    NOZZLE, JOINT_CLR, JOINT_BACK_CLR,
+    NOZZLE, JOINT_CLR,
     TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP,
-    LIDJ_TEN_SWEEP, LIDJ_SEAT_CLR, LIDJ_ENTRY_OVER,
+    LIDJ_TEN_SWEEP, LIDJ_SEAT_CLR, LIDJ_ENTRY_OVER, LIDJ_Z_CLR,
     DRUM_IR, DRUM_T, DRUM_Z1, LID_Z0, LID_Z1, LID_T,
 )
 
@@ -59,15 +62,17 @@ _OVER_A = math.degrees(LIDJ_ENTRY_OVER / _R_REF)
 def _flat_pts(tenon, z_base, r0, top=None):
     """(r, z) profile points at flat-face radius r0. tenon=True →
     nominal; False → the CAVITY: lateral faces dilated JOINT_CLR,
-    z-sandwich faces JOINT_BACK_CLR. `top` overrides the profile's top
-    (the lid uses it to run its cavities THROUGH the plate)."""
+    z-sandwich faces LIDJ_Z_CLR (this joint's own, tightened value —
+    user: the lid sat too loose at the 0.30 policy gap). `top`
+    overrides the profile's top (the lid uses it to run its cavities
+    THROUGH the plate)."""
     s, f, zn, tp = TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP
     if tenon:
         zt = TOPJ_TOP if top is None else top
         return [(r0, z_base), (r0 + s, z_base),
                 (r0 + s, zn), (r0 + s + f, zn + f),
                 (r0 + s + f, zt), (r0, zt)]
-    c, bc = JOINT_CLR, JOINT_BACK_CLR
+    c, bc = JOINT_CLR, LIDJ_Z_CLR
     zt = TOPJ_TOP + bc if top is None else top
     return [(r0 - c, z_base), (r0 + s + c, z_base),
             (r0 + s + c, zn - bc), (r0 + s + f + c, zn + f - bc),
