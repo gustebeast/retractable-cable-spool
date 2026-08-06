@@ -53,8 +53,14 @@ _SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
 # cavity CLOSES on the one-bead roof inside the arm (user's call: the
 # old THROUGH mushroom left the arm's underside open and weak). The GF
 # specs give it the 0.30 z-relief natively (joint height includes it).
+# stem= (user #910): the tenon stem WIDENED to the ring bar's 2.4 so
+# the hanging octagon matches the spine it grows from (width/2 gave a
+# 2.0 stem with a 0.2 step per side). The library's host-matching
+# override keeps the silhouette: the 45° shoulder gives 0.2 per side
+# (0.8 — the one-nozzle floor) and the waist vertical takes it (1.8);
+# height and swallow unchanged, so the arm-floor assert stands as-is.
 MOUNT_J = joint(MOUNT_TEN_W, None, tenon=_SPEC, mortise=_SPEC,
-                install="-x")
+                install="-x", stem=MOUNT_SPINE_W)
 assert (MOUNT_MATE_Z - (MOUNT_J.height + MOUNT_J.clearance)
         >= MOUNT_FLOOR_MIN - 1e-9), \
     "octagon cavity leaves under 1.6 of arm floor — shrink MOUNT_TEN_W"

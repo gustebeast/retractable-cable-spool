@@ -684,10 +684,15 @@ def _build_frame_top():
     ft = _plus(FRAME_Z0, FRAME_Z1)
     ft = ft.union(cyl(BRG_BOSS_OD, FRAME_Z1 - FRAME_Z0, z=FRAME_Z0))
     ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
+    # clean=False through the cut loops: cq's default runs OCC's
+    # unify-same-domain over the WHOLE part after EVERY cut — profiled
+    # (#910, py-spy) as the frame build's runaway cost once the mount
+    # cavities crossed the v-groove walls. heal(ft) at the end is the
+    # one cleanup pass.
     for a in (0.0, 90.0, 180.0, 270.0):
-        ft = ft.cut(_arc_mortise(a))
+        ft = ft.cut(_arc_mortise(a), clean=False)
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
-        ft = ft.cut(c)
+        ft = ft.cut(c, clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top

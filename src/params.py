@@ -644,6 +644,12 @@ assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
 # print-proven lateral / depth-face clearances for every other joint) ────────
 JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
 JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
+JOINT_STEP = 0.2                   # deliberate wall OFFSET between two
+                                   # cutters that would otherwise share a
+                                   # face: near-coplanar boolean walls are
+                                   # OCC's pathological unify case (#910,
+                                   # mount groove vs cavity slot — 15+ min
+                                   # builds); keep a real step
 WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
                                    # into frame_bottom, bed to lid-top
                                    # (user: wall_top, the 4 lock strips and
@@ -715,7 +721,13 @@ MOUNT_TEN_W  = 5 * NOZZLE          # 4.0 — joint width: the largest whose
                                    # OCTAGON swallow fits above the 1.6
                                    # arm floor (asserted in mount.py); its
                                    # cavity leaves 59% of the arm intact
-                                   # (user's ≥~50% rule, asserted)
+                                   # (user's ≥~50% rule, asserted). The
+                                   # STEM is overridden to MOUNT_SPINE_W
+                                   # (2.4, user #910 — match the ring
+                                   # bar) via cadkit's stem= knob; width
+                                   # 4.8 (stem 2.4 the parity way) was
+                                   # infeasible: swallow 6.97 > the 6.4
+                                   # of room over the arm floor
 MOUNT_SPINE_T = 3 * NOZZLE         # 2.4 — spine ring depth (was 4.0: the
                                    # shallower spine raises the mating
                                    # plane, buying the octagon its room;
@@ -798,7 +810,17 @@ assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
 # vertical walls, then a 45° V closing on a ONE-BEAD flat: 0.8 is the
 # bridging limit, user's call — the earlier +2·clearance flat printed a
 # 1.1 bridge; the V runs 0.15 deeper instead):
-MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 2.3 — groove width
+MOUNT_GRV_W    = (MOUNT_SPINE_W + 2 * JOINT_CLR
+                  + 2 * JOINT_STEP)                # 3.1 — groove width: the
+                                   # spine's seat PLUS a real step outside
+                                   # the octagon cavities' neck slot. The
+                                   # slot (stem 2.4 + 2·clr = 2.7) must
+                                   # never share walls with the groove:
+                                   # at #910 the stem override made them
+                                   # the SAME cylinder to within float
+                                   # dust and OCC's unify ground for
+                                   # 15+ min sewing micro-slivers along
+                                   # every site's arcs (py-spy-caught)
 MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
 MOUNT_GRV_FLAT = NOZZLE                            # 0.8 — dulled V flat
 MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3

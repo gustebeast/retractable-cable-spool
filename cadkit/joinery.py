@@ -250,7 +250,7 @@ def _octagon_width_min(nozzle=0.8, clearance=0.1):
 
 
 def _octagon_profile(width, nozzle, base_z, clearance, height=None,
-                     post_extra=0.0, waist_extra=0.0):
+                     post_extra=0.0, waist_extra=0.0, stem_w=None):
     """Closed (y, z) points for the TENON cross-section — the smaller part, where the
     nozzle floor is enforced. A stop sign: a `width`-wide waist over a stem of
     `width/2` (see _STEM_FRAC), joined by 45° diagonals — the UPPER (green) set by
@@ -296,10 +296,30 @@ def _octagon_profile(width, nozzle, base_z, clearance, height=None,
     grow = abs(clearance) * (math.sqrt(2.0) - 1.0)
     roof_t = _tenon_roof(n, clearance)     # tenon roof → mortise roof = one nozzle
     hw = width / 2.0                       # half flat-to-flat (the waist)
-    stem = _STEM_FRAC * width              # FAT stem (strength optimum, = width/2)
+    stem_def = _STEM_FRAC * width          # FAT stem (strength optimum, = width/2)
+    stem = stem_def if stem_w is None else stem_w
+    # `stem_w` — the HOST-MATCHING override (user-sanctioned deviation
+    # from the width/2 parity, cable-spool mount rings: the stem should
+    # equal the ring bar it hangs from). Only WIDER is modelled: the
+    # 45° shoulder gives up the difference and the WAIST VERTICAL takes
+    # it, so the silhouette height, the swallow and the print story are
+    # IDENTICAL to the default-stem joint — retention shoulder parity is
+    # knowingly forfeited (floored at one nozzle per side).
+    if stem_w is not None:
+        if stem_w < stem_def - 1e-9:
+            raise ValueError(f"stem override {stem_w:.3f} under the computed "
+                             f"optimum {stem_def:.3f} — only a WIDER stem is "
+                             "modelled (narrower starves the tension link)")
+        if hw - stem_w / 2.0 < n - 1e-9:
+            raise ValueError(f"stem override {stem_w:.3f} starves the "
+                             f"retention shoulder under the {n} nozzle — "
+                             f"max for width {width} is {2.0 * (hw - n):.3f}")
     orange = hw - stem / 2.0               # lower diagonal run = shoulder overhang / side
+    waist_pad = (hw - stem_def / 2.0) - orange  # what the shoulder gave up
     green = hw - roof_t / 2.0              # upper diagonal run (set by width)
-    h_min = pv + grow + orange + pv + green   # the width-driven minimal height
+    h_min = (pv + grow + (hw - stem_def / 2.0)
+             + pv + green)                 # the width-driven minimal height
+                                           # (stem-override INVARIANT)
     extra = 0.0
     if height is not None:
         if height < h_min - 1e-9:
@@ -312,9 +332,10 @@ def _octagon_profile(width, nozzle, base_z, clearance, height=None,
                                            # neck = pv; + the tenon's z-relief)
     z_neck = post_h
     z_wb = z_neck + orange                 # lower (orange) diagonal → waist bottom
-    z_wt = (z_wb + pv + extra / 2.0
-            + waist_extra)                 # vertical (grows with height, and
-                                           # with the cavity's z-relief) → waist top
+    z_wt = (z_wb + pv + waist_pad + extra / 2.0
+            + waist_extra)                 # vertical (grows with height, with
+                                           # the stem override's shoulder give-
+                                           # up, and with the cavity's z-relief)
     z_roof = z_wt + green                  # upper (green) diagonal → roof
     pts = [
         (stem / 2.0,  base_z),             # stem right (below the mating plane)
@@ -346,30 +367,35 @@ def _oct_relief(clearance, back_clearance):
 
 
 def _octagon_height(width, nozzle=0.8, clearance=0.1, height=None,
-                    back_clearance=None):
+                    back_clearance=None, stem_w=None):
     """Tenon height above the mating plane (what the mortise host must swallow).
     With `height` given, echoes it back (after validating the width's minimum).
-    A split `back_clearance` adds the tenon's z-relief post growth on top."""
+    A split `back_clearance` adds the tenon's z-relief post growth on top.
+    A `stem_w` override never changes the height (silhouette-invariant)."""
     _, h = _octagon_profile(width, nozzle, 0.0, clearance, height,
-                            post_extra=_oct_relief(clearance, back_clearance))
+                            post_extra=_oct_relief(clearance, back_clearance),
+                            stem_w=stem_w)
     return h
 
 
 def _octagon_tenon(width, length, nozzle=0.8, clearance=0.1, root=1.0,
-                  height=None, back_clearance=None):
+                  height=None, back_clearance=None, stem_w=None):
     """Stop-sign TENON (the nominal shape, where the nozzle floor is enforced): an
     octagon-on-stem prism along +X, base at the z=0 mating plane and extended `root`
     below for fusion. Prints -Z→+Z. `width` = joint size, the stem is width/2 (a
-    computed strength optimum, not a knob), `length` = engagement depth. Pass the
-    SAME width/nozzle/clearance(s) to the mortise so they mate. A split
-    `back_clearance` grows the stem POST by the z-relief (see _oct_relief)."""
+    computed strength optimum) unless `stem_w` overrides it WIDER to match the
+    hosting bar (shoulder gives, waist vertical takes — see _octagon_profile),
+    `length` = engagement depth. Pass the SAME width/nozzle/clearance(s)/stem to
+    the mortise so they mate. A split `back_clearance` grows the stem POST by
+    the z-relief (see _oct_relief)."""
     pts, _ = _octagon_profile(width, nozzle, -abs(root), clearance, height,
-                              post_extra=_oct_relief(clearance, back_clearance))
+                              post_extra=_oct_relief(clearance, back_clearance),
+                              stem_w=stem_w)
     return cq.Workplane("YZ").polyline(pts).close().extrude(length)
 
 
 def _octagon_pocket_profile(width, nozzle, base_z, clearance, height=None,
-                            waist_extra=0.0):
+                            waist_extra=0.0, stem_w=None):
     """POCKET variant of the cavity profile: the octagon's waist walls continued
     STRAIGHT DOWN to the opening face — the lower diagonals + stem neck (the
     Z-retention) removed, so the tenon can enter along Z. The upper tapers and
@@ -378,7 +404,7 @@ def _octagon_pocket_profile(width, nozzle, base_z, clearance, height=None,
     feature, always paired with a retained mortise segment the tenon slides
     into."""
     pts, z_roof = _octagon_profile(width, nozzle, base_z, clearance, height,
-                                   waist_extra=waist_extra)
+                                   waist_extra=waist_extra, stem_w=stem_w)
     hw = width / 2.0
     # pts: [stemR base, stemR neck, waistR bot, waistR top, roofR, roofL,
     #       waistL top, waistL bot, stemL neck, stemL base] — keep waist-top →
@@ -388,7 +414,8 @@ def _octagon_pocket_profile(width, nozzle, base_z, clearance, height=None,
 
 
 def _octagon_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
-                    pocket=False, height=None, back_clearance=None):
+                    pocket=False, height=None, back_clearance=None,
+                    stem_w=None):
     """Cavity CUTTER — the tenon profile DILATED `clearance` per side (mitred → faces
     stay 45°/vertical) and dropped `drop` below the mating plane so it opens through
     the host's face. Extrude PAST the host's open X-face so the tenon slides in; the
@@ -404,7 +431,8 @@ def _octagon_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
     A pocket retains nothing by itself; always pair it with a mortise segment."""
     prof = _octagon_pocket_profile if pocket else _octagon_profile
     pts, _ = prof(width, nozzle, -abs(drop), clearance, height,
-                  waist_extra=_oct_relief(clearance, back_clearance))
+                  waist_extra=_oct_relief(clearance, back_clearance),
+                  stem_w=stem_w)
     return (cq.Workplane("YZ").polyline(pts).close()
             .offset2D(abs(clearance), "intersection")
             .extrude(length))
@@ -594,19 +622,22 @@ def _arc_wire(pts, radius, clearance=0.0):
 
 
 def _octagon_tenon_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
-                      root=1.0, height=None, back_clearance=None):
+                      root=1.0, height=None, back_clearance=None, stem_w=None):
     """ROTATIONAL-install octagon TENON: the octagon section revolved
     `sweep_deg` about the Z axis at `radius`. Sweeps from plan angle 0 toward
     +Y (rotate about Z to place); mating plane z=0, `root` sunk below for
     volumetric fusion. A split `back_clearance` grows the stem POST by the
-    z-relief (see _oct_relief), as the straight variant."""
+    z-relief (see _oct_relief), as the straight variant; `stem_w` overrides
+    the stem WIDER to match the hosting bar (silhouette-invariant)."""
     pts, _ = _octagon_profile(width, nozzle, -abs(root), clearance, height,
-                              post_extra=_oct_relief(clearance, back_clearance))
+                              post_extra=_oct_relief(clearance, back_clearance),
+                              stem_w=stem_w)
     return _arc_wire(pts, radius).revolve(sweep_deg, (0, 0), (0, 1))
 
 
 def _octagon_mortise_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
-                        drop=2.0, height=None, back_clearance=None):
+                        drop=2.0, height=None, back_clearance=None,
+                        stem_w=None):
     """Cavity CUTTER matching _octagon_tenon_arc — dilated `clearance` per side
     (mitred in the radial plane), dropped `drop` below the mating plane, swept
     over the LONGER arc (engagement + angular entry overshoot + seat). Sweep
@@ -614,7 +645,8 @@ def _octagon_mortise_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
     inside the host is the stop. A split `back_clearance` grows the cavity's
     waist vertical by the z-relief (see _oct_relief)."""
     pts, _ = _octagon_profile(width, nozzle, -abs(drop), clearance, height,
-                              waist_extra=_oct_relief(clearance, back_clearance))
+                              waist_extra=_oct_relief(clearance, back_clearance),
+                              stem_w=stem_w)
     return _arc_wire(pts, radius, clearance).revolve(sweep_deg, (0, 0), (0, 1))
 
 
@@ -1209,10 +1241,12 @@ class Joint:
     it is never an input and callers must not branch on it to change
     geometry."""
     def __init__(self, width, length, tenon, mortise, clearance, install, depth,
-                 bounded=False, back_clearance=None, through=False):
+                 bounded=False, back_clearance=None, through=False,
+                 stem=None):
         self.back_clearance = (clearance if back_clearance is None
                                else back_clearance)
         self.through = through
+        self.stem = stem
         if install not in ("+x", "-x", "+z", "-z"):
             raise ValueError(
                 "install must be a SIGNED axis: '+x', '-x', '+z' or '-z' "
@@ -1230,6 +1264,13 @@ class Joint:
         self.width, self.length, self.clearance = width, length, clearance
         self.nozzle = max(tenon.nozzle, mortise.nozzle)   # coarser drives the min feature
         kind = (tenon.facing, mortise.facing)
+        if stem is not None and not (self.install_axis == "x"
+                                     and kind == ("up", "up")
+                                     and not through and not bounded):
+            raise ValueError(
+                "stem= (the host-matching override) is modelled for the "
+                "up+up install-x OCTAGON only — every other profile computes "
+                "its stem from the width")
         if through and (self.install_axis != "x" or kind != ("up", "up")):
             raise NotImplementedError(
                 "through=True (the mortise cavity may exit the host's far "
@@ -1340,9 +1381,12 @@ class Joint:
             # minimum grows the profile's two verticals evenly (max strength
             # in the given bounds) — see _octagon_profile. A split
             # back_clearance adds the z-relief post growth to the swallow.
+            # `stem` (host-matching override, WIDER only) is validated in
+            # the profile; the height is silhouette-invariant under it.
             self.height = _octagon_height(self.width, self.nozzle,
                                           self.clearance, depth,
-                                          back_clearance=self.back_clearance)
+                                          back_clearance=self.back_clearance,
+                                          stem_w=self.stem)
             self.width_min = _octagon_width_min(self.nozzle)
             return
         _, _, f_height, f_wmin = _FAMILY_FUNCS[self.family]
@@ -1390,7 +1434,8 @@ class Joint:
         if self.family == "octagon":
             return _octagon_tenon(self.width, L, self.nozzle,
                                   self.clearance, root, height=self.depth,
-                                  back_clearance=self.back_clearance)
+                                  back_clearance=self.back_clearance,
+                                  stem_w=self.stem)
         return _FAMILY_FUNCS[self.family][0](
             self.width, L, self.nozzle, self.clearance, root)
 
@@ -1416,7 +1461,8 @@ class Joint:
             return _octagon_mortise(self.width, L, self.nozzle,
                                     self.clearance, drop, pocket=True,
                                     height=self.depth,
-                                    back_clearance=self.back_clearance)
+                                    back_clearance=self.back_clearance,
+                                    stem_w=self.stem)
         if self.family == "mushroom":
             return _mushroom_mortise(self.width, L, self.nozzle,
                                      self.clearance, drop,
@@ -1433,7 +1479,8 @@ class Joint:
         if self.family == "octagon":
             return _octagon_mortise(self.width, L, self.nozzle,
                                     self.clearance, drop, height=self.depth,
-                                    back_clearance=self.back_clearance)
+                                    back_clearance=self.back_clearance,
+                                    stem_w=self.stem)
         return _FAMILY_FUNCS[self.family][1](
             self.width, L, self.nozzle, self.clearance, drop)
 
@@ -1464,7 +1511,8 @@ class Joint:
                 "install='x' sites only (octagon, and the THROUGH mushroom)")
         return _octagon_tenon_arc(self.width, radius, sweep_deg, self.nozzle,
                                   self.clearance, root, height=self.depth,
-                                  back_clearance=self.back_clearance)
+                                  back_clearance=self.back_clearance,
+                                  stem_w=self.stem)
 
     def mortise_arc(self, radius, sweep_deg, drop=2.0):
         """Cavity CUTTER matching tenon_arc — sweep it past the host's open
@@ -1482,7 +1530,8 @@ class Joint:
                 "install='x' sites only (octagon, and the THROUGH mushroom)")
         return _octagon_mortise_arc(self.width, radius, sweep_deg, self.nozzle,
                                     self.clearance, drop, height=self.depth,
-                                    back_clearance=self.back_clearance)
+                                    back_clearance=self.back_clearance,
+                                    stem_w=self.stem)
 
     def crossing(self, radius, arm_w, tenon_l=None, seat=None, over=1.0,
                  hand="cw"):
@@ -1502,7 +1551,8 @@ class Joint:
 
 
 def joint(width, length, tenon, mortise, clearance=None, install="+x",
-          depth=None, bounded=False, fit="normal", through=False):
+          depth=None, bounded=False, fit="normal", through=False,
+          stem=None):
     """THE joinery entrypoint. Names name the HALVES (`tenon`, `mortise`) —
     never the shape: describe the SITE and the library builds the optimal
     printable geometry for it. A site is:
@@ -1531,6 +1581,12 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
         no closure bridge is needed — the site takes the flat-top mushroom
         (shorter swallow) instead of the octagon, with `depth` = the
         host's thickness past the mating plane plus an exit margin.
+        `stem=` (up+up install-x octagon only): HOST-MATCHING stem
+        override — WIDER than the computed width/2 optimum, so the stem
+        can equal the bar it hangs from (user-sanctioned deviation,
+        cable-spool mount rings). Silhouette-invariant: the 45° shoulder
+        gives up the difference and the waist vertical takes it; the
+        shoulder is floored at one nozzle per side.
 
     MATERIALS pick the clearances (policy: joint_clearances — fiber-filled
     halves get a doubled depth-face gap; override the base with
@@ -1543,7 +1599,7 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
     here" before committing geometry."""
     c, bc = joint_clearances(tenon, mortise, fit, clearance)
     return Joint(width, length, tenon, mortise, c, install, depth,
-                 bounded, back_clearance=bc, through=through)
+                 bounded, back_clearance=bc, through=through, stem=stem)
 
 
 def joint_box_min(tenon, mortise, install="+x", bounded=False, quality=False,
@@ -1722,6 +1778,45 @@ if __name__ == "__main__":
           f"orange={orange:.3f} < green={green:.3f}{'' if ok else '  <-- FAIL'}")
     if not ok:
         fails.append(f"octagon: stem {stem_w:.3f} or orange>=green")
+    # STEM OVERRIDE (host-matching, user-sanctioned deviation): wider stem,
+    # shoulder gives, waist vertical takes — same height, same swallow
+    SO = 0.6 * WIDTH
+    spts, sroof = _octagon_profile(WIDTH, NZ, 0.0, CLR2, stem_w=SO)
+    _, droof = _octagon_profile(WIDTH, NZ, 0.0, CLR2)
+    sseg = lambda i: math.hypot(spts[i + 1][0] - spts[i][0],
+                                spts[i + 1][1] - spts[i][1])
+    s_stem, s_orange, s_vert = 2 * spts[1][0], sseg(1), sseg(2)
+    ok = (abs(s_stem - SO) < 1e-9 and abs(sroof - droof) < 1e-9
+          and abs(s_vert - (2.0 * NZ + (SO - 0.5 * WIDTH) / 2.0)) < 1e-9
+          and s_orange >= NZ * math.sqrt(2.0) - 1e-9)
+    print(f"  stem override         stem={s_stem:.3f} vert={s_vert:.3f} "
+          f"orange={s_orange:.3f} height {sroof:.3f}=={droof:.3f}"
+          f"{'' if ok else '  <-- FAIL'}")
+    if not ok:
+        fails.append("octagon: stem override geometry")
+    sten = _octagon_tenon(WIDTH, 14, nozzle=NZ, clearance=CLR2, stem_w=SO)
+    shost2 = (cq.Workplane("XY").box(20, WIDTH + 8, Hh + 6,
+                                     centered=(False, True, True))
+              .translate((0, 0, Hh / 2.0))
+              .cut(_octagon_mortise(WIDTH, 22, nozzle=NZ, clearance=CLR2,
+                                    drop=3, stem_w=SO).translate((-1, 0, 0))))
+    for label, d, expect in [("override seated", (0, 0, 0), "=0"),
+                             ("override +z locked", (0, 0, g), ">0"),
+                             ("override +y locked", (0, g, 0), ">0")]:
+        v = vol(shost2.translate(d), sten)
+        ok = (v == 0.0) if expect == "=0" else (v > 0.0)
+        print(f"  {label:<20} {v:>9.3f} mm3 (must be {expect})"
+              f"{'' if ok else '  <-- FAIL'}")
+        if not ok:
+            fails.append(f"octagon: {label} = {v:.3f}")
+    for bad, why in ((0.4 * WIDTH, "narrower"), (2.0 * (WIDTH / 2.0 - NZ) + 0.2,
+                                                 "shoulder-starving")):
+        try:
+            _octagon_profile(WIDTH, NZ, 0.0, CLR2, stem_w=bad)
+            fails.append(f"octagon: {why} stem override did not raise")
+            print(f"  {why} override      did NOT raise  <-- FAIL")
+        except ValueError:
+            print(f"  {why} override      raises (ok)")
     # below the tenon-minimum width must raise
     try:
         _octagon_tenon(wmin - 0.2, 10, nozzle=NZ, clearance=CLR2)
