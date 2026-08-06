@@ -953,8 +953,14 @@ _HORN_PX = FRAME_R_OUT - HORN_GUIDE_L          # the guide's entry mouth
 _HORN_PR = math.hypot(_HORN_PX, HORN_YC)
 _HORN_PA = math.atan2(HORN_YC, _HORN_PX)
 _exit_ys = []
+_R_WIND_MAX = RIM_OD / 2.0 - RATCHET_DEPTH     # the PHYSICAL outer bound
+                                   # (user #895: the cable can wind all the
+                                   # way to the start of the ratchet teeth
+                                   # — not just to design capacity, which
+                                   # is smaller now that the rim is
+                                   # tunnel-floored)
 for _i in range(21):
-    _r = WRAP_R0 + (R_OUT_COIL - WRAP_R0) * _i / 20.0
+    _r = WRAP_R0 + (_R_WIND_MAX - WRAP_R0) * _i / 20.0
     _ta = _HORN_PA + math.acos(_r / _HORN_PR)  # tangency (CW-driving side)
     _tx, _ty = _r * math.cos(_ta), _r * math.sin(_ta)
     _dx, _dy = _HORN_PX - _tx, HORN_YC - _ty
@@ -965,13 +971,11 @@ for _i in range(21):
         _c2 = _tx * _tx + _ty * _ty - _rw * _rw
         _t = (-_b2 + math.sqrt(_b2 * _b2 - 4.0 * _a2 * _c2)) / (2.0 * _a2)
         _exit_ys.append(_ty + _t * _dy)
-# margins: the window is the cable's TAKE-UP band (user #894: the −y
-# edge was too far out — the innermost wind's line pins it, so that
-# side gets the cable's half-width + a whisker, no extra play; the +y
-# side keeps 1.0 of play since the crossings genuinely wander there
-# with the wind state)
-CABLE_EXIT_Y_LO = min(_exit_ys) - (CABLE_D / 2.0 + 0.2)
-CABLE_EXIT_Y_HI = max(_exit_ys) + (CABLE_D / 2.0 + 1.0)
+# margins: the EXACT take-up band (user #895: cut precisely what the
+# cable's surface can occupy — centreline crossings ± the half-width,
+# NO buffer; any buffer gets added explicitly later if wanted)
+CABLE_EXIT_Y_LO = min(_exit_ys) - CABLE_D / 2.0
+CABLE_EXIT_Y_HI = max(_exit_ys) + CABLE_D / 2.0
 assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
     "exit window's low-y edge reaches the +X beam"
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
