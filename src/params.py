@@ -382,9 +382,14 @@ _RIM_PASS = 2.0 * ((DRUM_OR + NOZZLE + SEP_PASS_W)     # tunnel outer face
                    + RATCHET_DEPTH + 2 * NOZZLE)       # + tooth band + tier
 RIM_OD = max(_RIM_COIL, _RIM_PASS)
 
-LID_SEP_GAP = 4.0                  # FIXED separator↔lid gap (user's call) —
-                                   # the spool chamber height: one flat
-                                   # layer of the Ø3.0 cable + 1.0 play
+LID_SEP_GAP = (math.ceil(CABLE_D / NOZZLE - 1e-9)
+               * NOZZLE)           # 4.0 — separator↔lid gap = the spool
+                                   # chamber height: one flat cable layer,
+                                   # the Ø ROUNDED UP to the next bead
+                                   # multiple (user's rule at #885 — was a
+                                   # hardcoded 4.0 that silently lost its
+                                   # slack when the cable grew to 3.85;
+                                   # derived, it tracks the cable)
 LID_T   = 6 * NOZZLE               # 4.8 — user's stated minimum; it can stay
                                    # there because the cavities live in the
                                    # WALL, not the lid
