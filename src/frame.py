@@ -334,18 +334,22 @@ def _ratchet_stop():
 
 
 def _cable_horn():
-    """CABLE HORN pier (user #889, step 1 of the grab station): a SOLID
-    radial prism at the exit window's mid-azimuth — welded into the
-    band below the sill, running out to the fork blocks' radial extent
-    (the part's +x reach), top FLUSH with the window's bottom so the
-    exiting cable rides straight onto it. Prints with the frame from
-    the bed: plain verticals, no overhangs. (Next steps: the curved
-    channel side walls + the sliding lock cap.)"""
-    return (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
-            .center((WALL_IR + _R_OUT) / 2.0, 0.0)
-            .rect(_R_OUT - WALL_IR, HORN_W)
-            .extrude(HORN_Z1 - FLOOR_Z0)
-            .rotate((0, 0, 0), (0, 0, 1), CABLE_EXIT_ANGLE_DEG))
+    """CABLE HORN pier (user #889, corrected #890: STRAIGHT ALONG +X,
+    not radial): a solid prism from the exit window's midway point
+    running x-parallel out to the part's +x edge (the fork blocks'
+    plane), top FLUSH with the window's bottom so the exiting cable
+    rides straight onto it. Its root is trimmed to the band's BORE —
+    nothing intrudes into the coil chamber — welding through the
+    band's solid below-sill ring. Prints with the frame off the bed:
+    plain verticals. (Next: the channel side walls + the lock cap.)"""
+    yc = ((WALL_IR + WALL_OR) / 2.0
+          * math.sin(math.radians(CABLE_EXIT_ANGLE_DEG)))
+    p = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
+         .center((44.0 + _R_OUT) / 2.0, yc)
+         .rect(_R_OUT - 44.0, HORN_W)
+         .extrude(HORN_Z1 - FLOOR_Z0))
+    return p.cut(cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0,
+                     z=FLOOR_Z0 - 0.5))
 
 
 def _cable_guard(s):
