@@ -869,12 +869,9 @@ HORN_GUIDE_L = 16 * NOZZLE         # 12.8 — the walls live ONLY at the
                                    # across the open deck with the wind
                                    # state; the short guide channels it
                                    # just at the grab point)
-HORN_YC = ((WALL_IR + WALL_OR) / 2.0
-           * math.sin(math.radians(45.0)))     # 49.7 — the horn's centreline
-                                   # (frozen at the historical grab line;
-                                   # the EXIT WINDOW derives FROM this now,
-                                   # not the other way round — see the
-                                   # wall-openings block)
+# (HORN_YC — the horn's centreline — is defined AFTER the exit window:
+# the WINDOW derives purely from the cable/coil geometry, and the horn
+# then sits at its midway point — user's design order, #899)
 HORN_FLARE_R = HORN_CH_W / 2.0 + 5 * NOZZLE    # 7.2 — mouth flare radius:
                                    # cylindrical cuts bell both mouths out
                                    # (the exit tangency wanders across the
@@ -975,6 +972,10 @@ CABLE_EXIT_Y_HI = _R_WIND_MAX + CABLE_D / 2.0
 # (the taut-line alternative — cable aimed at the guide mouth rather
 # than parallel — dips ~1.6 further −y at the empty-spool end; add it
 # as explicit buffer later if the print shows the taut path matters)
+HORN_YC = (CABLE_EXIT_Y_LO + CABLE_EXIT_Y_HI) / 2.0   # 58.8 — the horn rides
+                                   # the WINDOW's midway point (the original
+                                   # spec, restored: window first, horn
+                                   # second — user's design order)
 assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
     "exit window's low-y edge reaches the +X beam"
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
