@@ -596,8 +596,11 @@ assert STUB_BOSS_D / 2.0 + STUB_FLARE < (SLEEVE_OD - 2 * SLEEVE_T) / 2.0, \
 SEP_POCKET_R       = DRUM_IR       # 43.35 — pocket out to the drum bore
 SEP_POCKET_FLOOR_T = 3 * NOZZLE    # 2.4 — plate left at the disc bottom (user)
 SEP_BOSS_D = BOT_CONE_CAP_D + 2 * 3 * NOZZLE   # 24.2 — bearing-cavity walls
-assert SEP_BOSS_D / 2.0 < SEP_POCKET_R - 1.0, \
-    "separator bearing boss meets the pocket's outer wall"
+SEP_BOSS_FLARE = 3 * NOZZLE        # 2.4 — 45° skirt tying the boss into the
+                                   # pocket floor (user; narrows upward in
+                                   # the upright print — self-supporting)
+assert SEP_BOSS_D / 2.0 + SEP_BOSS_FLARE < SEP_POCKET_R - 1.0, \
+    "separator bearing boss (flare included) meets the pocket's outer wall"
 assert LOOP_D_TIGHT / 2.0 >= CABLE_BEND_R_MIN - 1e-9, \
     "tight coil's centreline under the cable's bend radius"
 assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
