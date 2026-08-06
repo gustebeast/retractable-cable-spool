@@ -441,18 +441,23 @@ def _mushroom_width_min(nozzle=0.8, clearance=0.1):
 
 
 def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False,
-                      height=None):
+                      height=None, post_extra=0.0):
     """Closed (y, z) points for the TENON (nominal — the mortise is this
     dilated): stem = width/2 (the octagon's strength parity), 45° flares,
     a 2-nozzle vertical waist, flat top at `width`. The stem standoff
     pre-grows by clearance·(√2−1) so the DILATED cavity's neck wall still
     lands on the tier (the octagon's mitred-offset lesson — the reflex
-    stem→flare corner shortens it). pocket=True: the flare/neck retention
-    is dropped — full-width straight walls down to the opening (z-entry).
+    stem→flare corner shortens it). `post_extra` (the split-clearance
+    z-relief, see _oct_relief): the stem standoff grows by it — the whole
+    head rides away from the mating plane, exactly the octagon's
+    mechanics, so the CAVITY's printed neck wall never pays for the
+    relief. pocket=True: the flare/neck retention is dropped — full-width
+    straight walls down to the opening (z-entry).
     `height` (optional, the octagon's rule): total profile height above
-    the mating plane — the 45° flare and tier neck are printability-
-    locked, so ALL extra rides the WAIST verticals. A THROUGH cavity
-    passes height beyond the host's far face and no flat end is printed.
+    the mating plane BEFORE the relief — the 45° flare and tier neck are
+    printability-locked, so ALL extra rides the WAIST verticals; the
+    relief then adds on top. A THROUGH cavity passes height beyond the
+    host's far face and no flat end is printed.
     Returns (points, z_top)."""
     wmin = _mushroom_width_min(nozzle, clearance)
     if width < wmin - 1e-9:
@@ -464,16 +469,20 @@ def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False,
     hw = width / 2.0
     stem = _STEM_FRAC * width
     flare = hw - stem / 2.0                     # 45° run per side
-    z_neck = pv + grow                          # stem standoff (pre-grown)
-    z_wb = z_neck + flare                       # flare top = waist bottom
-    z_top = z_wb + pv                           # short waist, then the flat
+    z_neck0 = pv + grow                         # no-relief stem standoff
+    z_top0 = z_neck0 + flare + pv               # no-relief minimum height
     if height is not None:
-        if height < z_top - 1e-9:
+        if height < z_top0 - 1e-9:
             raise ValueError(f"height {height:.3f} is below this width's "
-                             f"minimum {z_top:.3f} mm (45° flare + tier "
+                             f"minimum {z_top0:.3f} mm (45° flare + tier "
                              "verticals are incompressible) — raise height "
                              "or shrink width")
-        z_top = height                          # extra rides the waist walls
+        base_top = height                       # extra rides the waist walls
+    else:
+        base_top = z_top0
+    z_neck = z_neck0 + post_extra               # relief rides the POST
+    z_wb = z_neck + flare                       # flare top = waist bottom
+    z_top = base_top + post_extra
     if pocket:
         return [(hw, base_z), (hw, z_top), (-hw, z_top), (-hw, base_z)], z_top
     pts = [(stem / 2.0, base_z), (stem / 2.0, z_neck),
@@ -483,18 +492,25 @@ def _mushroom_profile(width, nozzle, base_z, clearance, pocket=False,
     return pts, z_top
 
 
-def _mushroom_height(width, nozzle=0.8, clearance=0.1, height=None):
+def _mushroom_height(width, nozzle=0.8, clearance=0.1, height=None,
+                     back_clearance=None):
     """Tenon height above the mating plane (what the mortise host must
-    swallow, before the cavity's own +clearance dilation). With `height`
-    given, echoes it back (after validating the width's minimum)."""
-    _, h = _mushroom_profile(width, nozzle, 0.0, clearance, height=height)
+    swallow, before the cavity's own top gap). With `height` given,
+    echoes it back (after validating the width's minimum). A split
+    `back_clearance` adds the tenon's z-relief post growth on top (the
+    octagon's rule)."""
+    _, h = _mushroom_profile(width, nozzle, 0.0, clearance, height=height,
+                             post_extra=_oct_relief(clearance,
+                                                    back_clearance))
     return h
 
 
 def _mushroom_tenon(width, length, nozzle=0.8, clearance=0.1, root=1.0,
-                    height=None):
+                    height=None, back_clearance=None):
     pts, _ = _mushroom_profile(width, nozzle, -abs(root), clearance,
-                               height=height)
+                               height=height,
+                               post_extra=_oct_relief(clearance,
+                                                      back_clearance))
     return cq.Workplane("YZ").polyline(pts).close().extrude(length)
 
 
@@ -502,40 +518,48 @@ def _mushroom_cavity_pts(width, nozzle, base_z, clearance, back_clearance,
                          pocket=False, height=None):
     """CAVITY outline with SPLIT clearances (the flat-arc convention the
     projects print-validated): lateral faces dilated `clearance`, the
-    Z-LOADED faces — the 45° flare pair (and a capped top) — backed off
-    by `back_clearance` instead. Fiber-filled filaments grab on the
-    z-sandwich long before the laterals bind (see joint_clearances);
-    the flare shift is VERTICAL by bc, keeping the face at 45°."""
+    Z-LOADED faces — the 45° flare pair (and a capped top) — open by
+    `back_clearance` when seated. Fiber-filled filaments grab on the
+    z-sandwich long before the laterals bind (see joint_clearances).
+    The relief lives on the TENON's grown post (_mushroom_profile
+    post_extra), NOT on this outline's neck: shifting the cavity flares
+    down by bc shaved the printed neck wall below its tier (print-caught
+    at 1.36 on the cable-spool horn cap, the octagon's #875 lesson
+    replayed) — the cavity neck here KEEPS pv + grow and the flare pair
+    sits exactly where the un-relieved tenon's would, so the grown tenon
+    seats with the full bc gap on every z face."""
     c, bc = abs(clearance), abs(back_clearance)
+    relief = _oct_relief(clearance, back_clearance)
     pv = _bead_pref(nozzle)
     grow = c * (math.sqrt(2.0) - 1.0)
     hw = width / 2.0
     stem = _STEM_FRAC * width
     flare = hw - stem / 2.0
-    z_neck = pv + grow
+    z_neck = pv + grow                          # the TIER, kept
     z_wb = z_neck + flare
-    z_top = z_wb + pv
+    z_top0 = z_wb + pv
     if height is not None:
-        if height < z_top - 1e-9:
+        if height < z_top0 - 1e-9:
             raise ValueError(f"height {height:.3f} below the width's minimum "
-                             f"{z_top:.3f} mm")
-        top = height + bc
+                             f"{z_top0:.3f} mm")
+        top = height + relief + bc
     else:
-        top = z_top + bc
+        top = z_top0 + relief + bc
     if pocket:
         return [(hw + c, base_z), (hw + c, top),
                 (-hw - c, top), (-hw - c, base_z)]
-    return [(stem / 2.0 + c, base_z), (stem / 2.0 + c, z_neck - bc),
-            (hw + c, z_wb - bc), (hw + c, top),
-            (-hw - c, top), (-hw - c, z_wb - bc),
-            (-stem / 2.0 - c, z_neck - bc), (-stem / 2.0 - c, base_z)]
+    return [(stem / 2.0 + c, base_z), (stem / 2.0 + c, z_neck),
+            (hw + c, z_wb), (hw + c, top),
+            (-hw - c, top), (-hw - c, z_wb),
+            (-stem / 2.0 - c, z_neck), (-stem / 2.0 - c, base_z)]
 
 
 def _mushroom_mortise(width, length, nozzle=0.8, clearance=0.1, drop=2.0,
                       pocket=False, height=None, back_clearance=None):
     """Cavity CUTTER. Without `back_clearance`: the tenon profile dilated
     uniformly (the original site). With it: split clearances — laterals
-    at `clearance`, z-faces at `back_clearance` (fiber depth relief)."""
+    at `clearance`, z-faces riding the tenon's post relief (fiber depth
+    relief, the octagon's shared mechanics)."""
     if back_clearance is not None and abs(back_clearance - clearance) > 1e-9:
         pts = _mushroom_cavity_pts(width, nozzle, -abs(drop), clearance,
                                    back_clearance, pocket=pocket,
@@ -602,13 +626,16 @@ def _octagon_mortise_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
 
 
 def _mushroom_tenon_arc(width, radius, sweep_deg, nozzle=0.8, clearance=0.1,
-                        root=1.0, height=None):
+                        root=1.0, height=None, back_clearance=None):
     """ROTATIONAL-install mushroom TENON: the flat-top section revolved
     `sweep_deg` about the Z axis at `radius`. Sweeps from plan angle 0
     toward +Y (rotate about Z to place); mating plane z=0, `root` sunk
-    below for volumetric fusion."""
+    below for volumetric fusion. A split `back_clearance` grows the stem
+    POST by the z-relief (see _oct_relief) — as the straight variant."""
     pts, _ = _mushroom_profile(width, nozzle, -abs(root), clearance,
-                               height=height)
+                               height=height,
+                               post_extra=_oct_relief(clearance,
+                                                      back_clearance))
     return _arc_wire(pts, radius).revolve(sweep_deg, (0, 0), (0, 1))
 
 
@@ -1300,9 +1327,12 @@ class Joint:
         self.depth = depth
         if self.family == "mushroom":
             # tenon swallow: the MINIMAL profile — a through cavity runs
-            # deeper (self.depth), but the tenon itself never grows for it
+            # deeper (self.depth), but the tenon itself never grows for it.
+            # A split back_clearance adds the z-relief post growth (the
+            # octagon's shared mechanics — the cavity neck keeps its tier).
             self.height = _mushroom_height(self.width, self.nozzle,
-                                           self.clearance)
+                                           self.clearance,
+                                           back_clearance=self.back_clearance)
             self.width_min = _mushroom_width_min(self.nozzle, self.clearance)
             return
         if self.family == "octagon":
@@ -1348,7 +1378,8 @@ class Joint:
         L = self._len(length)
         if self.family == "mushroom":
             return _mushroom_tenon(self.width, L, self.nozzle,
-                                   self.clearance, root)
+                                   self.clearance, root,
+                                   back_clearance=self.back_clearance)
         if self.family == "hook":
             return _hook_tenon(self.width, L, self.nozzle,
                                self.clearance, root)
@@ -1421,7 +1452,8 @@ class Joint:
                                  "THROUGH mushroom site only")
             return _mushroom_tenon_arc(self.width, radius, sweep_deg,
                                        self.nozzle, self.clearance, root,
-                                       height=height)
+                                       height=height,
+                                       back_clearance=self.back_clearance)
         if height is not None:
             raise ValueError("tenon height override is modelled for the "
                              "mushroom sites only (the octagon sizes "
@@ -2258,6 +2290,45 @@ if __name__ == "__main__":
           f"{'' if ok else '  <-- FAIL'}")
     if not ok:
         fails.append(f"mushroom: mortise neck {mzt:.3f}")
+    # SPLIT clearances (fiber depth relief): the relief rides the TENON's
+    # grown post — the octagon's shared mechanics — so the cavity's
+    # printed neck wall KEEPS the tier (print-caught at 1.36 on the
+    # cable-spool horn cap when the flares shifted down instead), and the
+    # seated z-sandwich opens by exactly bc: lift rides the relief free,
+    # then binds
+    BC5 = 0.3
+    ok = abs(_mushroom_height(MW, NZ5, CLR5, back_clearance=BC5)
+             - (Mh + BC5)) < 1e-9
+    print(f"  split post growth     +{BC5} on height {'ok' if ok else 'FAIL'}")
+    if not ok:
+        fails.append("mushroom: split height growth")
+    smm = _mushroom_mortise(MW, 6, nozzle=NZ5, clearance=CLR5, drop=3,
+                            back_clearance=BC5)
+    szt = max(f.BoundingBox().zmax for f in smm.val().Faces()
+              if abs(abs(f.normalAt().y) - 1.0) < 1e-6
+              and abs(abs(f.Center().y) - msy) < 1e-6)
+    ok = szt >= 2.0 * NZ5 - 1e-6
+    print(f"  split mortise neck    {szt:.3f} (must be >= {2.0 * NZ5})"
+          f"{'' if ok else '  <-- FAIL'}")
+    if not ok:
+        fails.append(f"mushroom: split mortise neck {szt:.3f}")
+    smten = _mushroom_tenon(MW, 14, nozzle=NZ5, clearance=CLR5,
+                            back_clearance=BC5)
+    shost = (cq.Workplane("XY")
+             .box(20, MW + 8, Mh + BC5 + 6, centered=(False, True, True))
+             .translate((0, 0, (Mh + BC5) / 2.0))
+             .cut(_mushroom_mortise(MW, 22, nozzle=NZ5, clearance=CLR5,
+                                    drop=3, back_clearance=BC5)
+                  .translate((-1, 0, 0))))
+    for label, dz, expect in [("split seated", 0.0, "=0"),
+                              ("split lift < bc free", 0.8 * BC5, "=0"),
+                              ("split lift > bc locked", BC5 + 0.2, ">0")]:
+        v = vol(shost.translate((0, 0, dz)), smten)
+        ok = (v == 0.0) if expect == "=0" else (v > 0.0)
+        print(f"  {label:<22} {v:>7.3f} mm3 (must be {expect})"
+              f"{'' if ok else '  <-- FAIL'}")
+        if not ok:
+            fails.append(f"mushroom: {label} = {v:.3f}")
     # NO roof pre-shrink: the tenon top is the FULL width (the flat prints
     # as a supported floor in the down-building mortise host)
     mtop = max(mten.val().Faces(), key=lambda f: f.Center().z)
@@ -2322,8 +2393,10 @@ if __name__ == "__main__":
     dn = PrintSpec(nozzle=0.8, material="PETG-GF", facing="down")
     jm = joint(6.4, 12, tenon=up, mortise=dn)
     ok = (jm.family == "mushroom"
-          and abs(jm.tenon().val().Volume()
-                  - _mushroom_tenon(6.4, 12, 0.8, CGF).val().Volume()) < 1e-3)
+          and abs(jm.tenon().val().Volume()               # GF → the z-relief
+                  - _mushroom_tenon(6.4, 12, 0.8, CGF,    # rides the post
+                                    back_clearance=2 * CGF).val().Volume())
+          < 1e-3)
     print(f"  up+down -> mushroom   clr={jm.clearance} {'ok' if ok else 'FAIL'}")
     if not ok:
         fails.append("joint: up+down mushroom")
@@ -2336,9 +2409,11 @@ if __name__ == "__main__":
                through=True)
     ok = (jt.family == "mushroom"
           and abs(jt.mortise(drop=2.0).val().BoundingBox().zmax
-                  - (9.0 + jt.back_clearance)) < 1e-6   # z-faces run the
-          and abs(jt.tenon().val().BoundingBox().zmax   # DEPTH gap (fiber)
-                  - _mushroom_height(6.4, 0.8, CGF)) < 1e-6)
+                  - (9.0 + 2.0 * jt.back_clearance)) < 1e-6  # relief + top gap
+          and abs(jt.tenon().val().BoundingBox().zmax   # post rides the DEPTH
+                  - _mushroom_height(6.4, 0.8, CGF,     # gap (fiber relief)
+                                     back_clearance=jt.back_clearance))
+          < 1e-6)
     print(f"  up+up through -> mushroom  {'ok' if ok else 'FAIL'}")
     if not ok:
         fails.append("joint: up+up through mushroom")

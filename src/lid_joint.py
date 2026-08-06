@@ -50,9 +50,15 @@ TOPJ_RD = TOPJ_STEM + TOPJ_FLARE + JOINT_CLR     # 4.15 — cavity radial reach
 assert DRUM_T - TOPJ_RD >= 2 * NOZZLE - 1e-9, \
     "drum wall under 1.6 outboard of the lid-joint cavity — grow DRUM_T"
 # the standing tenon must stay recessed below the lid's top face (its
-# cavity is a THROUGH slot — nothing may poke out of the lid)
+# cavity is a THROUGH slot — nothing may poke out of the lid; the
+# relieved post keeps the flat top AT TOPJ_TOP — the tip vertical
+# absorbs the relief)
 assert LID_Z1 - (DRUM_Z1 + TOPJ_TOP) >= NOZZLE - 1e-9, \
     "separator tenon tips proud of the lid's through slots"
+# the tip vertical that remains after the relief still duls the flare's
+# top edge with real layers
+assert TOPJ_TIP - LIDJ_Z_CLR >= 0.4 - 1e-9, \
+    "lid tenon tip face consumed by the z-relief"
 
 _R_REF  = _R0 + (TOPJ_STEM + TOPJ_FLARE) / 2.0     # profile mid radius
 _SEAT_A = math.degrees(LIDJ_SEAT_CLR / _R_REF)
@@ -61,21 +67,31 @@ _OVER_A = math.degrees(LIDJ_ENTRY_OVER / _R_REF)
 
 def _flat_pts(tenon, z_base, r0, top=None):
     """(r, z) profile points at flat-face radius r0. tenon=True →
-    nominal; False → the CAVITY: lateral faces dilated JOINT_CLR,
-    z-sandwich faces LIDJ_Z_CLR (this joint's own, tightened value —
-    user: the lid sat too loose at the 0.30 policy gap). `top`
-    overrides the profile's top (the lid uses it to run its cavities
-    THROUGH the plate)."""
+    nominal PLUS the z-relief: the stem post grows by LIDJ_Z_CLR, so
+    the whole flare rides away from the mating plane (cadkit's shared
+    relief mechanics — the octagon/mushroom lesson, print-caught at
+    1.4 on the lid at #909: paying the relief out of the CAVITY's
+    neck shaved its printed wall under the 1.6 tier). False → the
+    CAVITY: lateral faces dilated JOINT_CLR; its neck wall KEEPS
+    TOPJ_NECK and the flare sits at the un-relieved station, so the
+    grown tenon seats with LIDJ_Z_CLR of gap on every z face (this
+    joint's own, tightened value — user: the lid sat too loose at
+    the 0.30 policy gap). `top` overrides the profile's top (the lid
+    uses it to run its cavities THROUGH the plate)."""
     s, f, zn, tp = TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP
+    c, bc = JOINT_CLR, LIDJ_Z_CLR
     if tenon:
+        # the flat TOP does NOT ride up with the relief: it faces a
+        # through slot (nothing above to gap against), and holding it
+        # at TOPJ_TOP keeps the tenon recessed in the lid — the relief
+        # comes out of the cosmetic TIP vertical (0.8 → 0.6, a z-height)
         zt = TOPJ_TOP if top is None else top
         return [(r0, z_base), (r0 + s, z_base),
-                (r0 + s, zn), (r0 + s + f, zn + f),
+                (r0 + s, zn + bc), (r0 + s + f, zn + f + bc),
                 (r0 + s + f, zt), (r0, zt)]
-    c, bc = JOINT_CLR, LIDJ_Z_CLR
     zt = TOPJ_TOP + bc if top is None else top
     return [(r0 - c, z_base), (r0 + s + c, z_base),
-            (r0 + s + c, zn - bc), (r0 + s + f + c, zn + f - bc),
+            (r0 + s + c, zn), (r0 + s + f + c, zn + f),
             (r0 + s + f + c, zt), (r0 - c, zt)]
 
 
