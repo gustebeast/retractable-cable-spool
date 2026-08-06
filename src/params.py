@@ -55,8 +55,10 @@ SPRING_STRIP_T   = 0.2       # strip steel thickness (v2-measured)
 SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 
 # ── Cable (hardware) ─────────────────────────────────────────────────────────
-CABLE_D        = 3.0         # working-cable Ø (user's measurement)
-CABLE_CAPACITY = 6.0 * 304.8 # 1828.8 — 6 ft of wrapped cable (user's call)
+CABLE_D        = 3.85        # working-cable Ø (user's measurement,
+                             # bumped from 3.0 at #883)
+CABLE_CAPACITY = 1000.0      # 1 m of wrapped cable (user's call at #884;
+                             # was 6 ft / 1828.8)
 
 # ── Axle (rotating arbor) ────────────────────────────────────────────────────
 AXLE_D       = 8.0                   # nominal — the 608's bore
@@ -369,10 +371,16 @@ _B = 2.0 * math.pi * WRAP_R0 - math.pi * COIL_PITCH
 N_WRAPS = ((-_B + math.sqrt(_B ** 2 + 4.0 * math.pi * COIL_PITCH
                             * CABLE_CAPACITY))
            / (2.0 * math.pi * COIL_PITCH))     # ≈ 5.06 turns for 6 ft
-R_OUT_COIL = WRAP_R0 + N_WRAPS * COIL_PITCH    # ≈ 66.9 — outermost wrap centre
-RIM_OD = 2.0 * (R_OUT_COIL + CABLE_D / 2.0 + 1.0)   # ≈ 138.9 — separator/lid
-                                               # OD: coil + 1.0 cover margin
-                                               # (replaces v2's 145.8 carry)
+R_OUT_COIL = WRAP_R0 + N_WRAPS * COIL_PITCH    # outermost wrap centre
+# separator/lid OD: coil + 1.0 cover margin — FLOORED by the connector
+# pass tunnel (at the 1 m capacity the coil-derived rim would shrink
+# below what the Ø13 tunnel needs between the drum wall and the tooth
+# band root; the disk keeps that minimum and simply carries spare coil
+# room — the AXIAL stack still shrinks with capacity, the real win)
+_RIM_COIL = 2.0 * (R_OUT_COIL + CABLE_D / 2.0 + 1.0)
+_RIM_PASS = 2.0 * ((DRUM_OR + NOZZLE + SEP_PASS_W)     # tunnel outer face
+                   + RATCHET_DEPTH + 2 * NOZZLE)       # + tooth band + tier
+RIM_OD = max(_RIM_COIL, _RIM_PASS)
 
 LID_SEP_GAP = 4.0                  # FIXED separator↔lid gap (user's call) —
                                    # the spool chamber height: one flat
@@ -469,8 +477,13 @@ LOOP_D_LOOSE = 2.0 * WALL_IR - CABLE_D - 1.4   # 137.66 — retracted: 0.7/side
 N_MIGRATE    = N_WRAPS             # drum turns over full payout (same spiral)
 LOOP_K_TIGHT = N_MIGRATE * LOOP_D_LOOSE / (LOOP_D_LOOSE - LOOP_D_TIGHT)  # ≈ 6.59
 AXIAL_STACK  = (LOOP_K_TIGHT + 1.0) * COIL_PITCH   # ≈ 23.5 — worst-case stack
-CH_TOP_Z = SEP_Z0 - 3 * NOZZLE     # −46.4 — coil ceiling under the rotating disk
-CH_BOT_Z = CH_TOP_Z - AXIAL_STACK - 1.0        # ≈ −70.9 — chamber floor plane
+CH_TOP_Z = SEP_Z0 - 3 * NOZZLE     # coil ceiling under the rotating disk
+# chamber depth: the worst-case breathing stack — FLOORED by the entry
+# port (at 1 m capacity the stack-derived chamber is too shallow for
+# the Ø13 connector's house gable; the port is hardware-sized, so the
+# chamber keeps its minimum and carries spare coil headroom)
+CH_BOT_Z = CH_TOP_Z - max(AXIAL_STACK + 1.0,
+                          0.5 + 1.5 * SEP_PASS_W + 2 * NOZZLE)
 # SPOKED FLOOR (user's call, replacing BOTH v2's separate coil cup AND
 # the bottom plus: the fused wall band + floor + beams ARE the bottom
 # frame now — and the stack got ~11 shorter for it)
@@ -497,9 +510,11 @@ BEAM_Z1 = FRAME_Z0                 # beams end at the top plus underside
 # CENTRE GUIDE SLEEVE (user's call): the tight coil winds against it, so
 # it can never be yanked under the cable's bend radius, and it keeps the
 # breathing helix round and centred (v2's cup sleeve, reborn on the floor).
-SLEEVE_OD    = 35 * NOZZLE         # 28.0 — the tight coil's ID (LOOP_D_TIGHT
-                                   # − CABLE_D = 29) keeps 0.5/side off it
-                                   # (v2's guard clearance)
+SLEEVE_OD    = 33 * NOZZLE         # 26.4 — the tight coil's ID (LOOP_D_TIGHT
+                                   # − CABLE_D = 28.15 at the Ø3.85 cable)
+                                   # keeps 0.5+/side off it (v2's guard;
+                                   # was 28.0 — slimmed at #883 with the
+                                   # cable bump)
 SLEEVE_T     = 2 * NOZZLE          # 1.6 — tube wall
 SLEEVE_FLARE = 4 * NOZZLE          # 3.2 — 45° root flare (strength, user's
                                    # call; widens toward the bed — support-
@@ -631,10 +646,15 @@ WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
 TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 FRAMEJ_W = 6 * NOZZLE              # 4.8 — joint width (stem 2.4, cadkit)
-FRAMEJ_R = 99 * NOZZLE             # 79.2 — profile centreline radius on the
-                                   # beams: cavity [76.65, 81.75] keeps a
-                                   # 1.6+ outer wall and a 2.9 web to the
-                                   # mount ring's cavities (frame.py asserts)
+FRAMEJ_R = (math.floor(((BEAM_IR + BEAM_SIZE)
+                        - (2 * NOZZLE + FRAMEJ_W / 2.0 + JOINT_CLR))
+                       / NOZZLE) * NOZZLE)
+                                   # profile centreline radius on the beams:
+                                   # the FARTHEST bead radius whose cavity
+                                   # keeps a 1.6 outer wall at the flush arm
+                                   # end (was a pinned 79.2 — DERIVED since
+                                   # #884 so capacity resizes flow through;
+                                   # frame.py still asserts the walls)
 FRAMEJ_TEN_ARC = BEAM_SIZE / 2.0   # 5.2 — engaged tenon arc per site (the
                                    # 50% rule: the joint takes half the
                                    # crossing, matching MOUNT_TEN_ARC)
@@ -687,10 +707,18 @@ MOUNT_MATE_Z = FRAME_RIB - MOUNT_SPINE_T           # 8.0 — the joint's mating
                                                    # plane (spine underside)
 MOUNT_FLOOR_MIN = 2 * NOZZLE       # 1.6 — solid arm required under the
                                    # closed cavities (user's call)
-MOUNT_RING_R  = 89 * NOZZLE        # 71.2 — outer ring centreline (near the
-                                   # arm ends, user's call; radial keep-out
-                                   # to the arc joints asserted in frame.py)
-MOUNT_RING2_R = 44 * NOZZLE        # 35.2 — INNER ring at half the diameter
+MOUNT_RING_R = (math.floor((FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR
+                            - 2 * NOZZLE - MOUNT_TEN_W / 2.0 - JOINT_CLR)
+                           / NOZZLE) * NOZZLE)
+                                   # outer ring centreline: the farthest
+                                   # bead radius whose cavities keep a 1.6
+                                   # web to the frame arc joints (was a
+                                   # pinned 71.2 — DERIVED since #884 so
+                                   # capacity resizes flow through; the
+                                   # keep-out stays asserted in frame.py)
+MOUNT_RING2_R = (round(MOUNT_RING_R / 2.0 / NOZZLE)
+                 * NOZZLE)         # INNER ring at half the diameter, on the
+                                   # bead grid (derived since #884)
                                    # (user: one ring is flimsy) — its own
                                    # arc joinery in all four arms; its
                                    # cavities stop exactly one 1.6 web
