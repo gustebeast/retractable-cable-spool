@@ -436,7 +436,7 @@ def _cable_horn():
     hj = joint(HORNJ_W, HORN_WALL_T, tenon=JOINT_SPEC, mortise=_DOWN,
                install="+x")
     assert (HORN_CH_W + HORN_ROOF_T) - (hj.height + JOINT_BACK_CLR) \
-        >= NOZZLE - 1e-9, "horn cap roof over the rail cavities"
+        >= 2 * NOZZLE - 1e-9, "horn cap roof over the rail cavities"
     x_mid = (xb0 + _R_OUT) / 2.0
     assert (2.0 * HORNJ_X_OFF - (HORNJ_W + 2.0 * hj.clearance)
             >= 2.0 * NOZZLE - 1e-9

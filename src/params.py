@@ -866,8 +866,13 @@ HORN_CH_W  = (math.ceil(1.5 * CABLE_D / NOZZLE - 1e-9)
                                    # rounded UP to the bead grid (user)
 HORN_WALL_T = 3 * NOZZLE           # 2.4 — meat beside the tunnel
 HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier/block width
-HORN_ROOF_T = 3 * NOZZLE           # 2.4 — meat above the tunnel; block
-                                   # height = HORN_CH_W + HORN_ROOF_T
+HORN_ROOF_T = 2.8                  # meat above the tunnel; block height
+                                   # = HORN_CH_W + HORN_ROOF_T. A z-size
+                                   # (layer-quantized, not a bead):
+                                   # sized so the cap keeps ≥ 1.6 over
+                                   # the rail cavities (user #908 — the
+                                   # mushroom swallow is 4.36, and 2.4
+                                   # here left only 1.24)
 HORN_BLOCK_L = 16 * NOZZLE         # 12.8 — tunnel block length along x,
                                    # flush with the +x frame edge: two
                                    # bells + straight middle
