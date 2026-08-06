@@ -211,10 +211,19 @@ def _build_axle_separator():
             z=SEP_Z0 + SEP_POCKET_FLOOR_T)
         .cut(cyl(SEP_BOSS_D,
                  (SEP_Z1 - SEP_Z0) + 2.0, z=SEP_Z0 - 0.5)))
-    # 45° skirt tying the boss into the pocket floor (user)
+    # 45° skirt tying the boss into the pocket floor (user), and the
+    # SAME cone where the pocket's outer wall (the drum bore) meets the
+    # floor — an annular fillet, self-supporting in the upright print
+    _pf = SEP_Z0 + SEP_POCKET_FLOOR_T
     b = b.union(cone_solid(d_bottom=SEP_BOSS_D + 2.0 * SEP_BOSS_FLARE,
-                           d_top=SEP_BOSS_D, h=SEP_BOSS_FLARE,
-                           z_base=SEP_Z0 + SEP_POCKET_FLOOR_T))
+                           d_top=SEP_BOSS_D, h=SEP_BOSS_FLARE, z_base=_pf))
+    b = b.union(
+        cq.Workplane("XZ")
+        .polyline([(SEP_POCKET_R - SEP_BOSS_FLARE, _pf),
+                   (SEP_POCKET_R + 1.0, _pf),
+                   (SEP_POCKET_R + 1.0, _pf + SEP_BOSS_FLARE),
+                   (SEP_POCKET_R, _pf + SEP_BOSS_FLARE)])
+        .close().revolve(360.0, (0, 0), (0, 1)))
     # BOTTOM-BEARING SEAT in the disk's underside (user's design): the
     # bearing sits FLUSH with the disk face; the 45° cone rising off the
     # pocket bore IS the seat (the race's factory OD-edge chamfer
