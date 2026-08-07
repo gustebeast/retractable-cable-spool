@@ -450,14 +450,22 @@ def _cable_horn():
     support = strut.union(foot).union(brace).cut(
         cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
     p = p.union(support)
-    # BOTTOM-CORNER CHAMFERS on A (user #922/#925): remove as much of
-    # the footing's corners as two rules allow — ≥ 1.6 of wall left to
-    # the bell mouths, and a remaining bottom face no narrower than the
-    # strut's POST_OUT_T. A's derived depth (above) makes the two rules
-    # BIND TOGETHER: the bottom face lands exactly on the strut at
-    # every bore size (retiring A's print overhang past B) with the
-    # bell rims intact. The cutters run 4.0 up-and-out past the block's
-    # sides so the 45° keeps cutting through anything higher up.
+    # TUNNEL BLOCK on the footing, flush with the +x edge
+    p = p.union(
+        cq.Workplane("XY").workplane(offset=HORN_Z1)
+        .center((xb0 + _R_OUT) / 2.0, yc)
+        .rect(_R_OUT - xb0, HORN_W)
+        .extrude(HORN_CH_W + HORN_ROOF_T))
+    # BOTTOM-CORNER CHAMFERS (user #922/#925/#926): cut AFTER the block
+    # union so the 45° also shaves the block's side walls wherever it
+    # rises past the deck (order-bug caught by the user at the 10mm
+    # demo: cutting before the block left overhung wall strips at deck
+    # level). Two rules size the cut — ≥ 1.6 of wall left to the bell
+    # mouths, and a remaining bottom face no narrower than the strut's
+    # POST_OUT_T; A's derived depth (above) makes them BIND TOGETHER,
+    # so the bottom face lands exactly on the strut at every bore size
+    # with the bell rims intact. The cutters run 4.0 up-and-out past
+    # the sides so the 45° keeps cutting anything higher up.
     d_wall = ((zc - z_a0) + HORN_W / 2.0
               - math.sqrt(2.0) * (ch2 + HORN_BELL_R + 2.0 * NOZZLE))
     d_ch = min((HORN_W - POST_OUT_T) / 2.0, d_wall)
@@ -470,12 +478,6 @@ def _cable_horn():
                        (yc + s * (hw + 4.0), z_a0),
                        (yc + s * (hw + 4.0), z_a0 + d_ch + 4.0)])
             .close().extrude(HORN_BLOCK_L + 2.0))
-    # TUNNEL BLOCK on the footing, flush with the +x edge
-    p = p.union(
-        cq.Workplane("XY").workplane(offset=HORN_Z1)
-        .center((xb0 + _R_OUT) / 2.0, yc)
-        .rect(_R_OUT - xb0, HORN_W)
-        .extrude(HORN_CH_W + HORN_ROOF_T))
     # cut 1 — the TUNNEL (round; the overhang is accepted, user #903)
     p = p.cut(
         cq.Workplane("YZ").workplane(offset=xb0 - 1.0)
