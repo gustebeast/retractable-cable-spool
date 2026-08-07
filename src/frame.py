@@ -442,6 +442,25 @@ def _cable_horn():
     support = strut.union(foot).union(brace).cut(
         cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
     p = p.union(support)
+    # BOTTOM-CORNER CHAMFERS on A (user #922): remove as much of the
+    # footing's corners as two rules allow — ≥ 1.6 of wall left to the
+    # bell scoops, and a remaining bottom face no narrower than the
+    # strut's POST_OUT_T. The tighter rule wins (currently the width
+    # rule: 2.8 vs the bell wall's 2.95); at 2.8 the bottom face is
+    # exactly the strut's width, so the 45° faces also retire A's
+    # print overhang past B.
+    d_wall = ((zc - z_a0) + HORN_W / 2.0
+              - math.sqrt(2.0) * (ch2 + HORN_BELL_R + 2.0 * NOZZLE))
+    d_ch = min((HORN_W - POST_OUT_T) / 2.0, d_wall)
+    assert d_ch > 0.0, "horn footing chamfer has no room"
+    hw = HORN_W / 2.0
+    for s in (+1.0, -1.0):
+        p = p.cut(
+            cq.Workplane("YZ").workplane(offset=xb0 - 1.0)
+            .polyline([(yc + s * (hw - d_ch), z_a0),
+                       (yc + s * (hw + 1.0), z_a0),
+                       (yc + s * (hw + 1.0), z_a0 + d_ch + 1.0)])
+            .close().extrude(HORN_BLOCK_L + 2.0))
     # TUNNEL BLOCK on the footing, flush with the +x edge
     p = p.union(
         cq.Workplane("XY").workplane(offset=HORN_Z1)
