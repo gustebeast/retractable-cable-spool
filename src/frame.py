@@ -388,7 +388,7 @@ def _cable_horn():
     #       overhangs it ±2.8 in y, accepted for now); its top face
     #       carries A's x-span exactly and its underside corbels at 45°;
     #   C · a FOOT prism on the bed tying B into the band's below-sill
-    #       ring (POST_OUT_T tall and wide, the side-column section).
+    #       ring (BEAM_SIZE tall — user #917 — by POST_OUT_T wide).
     # B and C are bore-trimmed like the old pier root — nothing enters
     # the coil chamber; the band ring is the weld.
     z_a0 = HORN_Z1 - HORN_BELL_R - 2.0 * NOZZLE
@@ -411,7 +411,7 @@ def _cable_horn():
     foot = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)   # C
             .center((x_c0 + (_R_OUT - d_bed + 2.0)) / 2.0, yc)
             .rect((_R_OUT - d_bed + 2.0) - x_c0, POST_OUT_T)
-            .extrude(POST_OUT_T))
+            .extrude(BEAM_SIZE))
     support = strut.union(foot).cut(
         cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
     p = p.union(support)
