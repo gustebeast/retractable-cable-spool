@@ -34,7 +34,7 @@ from cadkit.joinery import joint
 from .axle import ratchet_star_world, knurl_band_world
 from .lever_kinematics import assert_kinematics, R_ROOT
 from .params import (
-    NOZZLE,
+    NOZZLE_D,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
     SEP_Z0, SEP_Z1, BRAKE_H, R_OUT_COIL, CABLE_D,
     LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
@@ -236,8 +236,12 @@ assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
 # print, not hang under the bed plane); the inner air strip (window
 # edge 5.2 → lever face 7) is just as handle-free as the outer one,
 # and the shelf gets a better root: the +X beam's flank
-RWING_Y_TIP = RATCHET_LEV_Y0 - 1.3               # 5.7 — tip, 0.5 off the
-                                                 # window edge / beam flank
+RWING_Y_TIP = (LEVER_Y_IN - LEVER_SIDE_CLR) + 0.5   # 5.7 — tip, 0.5 air off
+                                                 # the window edge / beam
+                                                 # flank (was a spelled −1.3
+                                                 # off the plate face that
+                                                 # silently encoded this —
+                                                 # bead audit #933)
 # inner edge at the separator-rim clearance limit (rim-derived so the
 # wing tracks cable/capacity resizes); 4.0 of chunk outboard of it
 RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y_TIP ** 2) + 0.05
@@ -263,7 +267,7 @@ RSTOP_Y_TIP = RWING_Y_TIP + 1.0                  # 6.7 — overlaps the wing
                                                  # 1.0, clear of the lever
                                                  # face by 0.3
 RSTOP_ZBOT = RSTOP_ZT0 - (RSTOP_Y_TIP - RSTOP_Y_ROOT) - 1.6
-assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE - 1e-9, \
+assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE_D - 1e-9, \
     "A_RSTOP_WIDTH: wing/shelf contact face under 3 beads"
 assert RSTOP_X0 >= RWING_X1 + 0.5 - 1e-9, \
     "A_RSTOP_REST: the resting wing overlaps the shelf in x"
@@ -399,7 +403,7 @@ for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
 # wind chirality is final) presses the tenon into the stop.
 _B_DEG   = math.degrees(math.atan(_PLAN_TAN))     # face plan-bevel
 _U_LEN   = (BRAKE_LEV_Y1 - BRAKE_LEV_Y0) * math.sqrt(1.0 + _PLAN_TAN ** 2)
-_JT_STOP = 2 * NOZZLE
+_JT_STOP = 2 * NOZZLE_D
 _PAD_J   = joint(PAD_FLANGE_H, None, tenon=PAD_SPEC, mortise=PAD_SPEC,
                  install="-z", bounded=True, clearance=PAD_JOINT_CLR)
 
