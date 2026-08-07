@@ -66,7 +66,7 @@ from .params import (
     BRAKE_STOP_TOP_T, GUARD_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_ROOF_T,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
-    HORNJ_W, HORNJ_X_OFF, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
+    HORNJ_W, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
     HORN_WALL_T,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
@@ -338,12 +338,13 @@ def _ratchet_stop():
 
 def _cable_horn():
     """CABLE HORN (user #889, redesigned #903 — the ideal cable model
-    first; SPLIT for printability/install at #905). The PIER: a solid
-    prism from the exit window's midway point running x-parallel out
-    to the part's +x edge, top FLUSH with the window bottom so the
-    exiting cable rides straight onto it; root trimmed to the band's
-    bore, welded through the band's below-sill ring. The TUNNEL BLOCK:
-    a second prism ON the pier at its +x end, shaped by cuts —
+    first; SPLIT for printability/install at #905; the full pier
+    RETIRED for material at #914 — the block rides its own footing on
+    a 45° strut + band foot, see the A/B/C comment in the body; the
+    cable now flies unsupported from the window sill to the tunnel
+    mouth, which its tension is fine with). The TUNNEL BLOCK:
+    a prism at the part's +x edge, top of the old deck line, shaped by
+    cuts —
       · the TUNNEL: a round HORN_CH_W bore along x, its floor tangent
         to the pier top (the cable slides on at deck level, no step);
       · a MOUTH BELL at EACH end: a quarter-round trumpet revolved a
@@ -360,34 +361,61 @@ def _cable_horn():
     upper half is the HORN CAP, its own part (flat top face on the
     bed, trough up — also overhang-free). The cable lays into the
     trough from above and the cap closes the circle.
-    ATTACHMENT (user #906, params HORNJ_*/HORN_STOP_*): cadkit
-    MUSHROOM rails, the cap sliding on − to + y. Two rails at ±
-    HORNJ_X_OFF off the block's x middle: four TENON segments rise
-    off the trough strips' tops (up-printed: 45° flares, no bridge);
-    the cap takes a through-CAVITY per rail (down-printed host: the
-    wide flat end is its first supported layers — no bridge), open at
-    the +y face for entry. The STOP FLANGE on the cap's trailing −y
-    end hangs past the equator and lands on the trough's −y face —
-    it, not the cavity end wall (relieved the joint's back gap deeper),
+    ATTACHMENT (user #906, single rail #915, params HORNJ_*): ONE
+    central cadkit MUSHROOM rail, the cap sliding on − to + y: two
+    TENON segments rise off the trough strips' tops (up-printed: 45°
+    flares, no bridge); the cap takes one through-CAVITY (down-printed
+    host: the wide flat end is its first supported layers — no
+    bridge), open at the +y face for entry, z-sandwich at the lid's
+    print-proven 0.20. The STOP FLANGE on the cap's trailing −y end
+    hangs past the equator and lands on the trough's −y face — it,
+    not the cavity end wall (relieved the joint's back gap deeper),
     defines seating and blocks +y over-travel; it rides in free air
     (the exit window's band) for the whole slide."""
     yc = HORN_YC
     ch2 = HORN_CH_W / 2.0
     zc = HORN_Z1 + ch2             # tunnel axis: bore floor = pier top
     xb0 = _R_OUT - HORN_BLOCK_L
-    # the pier's x-start tracks the band's bore chord at its FAR-y edge
-    # (user #901: a fixed start left the +y side short of the drum
-    # after the horn moved; the bore cut below trims the rest)
-    x0 = math.sqrt(max(WALL_IR ** 2 - (yc + HORN_W / 2.0) ** 2, 0.0)) - 1.0
-    p = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)
-         .center((x0 + _R_OUT) / 2.0, yc)
-         .rect(_R_OUT - x0, HORN_W)
-         .extrude(HORN_Z1 - FLOOR_Z0))
-    # root trimmed to the band's bore (nothing intrudes into the coil
-    # chamber; the below-sill band ring is the weld)
-    p = p.cut(cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0,
-                  z=FLOOR_Z0 - 0.5))
-    # TUNNEL BLOCK on the pier top, flush with the +x edge
+    # MATERIAL-SAVING support (user #914 — the full drum-to-edge pier is
+    # RETIRED). Three prisms:
+    #   A · the exit block's own FOOTING: the block footprint extended
+    #       down to z_a0 — deep enough for all its geometry (the bells
+    #       scoop HORN_BELL_R below the deck) plus 1.6 of material;
+    #   B · a 45° STRUT falling inboard from A's underside to the print
+    #       bed: HORIZONTAL width = HORN_BLOCK_L (user #915 — the whole
+    #       exit section locked to the 10.4 beam budget), y-width
+    #       POST_OUT_T (user: match the lever SIDE supports, 5.6 — A
+    #       overhangs it ±2.8 in y, accepted for now); its top face
+    #       carries A's x-span exactly and its underside corbels at 45°;
+    #   C · a FOOT prism on the bed tying B into the band's below-sill
+    #       ring (POST_OUT_T tall and wide, the side-column section).
+    # B and C are bore-trimmed like the old pier root — nothing enters
+    # the coil chamber; the band ring is the weld.
+    z_a0 = HORN_Z1 - HORN_BELL_R - 2.0 * NOZZLE
+    p = (cq.Workplane("XY").workplane(offset=z_a0)          # A
+         .center((xb0 + _R_OUT) / 2.0, yc)
+         .rect(_R_OUT - xb0, HORN_W)
+         .extrude(HORN_Z1 - z_a0))
+    d_bed = z_a0 - FLOOR_Z0
+    strut = (cq.Workplane("XZ")                             # B
+             .polyline([(_R_OUT, z_a0),
+                        (_R_OUT - d_bed, FLOOR_Z0),
+                        (_R_OUT - d_bed - HORN_BLOCK_L, FLOOR_Z0),
+                        (xb0, z_a0)])
+             .close().extrude(POST_OUT_T / 2.0, both=True)
+             .translate((0.0, yc, 0.0)))
+    # C: from the band's bore chord at the strut's FAR-y edge (the #890
+    # membrane lesson) into B's outboard face
+    x_c0 = math.sqrt(max(WALL_IR ** 2
+                         - (yc + POST_OUT_T / 2.0) ** 2, 0.0)) - 1.0
+    foot = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)   # C
+            .center((x_c0 + (_R_OUT - d_bed + 2.0)) / 2.0, yc)
+            .rect((_R_OUT - d_bed + 2.0) - x_c0, POST_OUT_T)
+            .extrude(POST_OUT_T))
+    support = strut.union(foot).cut(
+        cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
+    p = p.union(support)
+    # TUNNEL BLOCK on the footing, flush with the +x edge
     p = p.union(
         cq.Workplane("XY").workplane(offset=HORN_Z1)
         .center((xb0 + _R_OUT) / 2.0, yc)
@@ -440,23 +468,20 @@ def _cable_horn():
     assert (HORN_CH_W + HORN_ROOF_T) - (hj.height + hj.back_clearance) \
         >= 2 * NOZZLE - 1e-9, "horn cap roof over the rail cavities"
     x_mid = (xb0 + _R_OUT) / 2.0
-    assert (2.0 * HORNJ_X_OFF - (HORNJ_W + 2.0 * hj.clearance)
-            >= 2.0 * NOZZLE - 1e-9
-            and HORNJ_X_OFF + HORNJ_W / 2.0 + hj.clearance
-            <= HORN_BLOCK_L / 2.0 - HORN_BELL_R), \
-        "horn rail windows: quality wall between cavities, clear of bells"
+    assert HORNJ_W / 2.0 + hj.clearance \
+        <= HORN_BLOCK_L / 2.0 - HORN_BELL_R, \
+        "horn rail window reaches the mouth bells"
     m_len = HORN_W + hj.back_clearance + 1.0
-    for dx in (-HORNJ_X_OFF, +HORNJ_X_OFF):
-        for y_top in (yc - HORN_W / 2.0 + HORN_WALL_T,
-                      yc + HORN_W / 2.0):
-            bottom = bottom.union(
-                hj.tenon(root=1.0)
-                .rotate((0, 0, 0), (0, 0, 1), -90.0)
-                .translate((x_mid + dx, y_top, zc)))
-        cap = cap.cut(
-            hj.mortise(drop=1.0, length=m_len)
+    for y_top in (yc - HORN_W / 2.0 + HORN_WALL_T,
+                  yc + HORN_W / 2.0):
+        bottom = bottom.union(
+            hj.tenon(root=1.0)
             .rotate((0, 0, 0), (0, 0, 1), -90.0)
-            .translate((x_mid + dx, yc + HORN_W / 2.0 + 1.0, zc)))
+            .translate((x_mid, y_top, zc)))
+    cap = cap.cut(
+        hj.mortise(drop=1.0, length=m_len)
+        .rotate((0, 0, 0), (0, 0, 1), -90.0)
+        .translate((x_mid, yc + HORN_W / 2.0 + 1.0, zc)))
     return bottom, cap
 
 
