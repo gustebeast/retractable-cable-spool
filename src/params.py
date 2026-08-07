@@ -28,6 +28,11 @@ from cadkit.printing import min_wall, snap
 NOZZLE      = 0.8            # THE print-width unit (0.8 nozzle, v2's call)
 STRUCT_WALL = min_wall(NOZZLE, beads=2)   # 1.6 — the two-bead quality tier
 FIT_CLR     = 0.15           # per-side slip-fit clearance (v2's proven value)
+# THE joint print policy — one spec, one clearance pair, defined at the
+# top so every joint block below can derive from it (moved up at #932;
+# the T-joint history comment lives at the old site)
+JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
+JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
 
 # ── 608 bearing (purchased part — dummy in the assembly, no STEP) ────────────
 BEARING_OD = 22.0            # outer race Ø
@@ -435,7 +440,9 @@ LIDJ_SITES      = 4                # joint sites (90° pitch)
 LIDJ_TEN_SWEEP  = 30.0             # tenon arc sweep (deg) — was 20 (user:
                                    # lid↔sep too loose; the drum rim has
                                    # free arc, so the engagement grew 1.5×)
-LIDJ_SEAT_CLR   = 0.15             # seating clearance at each stop (arc mm)
+LIDJ_SEAT_CLR   = JOINT_CLR        # seating clearance at each stop (arc
+                                   # mm — tracks the material policy,
+                                   # #932)
 LIDJ_ENTRY_OVER = 1.0              # pocket overshoot past the tenon, each
 LIDJ_Z_CLR      = 0.20             # z-sandwich clearance, THIS joint only
                                    # (user: drop the vertical slack a bit —
@@ -564,17 +571,9 @@ assert FLOOR_HUB_R >= SLEEVE_OD / 2.0 + SLEEVE_FLARE - 1e-9, \
 assert ENTRY_PORT_SILL + 1.5 * ENTRY_PORT_W <= CH_TOP_Z - 2 * NOZZLE + 1e-9, \
     "entry port's gable peak reaches the chamber ceiling"
 
-# Diamond PERFORATION of the fused wall band (user's call — material/time
-# saving): squares rotated 45° print support-free at any size, and present
-# only 45° ramp edges to the circumferentially-sliding coil (the knurl
-# lesson inverted). Width is sag-safe: a Ø3 cable at its R15 bend spans a
-# 6.4 hole dipping w²/8R ≈ 0.34 — under the loose coil's 0.7 standoff, so
-# a resting wrap can't hook a far edge. Perforated: the coil-chamber band
-# + the disk band. SOLID: the spool-chamber band (the working coil loads
-# that wall outward), the tenon/bay/entry-port sectors, floor/ceiling
-# margins.
-PERF_D   = 8 * NOZZLE              # 6.4 — diamond size across both diagonals
-PERF_WEB = 3 * NOZZLE              # 2.4 — min web between holes (= wall tier)
+# (The diamond PERFORATION of the band is RETIRED — user #932: it sat
+# behind wall.py's build-speed flag through the whole v3 iteration and
+# never got used. The band ships solid.)
 
 # ── BOTTOM BEARING (user's redesign — REPLACES the 45° rest lip): a second
 # 608 seated in the separator disk's UNDERSIDE (outer race co-rotates with
@@ -640,10 +639,9 @@ assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
 
 # ── Wall clearances (the T-joint POLICY values live on — the wall↔beam T
 # joints themselves are GONE, user's call: the wall is ONE fused band now,
-# no sliding pieces, so JOINT_CLR/JOINT_BACK_CLR remain as the project's
+# no sliding pieces, so JOINT_CLR/JOINT_BACK_CLR — now defined at the top
+# of the file with the print policy — remain as the project's
 # print-proven lateral / depth-face clearances for every other joint) ────────
-JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
-JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
 WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
                                    # into frame_bottom, bed to lid-top
                                    # (user: wall_top, the 4 lock strips and
@@ -660,7 +658,12 @@ WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
 # 50% rule applies here too (user reversed the earlier revert) — so the
 # stop-side half of every beam crossing stays solid; TOP_STOP_WALL is
 # RETIRED (the stop wall is simply the uncut half).
-TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
+TOP_JOINT_SEAT_CLR = JOINT_CLR     # seating clearance at each stop (arc
+                                   # mm) — the crossing's own default,
+                                   # NAMED for the pads-stop-first assert
+                                   # (was a re-typed 0.15 that would have
+                                   # stopped tracking the material policy
+                                   # — #932 altitude review)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 FRAMEJ_W = 6 * NOZZLE              # 4.8 — joint width (stem 2.4, cadkit)
 FRAMEJ_R = snap((BEAM_IR + BEAM_SIZE)
@@ -811,11 +814,13 @@ MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 2.7 — groove width: the
                                    # ONE straight wall top to bottom
                                    # (user #911; the #910 interim 3.1
                                    # step is retired). The shared wall is
-                                   # safe ONLY because frame.py cuts all
-                                   # mount cutters as one PRE-FUSED tool
-                                   # — two separate cutters with float-
-                                   # identical walls sent OCC unify into
-                                   # 15+ min builds (py-spy-caught)
+                                   # safe because the groove ARCS stop at
+                                   # the cavity spans (mount_channel_cuts)
+                                   # — no two cutters ever carve the same
+                                   # wall; float-identical walls from two
+                                   # cutters sent OCC unify into 15+ min
+                                   # builds (py-spy-caught #910; identity
+                                   # asserted in mount.py)
 MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
 MOUNT_GRV_FLAT = NOZZLE                            # 0.8 — dulled V flat
 MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
@@ -865,19 +870,17 @@ GUARD_T         = 2 * NOZZLE       # 1.6 — chevron bar section (user)
 GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
                                    # side's swept envelope (user)
 
-# ── CABLE HORN (user #889) — the grab station off the bottom frame at
-# the exit window. Step 1: a SOLID radial pier at the window's
-# mid-azimuth, welded into the band below the sill, running out to the
-# fork blocks' radial extent, top FLUSH with the window bottom (the
-# exiting cable rides straight onto it). Step 2 REDESIGNED at #903
-# (user: the IDEAL cable model first, printability/installation set
-# aside — the open-top guide walls + roof-cap plan are DROPPED): a
-# second prism sits ON the pier near its +x end, shaped by cuts —
-# a round through-TUNNEL for the cable and a FULL-CIRCLE bell at EACH
+# ── CABLE HORN (user #889) — the grab station at the exit window: a
+# TUNNEL BLOCK at the frame's +x edge, its top half the separate
+# horn_cap part, carried on a strutted FOOTING (A footing / B 45° strut
+# / C bed foot / D sill brace — frame.py's _cable_horn). Through the
+# block: a round TUNNEL for the cable and a FULL-CIRCLE bell at EACH
 # mouth (kept identical for simplicity, user: the +x exit needs the
 # full circle — the free cable pulls in any direction with no edge to
 # bite — and the −x entry just reuses it, though the spool-plane cable
-# never technically needs the top/bottom quadrants there).
+# never technically needs the top/bottom quadrants there). The design
+# history — solid pier #889, ideal-model tunnel #903, equator split
+# #905, pier retired for the strut set #914-#921 — lives in git.
 HORN_CH_W  = snap(1.5 * CABLE_D,
                   NOZZLE, "up")    # 6.4 — tunnel bore Ø: 1.5 × cable Ø,
                                    # rounded UP to the bead grid (user).
@@ -887,15 +890,17 @@ HORN_CH_W  = snap(1.5 * CABLE_D,
                                    # depth + chamfer rules track any
                                    # bore; override retired at #928)
 HORN_WALL_T = 3 * NOZZLE           # 2.4 — meat beside the tunnel
-HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — pier/block width
-HORN_ROOF_T = 4 * NOZZLE           # 3.2 — meat above the tunnel; block
-                                   # height = HORN_CH_W + HORN_ROOF_T.
+HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — block width
+HORN_ROOF_T = 4 * NOZZLE           # 3.2 — meat above the tunnel.
                                    # Sized so the cap keeps ≥ 1.6 over
                                    # the rail cavities (user #908), with
                                    # the cavity swallow at 4.66 now that
                                    # the mushroom's z-relief rides the
                                    # tenon post (#909's tier fix): roof
                                    # left 1.74
+HORN_BLOCK_H = HORN_CH_W + HORN_ROOF_T         # 9.6 — block height above
+                                   # the sill (named at #932 — it was
+                                   # spelled out at four frame.py sites)
 HORN_BLOCK_L = BEAM_SIZE           # 10.4 — tunnel block length along x,
                                    # flush with the +x frame edge (user
                                    # #915: LOCKED to the beam/axle-
@@ -909,22 +914,20 @@ HORN_BELL_R = 2 * NOZZLE           # 1.6 — mouth bell, BOTH ends: a
                                    # the bore, tangent to the face);
                                    # leaves NOZZLE dull flats at the
                                    # block's side faces
-# cap ATTACHMENT (user #906): cadkit MUSHROOM rails (hosts print in
-# opposite z directions), install sliding − to + y. TENONS rise off the
-# trough strips' tops (2.4 engagement each, rooted in the pier meat);
-# the CAP carries one through-CAVITY per rail across its full width —
-# open at the +y face (entry), 0.3 into the stop flange at the far end
-# so the FLANGE, not the cavity wall, defines seating. The flange: extra
-# material on the CAP ONLY (user: don't grow the bottom prism), at its
-# trailing −y end, hanging past the equator to catch the trough's −y
-# face and stop +y over-travel. Backing out −y has no shape retention
-# yet (cadkit doctrine: stop one way, preload the other).
-HORNJ_W      = 5 * NOZZLE          # 4.0 — joint width room (across x):
-                                   # ONE central rail (user #915 — the
-                                   # 10.4 block budget can't host the
-                                   # old two-rail pair); mushroom
-                                   # swallow 4.46 at the 0.20 sandwich,
-                                   # roof left 1.94
+# cap ATTACHMENT (user #906, single rail #915): ONE central cadkit
+# MUSHROOM rail (hosts print in opposite z directions), install sliding
+# − to + y. Two TENON segments rise off the trough strips' tops (2.4
+# engagement each); the CAP carries one through-CAVITY across its full
+# width — open at the +y face (entry), run past the far face so the
+# STOP FLANGE, not the cavity end wall, defines seating. The flange:
+# extra material on the CAP ONLY (user: don't grow the bottom prism),
+# at its trailing −y end, hanging past the equator to catch the
+# trough's −y face and stop +y over-travel. Backing out −y has no
+# shape retention yet (cadkit doctrine: stop one way, preload the
+# other).
+HORNJ_W      = 5 * NOZZLE          # 4.0 — joint width room (across x);
+                                   # mushroom swallow 4.46 at the 0.20
+                                   # sandwich, roof left 1.94
 HORNJ_Z_CLR  = 0.20                # rail z-sandwich clearance, THIS joint
                                    # only (user #912: same treatment as
                                    # the lid's LIDJ_Z_CLR — short joinery

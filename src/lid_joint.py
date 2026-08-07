@@ -10,7 +10,7 @@ only overhang, self-supporting), a TOPJ_TIP vertical tip face, then a
 FLAT top. Every host prints it cleanly: frame_top's +z→−z print opens
 its cavities at the print top (plain floors), and the lid's cavities
 are THROUGH slots. Lateral faces run JOINT_CLR; the z-sandwich pairs
-run JOINT_BACK_CLR (cadkit's fiber-fill policy).
+run LIDJ_Z_CLR (see the #878 tightening below).
 
 SEP ↔ LID (user's design — sides SWAPPED vs the old mount-flip, so
 this joint now mirrors frame_top↔frame_bottom): the SEPARATOR's drum
@@ -55,8 +55,8 @@ assert DRUM_T - TOPJ_RD >= 2 * NOZZLE - 1e-9, \
 # absorbs the relief)
 assert LID_Z1 - (DRUM_Z1 + TOPJ_TOP) >= NOZZLE - 1e-9, \
     "separator tenon tips proud of the lid's through slots"
-# the tip vertical that remains after the relief still duls the flare's
-# top edge with real layers
+# the tip vertical that remains after the relief still dulls the
+# flare's top edge with real layers
 assert TOPJ_TIP - LIDJ_Z_CLR >= 0.4 - 1e-9, \
     "lid tenon tip face consumed by the z-relief"
 
@@ -78,7 +78,7 @@ def _flat_pts(tenon, z_base, r0, top=None):
     joint's own, tightened value — user: the lid sat too loose at
     the 0.30 policy gap). `top` overrides the profile's top (the lid
     uses it to run its cavities THROUGH the plate)."""
-    s, f, zn, tp = TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP
+    s, f, zn = TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK
     c, bc = JOINT_CLR, LIDJ_Z_CLR
     if tenon:
         # the flat TOP does NOT ride up with the relief: it faces a
