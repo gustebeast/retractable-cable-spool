@@ -38,7 +38,7 @@ from cadkit.joinery import PrintSpec, joint
 from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
-from .helpers import cone_solid, cyl, heal
+from .helpers import cone_solid, cyl, drop_stray_shells, heal
 from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
                      RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_SLOPE,
                      RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT,
@@ -66,8 +66,8 @@ from .params import (
     BRAKE_STOP_TOP_T, GUARD_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_ROOF_T,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
-    HORNJ_W, HORNJ_X_OFF, HORN_STOP_T, HORN_STOP_DROP, HORN_WALL_T,
-    JOINT_BACK_CLR,
+    HORNJ_W, HORNJ_X_OFF, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
+    HORN_WALL_T,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -368,7 +368,7 @@ def _cable_horn():
     wide flat end is its first supported layers — no bridge), open at
     the +y face for entry. The STOP FLANGE on the cap's trailing −y
     end hangs past the equator and lands on the trough's −y face —
-    it, not the cavity end wall (relieved JOINT_BACK_CLR deeper),
+    it, not the cavity end wall (relieved the joint's back gap deeper),
     defines seating and blocks +y over-travel; it rides in free air
     (the exit window's band) for the whole slide."""
     yc = HORN_YC
@@ -434,8 +434,10 @@ def _cable_horn():
     # MUSHROOM rails (cadkit): local +X (the slide) → global −y — the
     # CAP travels +y over the fixed tenons; local Y → global +x
     hj = joint(HORNJ_W, HORN_WALL_T, tenon=JOINT_SPEC, mortise=_DOWN,
-               install="+x")
-    assert (HORN_CH_W + HORN_ROOF_T) - (hj.height + JOINT_BACK_CLR) \
+               install="+x", back_clearance=HORNJ_Z_CLR)
+    # (z-sandwich tightened to the lid's print-proven 0.20 — user #912:
+    # short joinery that must stay put)
+    assert (HORN_CH_W + HORN_ROOF_T) - (hj.height + hj.back_clearance) \
         >= 2 * NOZZLE - 1e-9, "horn cap roof over the rail cavities"
     x_mid = (xb0 + _R_OUT) / 2.0
     assert (2.0 * HORNJ_X_OFF - (HORNJ_W + 2.0 * hj.clearance)
@@ -443,7 +445,7 @@ def _cable_horn():
             and HORNJ_X_OFF + HORNJ_W / 2.0 + hj.clearance
             <= HORN_BLOCK_L / 2.0 - HORN_BELL_R), \
         "horn rail windows: quality wall between cavities, clear of bells"
-    m_len = HORN_W + JOINT_BACK_CLR + 1.0
+    m_len = HORN_W + hj.back_clearance + 1.0
     for dx in (-HORNJ_X_OFF, +HORNJ_X_OFF):
         for y_top in (yc - HORN_W / 2.0 + HORN_WALL_T,
                       yc + HORN_W / 2.0):
@@ -686,23 +688,30 @@ def _build_frame_top():
     ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
     # clean=False through the cut loops: cq's default runs OCC's
     # unify-same-domain over the WHOLE part after EVERY cut — profiled
-    # (#910, py-spy) as the frame build's runaway cost once the mount
-    # cavities crossed the v-groove walls. heal(ft) at the end is the
-    # one cleanup pass.
+    # (#910, py-spy) as the frame build's runaway cost. heal(ft) at the
+    # end is the one cleanup pass.
     for a in (0.0, 90.0, 180.0, 270.0):
         ft = ft.cut(_arc_mortise(a), clean=False)
+    # mount channels: the v-grooves and the cavity slots SHARE a wall by
+    # design (2.7 = 2.7 — one straight surface, user #911); the groove
+    # arcs stop short of the cavity spans (mount_channel_cuts) so no two
+    # cutters ever carve float-identical walls — OCC's pathological
+    # unify case (#910, 15+ min builds).
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
         ft = ft.cut(c, clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top
-    ft = ft.cut(cyl(BRG_LIP_ID, (FRAME_Z1 - FRAME_Z0) + 1.0, z=FRAME_Z0 - 0.5))
+    ft = ft.cut(cyl(BRG_LIP_ID, (FRAME_Z1 - FRAME_Z0) + 1.0,
+                    z=FRAME_Z0 - 0.5), clean=False)
     ft = ft.cut(cone_solid(d_bottom=BRG_LIP_ID, d_top=BRG_BORE,
                            h=BRG_SEAT_CONE_Z1 - BRG_SEAT_CONE_Z0,
-                           z_base=BRG_SEAT_CONE_Z0))
+                           z_base=BRG_SEAT_CONE_Z0), clean=False)
     ft = ft.cut(cyl(BRG_BORE, (FRAME_Z1 - BRG_SEAT_CONE_Z1) + 0.5,
-                    z=BRG_SEAT_CONE_Z1))
-    return heal(ft)
+                    z=BRG_SEAT_CONE_Z1), clean=False)
+    # the groove-arc lap bands imprint orphan open-shell debris where
+    # they die inside the cavity slots — rebuild from closed shells
+    return drop_stray_shells(heal(ft))
 
 
 # horn split once (bottom half fuses into frame_bottom; the cap is its

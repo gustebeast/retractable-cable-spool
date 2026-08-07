@@ -198,11 +198,18 @@ def _v_groove_arc(R, a0, a1):
 def mount_channel_cuts():
     """frame_top's cutters — per arm, per ring: the crossing's retained
     arc CAVITY (open past the arm's entry face; its far end wall,
-    seat-shy of the seated tenon, is the stop) plus ONE FULL-CIRCLE
-    V-groove per ring (user's 2.4-square rings are wider than the
-    cavities' 2.3 stem slots, so the groove carries the rings over
-    EVERY crossing — the cavity zones included; it only rebates the
-    neck walls' top 0.9, far above the flare engagement)."""
+    seat-shy of the seated tenon, is the stop) plus V-groove ARCS
+    BETWEEN the cavity spans. The grooves used to run full circles;
+    with the 2.4 stem (user #910) the cavities' neck slots are the
+    SAME 2.7 as the groove — one straight wall, user #911 — and two
+    cutters carving float-identical walls is OCC's pathological unify
+    case (15+ min frame builds, py-spy-caught). So inside a cavity's
+    span the SLOT is the groove (same width, deeper) and the groove
+    arcs live only between spans: each runs from a cavity's STOP-WALL
+    azimuth (an exact flat-on-flat abutment — benign; a 0.3° lap into
+    the slot instead rode the walls coincident and left frame_top's
+    outer shell OPEN) to the next cavity's air-side end (its `over`
+    overshoot is already past the arm's entry face — open air)."""
     cuts = []
     for R in _RINGS:
         c = _CROSS[R]
@@ -210,7 +217,16 @@ def mount_channel_cuts():
             cuts.append(
                 _hang(c.mortise(drop=MOUNT_SPINE_T + 0.5))
                 .rotate((0, 0, 0), (0, 0, 1), site))
-        cuts.append(_v_groove_arc(R, 0.0, 360.0))
+        # hand="ccw" cavity span in each site's frame:
+        # [−arm − over, −arm + ten + seat]
+        a_lo = -c.arm - c.over
+        a_hi = -c.arm + c.ten + c.seat
+        n = len(_SITES)
+        for i, site in enumerate(_SITES):
+            nxt = _SITES[(i + 1) % n]
+            if nxt <= site:
+                nxt += 360.0
+            cuts.append(_v_groove_arc(R, site + a_hi, nxt + a_lo))
     return cuts
 
 
