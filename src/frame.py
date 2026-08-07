@@ -46,7 +46,7 @@ from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
-    NOZZLE,
+    NOZZLE_D,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
@@ -93,7 +93,7 @@ from .params import (
 # twist crosses THIS joint, so frame_top must seat rotating CW (viewed
 # +z) for the parked spring, pull-out and brake drag to all PRESS the
 # stops. Uninstall = frame_top CCW, a torque no sustained load makes. ────────
-_DOWN = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="down")
+_DOWN = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="down")
 FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
                 install="-x")
 FRAME_X = FRAME_J.crossing(FRAMEJ_R, BEAM_SIZE, FRAMEJ_TEN_ARC,
@@ -101,15 +101,15 @@ FRAME_X = FRAME_J.crossing(FRAMEJ_R, BEAM_SIZE, FRAMEJ_TEN_ARC,
                            hand="ccw")
 
 assert ((BEAM_IR + BEAM_SIZE) - (FRAMEJ_R + FRAMEJ_W / 2.0 + JOINT_CLR)
-        >= 2 * NOZZLE - 1e-9), \
+        >= 2 * NOZZLE_D - 1e-9), \
     "arc-joint cavity's outer wall under 1.6 at the flush arm end"
-assert FRAME_RIB - FRAME_J.cavity_depth >= 2 * NOZZLE - 1e-9, \
+assert FRAME_RIB - FRAME_J.cavity_depth >= 2 * NOZZLE_D - 1e-9, \
     "arc-joint cavity ceiling under 1.6 in the top plus"
 # the mount ring's cavities sit radially INBOARD of the arc-joint
 # cavities — the web between them must hold tier
 assert ((FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR)
         - (MOUNT_RING_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
-        >= 2 * NOZZLE - 1e-9), \
+        >= 2 * NOZZLE_D - 1e-9), \
     "mount ring cavities reach the frame arc-joint radius"
 
 _R_OUT   = FRAME_R_OUT
@@ -312,12 +312,12 @@ def _brake_rest_stop():
     # the 45° underside now meets a vertical ONE-BEAD end face instead
     # of running to a knife point (user #886) — which also shortens the
     # −y reach to TOP_T − 0.8 past the contact plane
-    y_tip = y_c - (BRAKE_STOP_TOP_T - NOZZLE)
+    y_tip = y_c - (BRAKE_STOP_TOP_T - NOZZLE_D)
     y_root = -4.5                             # buried into the band strip
     z_top = zc + BRAKE_STOP_TOP_T
     return (cq.Workplane("YZ")
             .polyline([(y_root, zc + (y_c - y_root)),
-                       (y_tip, z_top - NOZZLE),
+                       (y_tip, z_top - NOZZLE_D),
                        (y_tip, z_top), (y_root, z_top)])
             .close().extrude(WALL_OR - WALL_IR)
             .translate((WALL_IR, 0.0, 0.0)))
@@ -645,7 +645,7 @@ def _thrust_boss(y_face, grow, pz, clip_x=None):
     ID and OD ceilings print at 45°. Optionally clipped off the wall
     ring's slide path."""
     boss = contact_ring(BOSS_BORE_ID, (LEVER_PIVOT_X, y_face, pz),
-                        (0.0, grow, 0.0), nozzle=NOZZLE)
+                        (0.0, grow, 0.0), nozzle=NOZZLE_D)
     boss = boss.cut(teardrop_hole(BOSS_BORE_ID, LEVER_SIDE_CLR + 2.0,
                                   (LEVER_PIVOT_X, y_face - grow * 1.0, pz),
                                   (0.0, grow, 0.0)))
@@ -784,7 +784,7 @@ def _anchor_wall():
                       (y0, ANCH_WIN_Z1),         # bay wall up to the flat top
                       (y1, ANCH_WIN_Z1),         # flat top edge
                       (y1, ANCH_TIP_Z),          # +y entry wall down to...
-                      (y1 - NOZZLE, ANCH_TIP_Z)])    # ...the dulled tip flat
+                      (y1 - NOZZLE_D, ANCH_TIP_Z)])    # ...the dulled tip flat
            .close().extrude((ANCH_OR - x_in) + 1.0))   # (close = the 45° floor)
     return w.cut(win)
 

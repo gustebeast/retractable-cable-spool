@@ -35,9 +35,9 @@ import math
 import cadquery as cq
 
 from .params import (
-    NOZZLE, JOINT_CLR,
+    NOZZLE_D, JOINT_CLR,
     TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP,
-    LIDJ_TEN_SWEEP, LIDJ_SEAT_CLR, LIDJ_ENTRY_OVER, LIDJ_Z_CLR,
+    LIDJ_TEN_SWEEP_DEG, LIDJ_SEAT_CLR, LIDJ_ENTRY_OVER, LIDJ_Z_CLR,
     DRUM_IR, DRUM_T, DRUM_Z1, LID_Z0, LID_Z1, LID_T,
 )
 
@@ -47,13 +47,13 @@ TOPJ_RD = TOPJ_STEM + TOPJ_FLARE + JOINT_CLR     # 4.15 — cavity radial reach
                                                  # outboard of the flat face
 
 # every printed wall around the drum-wall tenons keeps the 1.6 tier
-assert DRUM_T - TOPJ_RD >= 2 * NOZZLE - 1e-9, \
+assert DRUM_T - TOPJ_RD >= 2 * NOZZLE_D - 1e-9, \
     "drum wall under 1.6 outboard of the lid-joint cavity — grow DRUM_T"
 # the standing tenon must stay recessed below the lid's top face (its
 # cavity is a THROUGH slot — nothing may poke out of the lid; the
 # relieved post keeps the flat top AT TOPJ_TOP — the tip vertical
 # absorbs the relief)
-assert LID_Z1 - (DRUM_Z1 + TOPJ_TOP) >= NOZZLE - 1e-9, \
+assert LID_Z1 - (DRUM_Z1 + TOPJ_TOP) >= NOZZLE_D - 1e-9, \
     "separator tenon tips proud of the lid's through slots"
 # the tip vertical that remains after the relief still dulls the
 # flare's top edge with real layers
@@ -118,8 +118,8 @@ def _pocket(sweep, top):
 def sep_tenon(site_deg):
     """One STANDING tenon on the separator's drum wall top, seated pose
     centered on site_deg, root sunk 1.0 into the wall."""
-    return (flat_arc_solid(True, LIDJ_TEN_SWEEP, -1.0, _R0)
-            .rotate((0, 0, 0), (0, 0, 1), site_deg - LIDJ_TEN_SWEEP / 2.0)
+    return (flat_arc_solid(True, LIDJ_TEN_SWEEP_DEG, -1.0, _R0)
+            .rotate((0, 0, 0), (0, 0, 1), site_deg - LIDJ_TEN_SWEEP_DEG / 2.0)
             .translate((0.0, 0.0, DRUM_Z1)))
 
 
@@ -130,12 +130,12 @@ def lid_channel_cut(site_deg):
     the lid's frame the tenon travels CCW — that end wall IS the stop),
     plus the entry-pocket envelope CW-adjacent (where the pocket sits
     once seated: it swept CW away from the tenon during seating)."""
-    half = LIDJ_TEN_SWEEP / 2.0
+    half = LIDJ_TEN_SWEEP_DEG / 2.0
     through = LID_T + 2.0
-    cav = (flat_arc_solid(False, LIDJ_TEN_SWEEP + _SEAT_A, -2.0, _R0,
+    cav = (flat_arc_solid(False, LIDJ_TEN_SWEEP_DEG + _SEAT_A, -2.0, _R0,
                           top=through)
            .rotate((0, 0, 0), (0, 0, 1), site_deg - half))
-    pkt = (_pocket(LIDJ_TEN_SWEEP + 2.0 * _OVER_A, through)
+    pkt = (_pocket(LIDJ_TEN_SWEEP_DEG + 2.0 * _OVER_A, through)
            .rotate((0, 0, 0), (0, 0, 1),
-                   site_deg - half - LIDJ_TEN_SWEEP - 2.0 * _OVER_A))
+                   site_deg - half - LIDJ_TEN_SWEEP_DEG - 2.0 * _OVER_A))
     return cav.union(pkt).translate((0.0, 0.0, LID_Z0))

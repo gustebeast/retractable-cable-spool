@@ -36,7 +36,7 @@ import cadquery as cq
 from cadkit.joinery import PrintSpec, joint
 
 from .params import (
-    NOZZLE, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
+    NOZZLE_D, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
     MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
@@ -47,7 +47,7 @@ from .params import (
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
 )
 
-_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
+_SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
 # cadkit's standard for two same-direction hosts: the OCTAGON — its
 # cavity CLOSES on the one-bead roof inside the arm (user's call: the
 # old THROUGH mushroom left the arm's underside open and weak). The GF

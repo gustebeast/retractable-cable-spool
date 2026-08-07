@@ -161,4 +161,5 @@ def main():
     show(str(VIEWER))
 
 
-main()
+if __name__ == "__main__":       # guarded so audits can import src.* freely
+    main()                       # (cadkit.bead_check walks every module)
