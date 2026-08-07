@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+import math
+
 import cadquery as cq
+
+
+def chord_x(r: float, y: float) -> float:
+    """x of a circle's chord at height |y| — where a ring of radius `r`
+    (about the z axis) sits in x at a given y. The guarded form of
+    sqrt(r² − y²): 0 past the rim, so callers can subtract a weld/bury
+    margin without a domain error. One home for the formula the band,
+    horn and lever code all need (the #890 membrane-lesson math)."""
+    return math.sqrt(max(r * r - y * y, 0.0))
 
 
 def cyl(d: float, h: float, z: float = 0.0) -> cq.Workplane:

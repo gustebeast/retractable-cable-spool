@@ -23,13 +23,12 @@ import math
 
 import cadquery as cq
 
-from .helpers import cyl, heal
+from .helpers import chord_x, cyl
 from .params import (
     WALL_IR, WALL_OR, WALL_Z1, WALL_ZB,
-    LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0, FLOOR_Z1,
+    LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0,
     CABLE_EXIT_Y_LO, CABLE_EXIT_Y_HI, CABLE_EXIT_Z0,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
-    PERF_D, PERF_WEB, CH_TOP_Z,
 )
 
 
@@ -59,7 +58,7 @@ def _cable_exit():
     # the cutter's x-start tracks the band's chord at the window's far-y
     # edge (the #890 membrane lesson: a fixed start strands a sliver
     # where the ring pulls inboard of it)
-    x0 = math.sqrt(max(WALL_IR ** 2 - CABLE_EXIT_Y_HI ** 2, 0.0)) - 1.0
+    x0 = chord_x(WALL_IR, CABLE_EXIT_Y_HI) - 1.0
     return (cq.Workplane("XY").workplane(offset=CABLE_EXIT_Z0)
             .polyline([(x0, CABLE_EXIT_Y_LO),
                        (WALL_OR + 3.0, CABLE_EXIT_Y_LO),
@@ -84,58 +83,10 @@ def _entry_port():
 
 
 # (the 45° REST LIP is GONE — user's redesign: the separator now rides a
-# second 608 on the frame floor's stub axle; see frame.py/axle.py.)
-
-# REVERTABLE build-speed flag (user's call): the ~150-diamond cut costs
-# real build/scan time — keep False while iterating, flip TRUE before any
-# real print/export of frame_bottom (the perforation is part of the
-# shipped design).
-WALL_PERF = False
-
-
-def _perforation():
-    """Diamond perforation cutter (see params PERF_*): checker-tiled 45°
-    diamonds through the COIL-CHAMBER band only (user trimmed the disk-
-    band row, #828), solid PERF_WEB margins at floor and ceiling, the
-    entry port's sector skipped. Beam sectors kept solid WIDE — no hole
-    adjacent to a beam (user's screenshot): ±27° at +x, ±12.5° at the
-    other three. Built as ONE compound so the band takes a single cut."""
-    d2 = PERF_D / 2.0
-    r_mid = (WALL_IR + WALL_OR) / 2.0
-    n_az = int((2.0 * math.pi * r_mid) // (PERF_D + PERF_WEB))   # 51
-    pitch = 360.0 / n_az
-    row_dz = (PERF_D + PERF_WEB) / 2.0             # checker stagger
-    proto = (cq.Workplane("YZ")
-             .polyline([(0.0, -d2), (d2, 0.0), (0.0, d2), (-d2, 0.0)])
-             .close().extrude(16.0).translate((60.0, 0.0, 0.0)))
-    keep = [(0.0, 27.0), (90.0, 12.5), (180.0, 12.5), (270.0, 12.5)]
-
-    def rows(z0, z1):
-        out, z = [], z0 + d2
-        while z + d2 <= z1 + 1e-9:
-            out.append(z)
-            z += row_dz
-        return out
-
-    zones = (
-        # coil chamber only — the loose coil rests/slides here: sag-safe
-        # size, entry-port sector solid
-        (FLOOR_Z1 + PERF_WEB, CH_TOP_Z - PERF_WEB,
-         keep + [(ENTRY_PORT_AZ_DEG, 9.0)]),
-    )
-    solids = []
-    for z0, z1, ko in zones:
-        for ri, zc in enumerate(rows(z0, z1)):
-            off = pitch / 2.0 if ri % 2 else 0.0
-            for k in range(n_az):
-                az = (k * pitch + off) % 360.0
-                if any(min(abs(az - a), 360.0 - abs(az - a)) < w
-                       for a, w in ko):
-                    continue
-                solids.append(
-                    proto.translate((0.0, 0.0, zc))
-                    .rotate((0, 0, 0), (0, 0, 1), az).val())
-    return cq.Workplane("XY").add(cq.Compound.makeCompound(solids))
+# second 608 on the frame floor's stub axle; see frame.py/axle.py.
+# The diamond PERFORATION of the band is gone too — user #932: it sat
+# behind a build-speed flag through the whole v3 iteration and never
+# got used; the band ships solid.)
 
 
 def _build_wall_full():
@@ -150,9 +101,11 @@ def _build_wall_full():
     w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0, FLOOR_Z0 - 0.5))
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
-    if WALL_PERF:                  # revertable — see the flag above
-        w = w.cut(_perforation())
-    return heal(w)
+    # NO heal here: the band's only consumer is frame_bottom, which runs
+    # its own boolean chain over it and heals once at the end — a full
+    # ShapeFix/unify pass on the bare band is thrown-away work (#932
+    # efficiency review)
+    return w
 
 
 # ONE band — fused into frame_bottom (wall_top, the lock strips and the
