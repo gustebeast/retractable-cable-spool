@@ -421,11 +421,13 @@ def _cable_horn():
             .center((x_c0 + (_R_OUT - d_bed)) / 2.0, yc)
             .rect((_R_OUT - d_bed) - x_c0, POST_OUT_T)
             .extrude(BEAM_SIZE))
-    # D: top edge at the sill, positioned so it reaches the band's ring
-    # at its NEAR-y edge too (the widest inner chord across its width)
-    x_d0 = (math.sqrt(max(WALL_IR ** 2
-                          - (yc - POST_OUT_T / 2.0) ** 2, 0.0))
-            + 1.0 - HORN_BLOCK_L)
+    # D: top edge at the sill, its outboard END flush with the band's
+    # OUTER face at the far-y corner (user #921: it poked 4.98 past the
+    # sill's edge there — the outer chord shrinks fast at these y's);
+    # the brace welds into the band's outer wall lower down its 45° run
+    x_d0 = (math.sqrt(max(WALL_OR ** 2
+                          - (yc + POST_OUT_T / 2.0) ** 2, 0.0))
+            - HORN_BLOCK_L)
     x_land = xb0 - d_bed          # where B's TOP plane lands on the bed
     sink = 0.5                    # into B — volumetric fusion
     x_m1 = (HORN_Z1 + x_d0 + x_land + sink - FLOOR_Z0) / 2.0
