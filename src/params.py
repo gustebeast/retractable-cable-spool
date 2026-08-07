@@ -644,12 +644,6 @@ assert 2.0 * WALL_IR - LOOP_D_LOOSE - CABLE_D >= 1.2 - 1e-9, \
 # print-proven lateral / depth-face clearances for every other joint) ────────
 JOINT_SPEC = PrintSpec(nozzle=NOZZLE, material="PETG-GF", facing="up")
 JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
-JOINT_STEP = 0.2                   # deliberate wall OFFSET between two
-                                   # cutters that would otherwise share a
-                                   # face: near-coplanar boolean walls are
-                                   # OCC's pathological unify case (#910,
-                                   # mount groove vs cavity slot — 15+ min
-                                   # builds); keep a real step
 WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
                                    # into frame_bottom, bed to lid-top
                                    # (user: wall_top, the 4 lock strips and
@@ -810,17 +804,17 @@ assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
 # vertical walls, then a 45° V closing on a ONE-BEAD flat: 0.8 is the
 # bridging limit, user's call — the earlier +2·clearance flat printed a
 # 1.1 bridge; the V runs 0.15 deeper instead):
-MOUNT_GRV_W    = (MOUNT_SPINE_W + 2 * JOINT_CLR
-                  + 2 * JOINT_STEP)                # 3.1 — groove width: the
-                                   # spine's seat PLUS a real step outside
-                                   # the octagon cavities' neck slot. The
-                                   # slot (stem 2.4 + 2·clr = 2.7) must
-                                   # never share walls with the groove:
-                                   # at #910 the stem override made them
-                                   # the SAME cylinder to within float
-                                   # dust and OCC's unify ground for
-                                   # 15+ min sewing micro-slivers along
-                                   # every site's arcs (py-spy-caught)
+MOUNT_GRV_W    = MOUNT_SPINE_W + 2 * JOINT_CLR     # 2.7 — groove width: the
+                                   # spine's snug seat. With the 2.4 stem
+                                   # this EQUALS the cavities' neck slot —
+                                   # ONE straight wall top to bottom
+                                   # (user #911; the #910 interim 3.1
+                                   # step is retired). The shared wall is
+                                   # safe ONLY because frame.py cuts all
+                                   # mount cutters as one PRE-FUSED tool
+                                   # — two separate cutters with float-
+                                   # identical walls sent OCC unify into
+                                   # 15+ min builds (py-spy-caught)
 MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
 MOUNT_GRV_FLAT = NOZZLE                            # 0.8 — dulled V flat
 MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
@@ -924,6 +918,12 @@ HORNJ_X_OFF  = 2.8                 # TWO rails at ± this off the block's
                                    # between the quality-tier wall floor
                                    # (cavity gap 2.1 ≥ 1.6) and the
                                    # bell-free window (edges 0.25 clear)
+HORNJ_Z_CLR  = 0.20                # rail z-sandwich clearance, THIS joint
+                                   # only (user #912: same treatment as
+                                   # the lid's LIDJ_Z_CLR — short joinery
+                                   # that must STAY PUT runs tighter than
+                                   # the GF 0.30 policy; 0.20 is the
+                                   # lid's print-proven value)
 HORN_STOP_T    = 3 * NOZZLE        # 2.4 — stop flange thickness (y)
 HORN_STOP_DROP = 3 * NOZZLE        # 2.4 — flange catch depth below the
                                    # equator plane (contact patch on the

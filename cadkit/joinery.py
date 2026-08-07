@@ -1552,7 +1552,7 @@ class Joint:
 
 def joint(width, length, tenon, mortise, clearance=None, install="+x",
           depth=None, bounded=False, fit="normal", through=False,
-          stem=None):
+          stem=None, back_clearance=None):
     """THE joinery entrypoint. Names name the HALVES (`tenon`, `mortise`) —
     never the shape: describe the SITE and the library builds the optimal
     printable geometry for it. A site is:
@@ -1590,7 +1590,10 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
 
     MATERIALS pick the clearances (policy: joint_clearances — fiber-filled
     halves get a doubled depth-face gap; override the base with
-    `clearance=`); `fit` picks the tier: "normal" (print-tested slide) or
+    `clearance=`, and the depth-face gap alone with `back_clearance=` —
+    the print-proven move for SHORT joints that must stay put: the
+    cable-spool lid ran its z-sandwich at 0.20 under the GF 0.30 policy
+    after seating too loose); `fit` picks the tier: "normal" (print-tested slide) or
     "loose" (2× everything — for joints that must slide with zero effort,
     e.g. a part serviced often, or one mated blind). Returns a Joint:
     `.tenon(root)` /
@@ -1598,6 +1601,8 @@ def joint(width, length, tenon, mortise, clearance=None, install="+x",
     `.dims`). Use `joint_box_min` for "how much room would a joint need
     here" before committing geometry."""
     c, bc = joint_clearances(tenon, mortise, fit, clearance)
+    if back_clearance is not None:
+        bc = back_clearance
     return Joint(width, length, tenon, mortise, c, install, depth,
                  bounded, back_clearance=bc, through=through, stem=stem)
 
