@@ -23,9 +23,10 @@ import math
 
 from cadkit.joinery import PrintSpec, joint_clearances, joint_box_min
 from cadkit.contact import contact_rib_size
+from cadkit.printing import min_wall, snap
 
 NOZZLE      = 0.8            # THE print-width unit (0.8 nozzle, v2's call)
-STRUCT_WALL = 2 * NOZZLE     # 1.6 — the two-bead quality tier
+STRUCT_WALL = min_wall(NOZZLE, beads=2)   # 1.6 — the two-bead quality tier
 FIT_CLR     = 0.15           # per-side slip-fit clearance (v2's proven value)
 
 # ── 608 bearing (purchased part — dummy in the assembly, no STEP) ────────────
@@ -389,8 +390,7 @@ _RIM_PASS = 2.0 * (math.hypot(DRUM_OR + SEP_PASS_W,
                    + RATCHET_DEPTH + 2 * NOZZLE)
 RIM_OD = max(_RIM_COIL, _RIM_PASS)
 
-LID_SEP_GAP = (math.ceil(CABLE_D / NOZZLE - 1e-9)
-               * NOZZLE)           # 4.0 — separator↔lid gap = the spool
+LID_SEP_GAP = snap(CABLE_D, NOZZLE, "up")   # 4.0 — separator↔lid gap = the spool
                                    # chamber height: one flat cable layer,
                                    # the Ø ROUNDED UP to the next bead
                                    # multiple (user's rule at #885 — was a
@@ -663,9 +663,9 @@ WALL_ZB       = FLOOR_Z0           # wall band bottom — the band is FUSED
 TOP_JOINT_SEAT_CLR = 0.15          # seating clearance at each stop (arc mm)
 TOP_ENTRY_OVER     = 1.0           # channel overshoot past the entry (arc mm)
 FRAMEJ_W = 6 * NOZZLE              # 4.8 — joint width (stem 2.4, cadkit)
-FRAMEJ_R = (math.floor(((BEAM_IR + BEAM_SIZE)
-                        - (2 * NOZZLE + FRAMEJ_W / 2.0 + JOINT_CLR))
-                       / NOZZLE) * NOZZLE)
+FRAMEJ_R = snap((BEAM_IR + BEAM_SIZE)
+                - (2 * NOZZLE + FRAMEJ_W / 2.0 + JOINT_CLR),
+                NOZZLE, "down")
                                    # profile centreline radius on the beams:
                                    # the FARTHEST bead radius whose cavity
                                    # keeps a 1.6 outer wall at the flush arm
@@ -730,17 +730,17 @@ MOUNT_MATE_Z = FRAME_RIB - MOUNT_SPINE_T           # 8.0 — the joint's mating
                                                    # plane (spine underside)
 MOUNT_FLOOR_MIN = 2 * NOZZLE       # 1.6 — solid arm required under the
                                    # closed cavities (user's call)
-MOUNT_RING_R = (math.floor((FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR
-                            - 2 * NOZZLE - MOUNT_TEN_W / 2.0 - JOINT_CLR)
-                           / NOZZLE) * NOZZLE)
+MOUNT_RING_R = snap(FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR
+                    - 2 * NOZZLE - MOUNT_TEN_W / 2.0 - JOINT_CLR,
+                    NOZZLE, "down")
                                    # outer ring centreline: the farthest
                                    # bead radius whose cavities keep a 1.6
                                    # web to the frame arc joints (was a
                                    # pinned 71.2 — DERIVED since #884 so
                                    # capacity resizes flow through; the
                                    # keep-out stays asserted in frame.py)
-MOUNT_RING2_R = (round(MOUNT_RING_R / 2.0 / NOZZLE)
-                 * NOZZLE)         # INNER ring at half the diameter, on the
+MOUNT_RING2_R = snap(MOUNT_RING_R / 2.0,
+                     NOZZLE)       # INNER ring at half the diameter, on the
                                    # bead grid (derived since #884)
                                    # (user: one ring is flimsy) — its own
                                    # arc joinery in all four arms; its
@@ -748,10 +748,11 @@ MOUNT_RING2_R = (round(MOUNT_RING_R / 2.0 / NOZZLE)
                                    # inboard of the +x anchor rib (assert)
 MOUNT_SPINE_W = 3 * NOZZLE         # 2.4 — ring section (user: one square
                                    # 2.4 x 2.4 for rings/spokes/tails; the
-                                   # spine no longer threads the cavities'
-                                   # 2.3 stem slots — the V-grooves run
-                                   # FULL CIRCLE now, carrying the rings
-                                   # over every crossing, cavities incl.)
+                                   # tenon stem matches it via cadkit's
+                                   # stem= override, and the V-grooves run
+                                   # as ARCS between the cavity spans —
+                                   # #913 — the slot IS the groove inside
+                                   # a span)
 MOUNT_TEN_ARC = BEAM_SIZE / 2.0    # 5.2 — engaged tenon ARC LENGTH per site
                                    # (user: trim the joint from the STOP
                                    # side — the tenon anchors at the arm's
@@ -877,8 +878,8 @@ GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
 # full circle — the free cable pulls in any direction with no edge to
 # bite — and the −x entry just reuses it, though the spool-plane cable
 # never technically needs the top/bottom quadrants there).
-HORN_CH_W  = (math.ceil(1.5 * CABLE_D / NOZZLE - 1e-9)
-              * NOZZLE)            # 6.4 — tunnel bore Ø: 1.5 × cable Ø,
+HORN_CH_W  = snap(1.5 * CABLE_D,
+                  NOZZLE, "up")    # 6.4 — tunnel bore Ø: 1.5 × cable Ø,
                                    # rounded UP to the bead grid (user).
                                    # (The #923–#927 fat-cable demo — an
                                    # exit-only OD override at 4.8 then
@@ -939,8 +940,8 @@ HORN_STOP_DROP = 3 * NOZZLE        # 2.4 — flange catch depth below the
 # then sits at its midway point — user's design order, #899)
 # (HORN_Z1 = the window bottom — set beside CABLE_EXIT_Z0 below)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
-POST_OUT_T = (math.ceil(BEAM_SIZE / 2.0 / NOZZLE - 1e-9)
-              * NOZZLE)            # 5.6 — side-column / bent-arm section:
+POST_OUT_T = snap(BEAM_SIZE / 2.0,
+                  NOZZLE, "up")    # 5.6 — side-column / bent-arm section:
                                    # the half-beam ROUNDED UP to the bead
                                    # grid (user #914: BEAM_SIZE/2 = 5.2
                                    # was a half-bead width)
