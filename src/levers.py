@@ -236,12 +236,13 @@ assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
 # print, not hang under the bed plane); the inner air strip (window
 # edge 5.2 → lever face 7) is just as handle-free as the outer one,
 # and the shelf gets a better root: the +X beam's flank
-RWING_Y_TIP = (LEVER_Y_IN - LEVER_SIDE_CLR) + 0.5   # 5.7 — tip, 0.5 air off
-                                                 # the window edge / beam
-                                                 # flank (was a spelled −1.3
-                                                 # off the plate face that
-                                                 # silently encoded this —
-                                                 # bead audit #933)
+RWING_Y_TIP = LEVER_Y_IN - LEVER_SIDE_CLR        # 5.2 — tip FLUSH on the
+                                                 # window edge / beam flank
+                                                 # (user #934: the 0.5 air
+                                                 # gap dropped — the wing
+                                                 # runs all the way to the
+                                                 # sidewall; sliding face
+                                                 # contact, zero volume)
 # inner edge at the separator-rim clearance limit (rim-derived so the
 # wing tracks cable/capacity resizes); 4.0 of chunk outboard of it
 RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y_TIP ** 2) + 0.05
