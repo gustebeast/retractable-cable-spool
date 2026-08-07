@@ -877,10 +877,10 @@ GUARD_LEVER_CLR = 3 * NOZZLE       # 2.4 — peak clearance under the brake
 # full circle — the free cable pulls in any direction with no edge to
 # bite — and the −x entry just reuses it, though the spool-plane cable
 # never technically needs the top/bottom quadrants there).
-HORN_CABLE_D = 4.8                 # REVERT TO CABLE_D — exit-only cable
-                                   # OD override (user #923: demo that
-                                   # the footing-chamfer constraint pair
-                                   # handles a fatter cable — at 4.8 the
+HORN_CABLE_D = 10.0                # REVERT TO CABLE_D — exit-only cable
+                                   # OD override (user #923/#924: demo
+                                   # that the footing-chamfer constraint
+                                   # pair handles a fatter cable — the
                                    # BELL-WALL rule fires instead of the
                                    # width rule)
 HORN_CH_W  = (math.ceil(1.5 * HORN_CABLE_D / NOZZLE - 1e-9)
