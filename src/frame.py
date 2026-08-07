@@ -397,7 +397,15 @@ def _cable_horn():
     #       rule), triangulating B's other diagonal.
     # B and C are bore-trimmed like the old pier root — nothing enters
     # the coil chamber; the band ring is the weld.
-    z_a0 = HORN_Z1 - HORN_BELL_R - 2.0 * NOZZLE
+    # A's depth (user #925): deep enough for the bell scoops + 1.6 AND
+    # for the 45° corner chamfers to narrow the bottom to the strut's
+    # width while keeping the full 1.6 wall at the bell mouths — the
+    # second term grows with the bore, so a fat exit cable deepens the
+    # footing instead of leaving overhung ledges past the strut
+    dep = max(HORN_BELL_R + 2.0 * NOZZLE,
+              math.sqrt(2.0) * (ch2 + HORN_BELL_R + 2.0 * NOZZLE)
+              - POST_OUT_T / 2.0 - ch2)
+    z_a0 = HORN_Z1 - dep
     p = (cq.Workplane("XY").workplane(offset=z_a0)          # A
          .center((xb0 + _R_OUT) / 2.0, yc)
          .rect(_R_OUT - xb0, HORN_W)
@@ -442,13 +450,14 @@ def _cable_horn():
     support = strut.union(foot).union(brace).cut(
         cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
     p = p.union(support)
-    # BOTTOM-CORNER CHAMFERS on A (user #922): remove as much of the
-    # footing's corners as two rules allow — ≥ 1.6 of wall left to the
-    # bell scoops, and a remaining bottom face no narrower than the
-    # strut's POST_OUT_T. The tighter rule wins (currently the width
-    # rule: 2.8 vs the bell wall's 2.95); at 2.8 the bottom face is
-    # exactly the strut's width, so the 45° faces also retire A's
-    # print overhang past B.
+    # BOTTOM-CORNER CHAMFERS on A (user #922/#925): remove as much of
+    # the footing's corners as two rules allow — ≥ 1.6 of wall left to
+    # the bell mouths, and a remaining bottom face no narrower than the
+    # strut's POST_OUT_T. A's derived depth (above) makes the two rules
+    # BIND TOGETHER: the bottom face lands exactly on the strut at
+    # every bore size (retiring A's print overhang past B) with the
+    # bell rims intact. The cutters run 4.0 up-and-out past the block's
+    # sides so the 45° keeps cutting through anything higher up.
     d_wall = ((zc - z_a0) + HORN_W / 2.0
               - math.sqrt(2.0) * (ch2 + HORN_BELL_R + 2.0 * NOZZLE))
     d_ch = min((HORN_W - POST_OUT_T) / 2.0, d_wall)
@@ -458,8 +467,8 @@ def _cable_horn():
         p = p.cut(
             cq.Workplane("YZ").workplane(offset=xb0 - 1.0)
             .polyline([(yc + s * (hw - d_ch), z_a0),
-                       (yc + s * (hw + 1.0), z_a0),
-                       (yc + s * (hw + 1.0), z_a0 + d_ch + 1.0)])
+                       (yc + s * (hw + 4.0), z_a0),
+                       (yc + s * (hw + 4.0), z_a0 + d_ch + 4.0)])
             .close().extrude(HORN_BLOCK_L + 2.0))
     # TUNNEL BLOCK on the footing, flush with the +x edge
     p = p.union(
