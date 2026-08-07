@@ -890,8 +890,12 @@ HORN_ROOF_T = 4 * NOZZLE           # 3.2 — meat above the tunnel; block
                                    # the mushroom's z-relief rides the
                                    # tenon post (#909's tier fix): roof
                                    # left 1.74
-HORN_BLOCK_L = 16 * NOZZLE         # 12.8 — tunnel block length along x,
-                                   # flush with the +x frame edge: two
+HORN_BLOCK_L = BEAM_SIZE           # 10.4 — tunnel block length along x,
+                                   # flush with the +x frame edge (user
+                                   # #915: LOCKED to the beam/axle-
+                                   # support size so the 45° strut's top
+                                   # face carries it exactly — no
+                                   # overhang, no exposed ledge): two
                                    # bells + straight middle
 HORN_BELL_R = 2 * NOZZLE           # 1.6 — mouth bell, BOTH ends: a
                                    # quarter-round trumpet revolved
@@ -909,15 +913,12 @@ HORN_BELL_R = 2 * NOZZLE           # 1.6 — mouth bell, BOTH ends: a
 # trailing −y end, hanging past the equator to catch the trough's −y
 # face and stop +y over-travel. Backing out −y has no shape retention
 # yet (cadkit doctrine: stop one way, preload the other).
-HORNJ_W      = 4 * NOZZLE          # 3.2 — joint width room (across x);
-                                   # mushroom height 4.06, cap swallow
-                                   # 4.36 — roof left 1.24
-HORNJ_X_OFF  = 2.8                 # TWO rails at ± this off the block's
-                                   # x middle (pitch-locks the cap). A
-                                   # POSITION, not a bead — the one slot
-                                   # between the quality-tier wall floor
-                                   # (cavity gap 2.1 ≥ 1.6) and the
-                                   # bell-free window (edges 0.25 clear)
+HORNJ_W      = 5 * NOZZLE          # 4.0 — joint width room (across x):
+                                   # ONE central rail (user #915 — the
+                                   # 10.4 block budget can't host the
+                                   # old two-rail pair); mushroom
+                                   # swallow 4.46 at the 0.20 sandwich,
+                                   # roof left 1.94
 HORNJ_Z_CLR  = 0.20                # rail z-sandwich clearance, THIS joint
                                    # only (user #912: same treatment as
                                    # the lid's LIDJ_Z_CLR — short joinery
@@ -933,7 +934,11 @@ HORN_STOP_DROP = 3 * NOZZLE        # 2.4 — flange catch depth below the
 # then sits at its midway point — user's design order, #899)
 # (HORN_Z1 = the window bottom — set beside CABLE_EXIT_Z0 below)
 BRAKE_STOP_TOP_T    = 3 * NOZZLE   # 2.4 — meat above the contact plane
-POST_OUT_T     = BEAM_SIZE / 2.0   # 5.2 — side-column / bent-arm section
+POST_OUT_T = (math.ceil(BEAM_SIZE / 2.0 / NOZZLE - 1e-9)
+              * NOZZLE)            # 5.6 — side-column / bent-arm section:
+                                   # the half-beam ROUNDED UP to the bead
+                                   # grid (user #914: BEAM_SIZE/2 = 5.2
+                                   # was a half-bead width)
 BOSS_RING_W    = contact_rib_size(NOZZLE)      # 1.6 — thrust ring width & proud
 BOSS_BORE_ID   = PIN_SQ_S * math.sqrt(2.0) + 0.4   # 6.62 — clears the square's
                                                    # rotating envelope
