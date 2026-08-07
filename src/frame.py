@@ -405,12 +405,15 @@ def _cable_horn():
              .close().extrude(POST_OUT_T / 2.0, both=True)
              .translate((0.0, yc, 0.0)))
     # C: from the band's bore chord at the strut's FAR-y edge (the #890
-    # membrane lesson) into B's outboard face
+    # membrane lesson) to EXACTLY where B's 45° underside lands on the
+    # bed (user #918: running past it left a little vertical end face
+    # sticking out from under the slope; flush, the end face is buried
+    # in the strut's foot wedge)
     x_c0 = math.sqrt(max(WALL_IR ** 2
                          - (yc + POST_OUT_T / 2.0) ** 2, 0.0)) - 1.0
     foot = (cq.Workplane("XY").workplane(offset=FLOOR_Z0)   # C
-            .center((x_c0 + (_R_OUT - d_bed + 2.0)) / 2.0, yc)
-            .rect((_R_OUT - d_bed + 2.0) - x_c0, POST_OUT_T)
+            .center((x_c0 + (_R_OUT - d_bed)) / 2.0, yc)
+            .rect((_R_OUT - d_bed) - x_c0, POST_OUT_T)
             .extrude(BEAM_SIZE))
     support = strut.union(foot).cut(
         cyl(2.0 * WALL_IR, (HORN_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5))
