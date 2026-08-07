@@ -390,11 +390,11 @@ def _cable_horn():
     #   C · a FOOT prism on the bed tying B into the band's below-sill
     #       ring (BEAM_SIZE tall — user #917 — by POST_OUT_T wide);
     #   D · a 45° BRACE (user #919: cable tension left on the block
-    #       must not bend it backwards): POST_OUT_T × POST_OUT_T-wide
-    #       bar from the exit window's sill in the band, falling
-    #       down-OUTBOARD at 45° into B's top face (sunk 0.5 — the
-    #       cadkit volumetric-fusion rule), triangulating B's other
-    #       diagonal.
+    #       must not bend it backwards): HORN_BLOCK_L horizontal width
+    #       (matching B, user #920) × POST_OUT_T in y, from the exit
+    #       window's sill in the band, falling down-OUTBOARD at 45°
+    #       into B's top face (sunk 0.5 — the cadkit volumetric-fusion
+    #       rule), triangulating B's other diagonal.
     # B and C are bore-trimmed like the old pier root — nothing enters
     # the coil chamber; the band ring is the weld.
     z_a0 = HORN_Z1 - HORN_BELL_R - 2.0 * NOZZLE
@@ -425,15 +425,15 @@ def _cable_horn():
     # at its NEAR-y edge too (the widest inner chord across its width)
     x_d0 = (math.sqrt(max(WALL_IR ** 2
                           - (yc - POST_OUT_T / 2.0) ** 2, 0.0))
-            + 1.0 - POST_OUT_T)
+            + 1.0 - HORN_BLOCK_L)
     x_land = xb0 - d_bed          # where B's TOP plane lands on the bed
     sink = 0.5                    # into B — volumetric fusion
     x_m1 = (HORN_Z1 + x_d0 + x_land + sink - FLOOR_Z0) / 2.0
-    x_m2 = x_m1 + POST_OUT_T / 2.0
+    x_m2 = x_m1 + HORN_BLOCK_L / 2.0
     brace = (cq.Workplane("XZ")                             # D
              .polyline([(x_d0, HORN_Z1),
-                        (x_d0 + POST_OUT_T, HORN_Z1),
-                        (x_m2, HORN_Z1 - (x_m2 - x_d0 - POST_OUT_T)),
+                        (x_d0 + HORN_BLOCK_L, HORN_Z1),
+                        (x_m2, HORN_Z1 - (x_m2 - x_d0 - HORN_BLOCK_L)),
                         (x_m1, HORN_Z1 - (x_m1 - x_d0))])
              .close().extrude(POST_OUT_T / 2.0, both=True)
              .translate((0.0, yc, 0.0)))
