@@ -12,7 +12,7 @@ import pathlib
 
 import cadquery as cq
 
-from cadkit.step_export import export_step
+from cadkit.step_export import export_step, print_pose
 from cadkit.cq_colors import color
 from cadkit.freecad import show
 
@@ -75,42 +75,25 @@ COLOR = {
     "build_num":   "#F0A878",  # salmon — floating build number
 }
 
-# ── PRINT POSE for the per-part STEP exports (user #935): each file
-# lands in Bambu already print-oriented — rotated onto its documented
-# bed face, dropped to z=0, centred on xy. EXPORT-ONLY: the assembly /
-# viewer keeps every part in its as-modeled place (the parts are added
-# to the Assembly below untransformed).
-def _flip_z(p):                    # +z→−z prints: the top face is the bed
-    return p.rotate((0, 0, 0), (1, 0, 0), 180.0)
-
-
-def _outer_y_down(sign):
-    """Levers + pad print standing on their OUTER y face (#886 / v2's
-    pad recipe): rotate that face down onto the bed."""
-    def rot(p):
-        return p.rotate((0, 0, 0), (1, 0, 0), -90.0 * sign)
-    return rot
-
-
+# ── PRINT POSE for the per-part STEP exports (user #935, cadkit's
+# print_pose since #937): each file lands in Bambu already
+# print-oriented — rotated onto its documented bed face, dropped to
+# z=0, centred on xy. EXPORT-ONLY: the assembly / viewer keeps every
+# part as-modeled. This table is the project's print-orientation
+# RECORD — when a part's print direction changes, its entry changes
+# in the same commit (cadkit AGENTS.md convention).
 PRINT_ROT = {
-    "frame_top":     _flip_z,            # prints +z→−z
-    "mount_ring":    _flip_z,            # octagon rule: frame_top's direction
-    "horn_cap":      _flip_z,            # prints +z→−z (user #905)
-    "axle_top":      _flip_z,            # bed = the shaft top (flipped print)
-    "lid":           _flip_z,            # prints +z→−z (through slots)
-    "ratchet_lever": _outer_y_down(+1),  # bed = its +y OUTER face
-    "brake_lever":   _outer_y_down(-1),  # bed = its −y OUTER face
-    "brake_pad_tpu": _outer_y_down(-1),  # stands on its −y outer end (v2)
-    # frame_bottom / axle_separator / lever_pin_tpu model as printed
+    "frame_top":     "flip",             # prints +z→−z
+    "mount_ring":    "flip",             # octagon rule: frame_top's direction
+    "horn_cap":      "flip",             # prints +z→−z (user #905)
+    "axle_top":      "flip",             # bed = the shaft top (flipped print)
+    "lid":           "flip",             # prints +z→−z (through slots)
+    "ratchet_lever": ((1, 0, 0), -90),   # bed = its +y OUTER face (#886)
+    "brake_lever":   ((1, 0, 0), 90),    # bed = its −y OUTER face
+    "brake_pad_tpu": ((1, 0, 0), 90),    # stands on its −y outer end (v2)
+    # frame_bottom / axle_separator / lever_pin_tpu / screw_spacer
+    # model as printed (drop-and-centre only)
 }
-
-
-def _print_pose(name, part):
-    part = PRINT_ROT.get(name, lambda p: p)(part)
-    bb = part.val().BoundingBox()
-    return part.translate((-(bb.xmin + bb.xmax) / 2.0,
-                           -(bb.ymin + bb.ymax) / 2.0, -bb.zmin))
-
 
 # One STEP per PRINTED part (dummies are assembly-only, cadkit rule).
 PARTS = [
@@ -154,7 +137,7 @@ def _build_number_model(n):
 
 def main():
     for _name, part, fname in PARTS:
-        export_step(_print_pose(_name, part), str(OUT / fname))
+        export_step(print_pose(part, PRINT_ROT.get(_name)), str(OUT / fname))
 
     build_n = _bump_build_counter()
 
