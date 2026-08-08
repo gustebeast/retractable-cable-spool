@@ -714,6 +714,22 @@ MOUNT_PLATE_T = 5 * NOZZLE_D         # 4.0 — pad/spine thickness: the MINIMUM
 assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
     "mount plate too thin to countersink the wood screw flush"
 
+# SCREW SPACER (user #936: the validated screws out-reach the desk —
+# the tips would break through the far side): a per-screw puck stacked
+# between the head and the pad's countersink, stealing SPACER_H of
+# drilled depth. Pad footprint (MOUNT_PAD_W sq); a truncated MALE cone
+# (the pocket's own cone, FIT_CLR radial shrink) centres it in the
+# pad's existing female cone, and its underside carries the IDENTICAL
+# female countersink + shaft bore (one cutter, mount.py), so the head
+# seats exactly as before — SPACER_H lower. Clamp load runs flat face
+# on flat face (spacer top ↔ pad underside); the cones only centre.
+SPACER_H        = 7 * NOZZLE_D     # 5.6 — drilled-length reduction (user)
+SPACER_CONE_ENG = 2 * NOZZLE_D     # 1.6 — male-cone engagement height
+assert SPACER_H - WOOD_SCREW_HEAD_H >= 2 * NOZZLE_D - 1e-9, \
+    "spacer web between its countersink tip and its top face under the tier"
+assert SPACER_CONE_ENG <= WOOD_SCREW_HEAD_H - 1e-9, \
+    "spacer male cone bottoms out in the pad's countersink"
+
 MOUNT_TEN_W  = 5 * NOZZLE_D          # 4.0 — joint width: the largest whose
                                    # OCTAGON swallow fits above the 1.6
                                    # arm floor (asserted in mount.py); its

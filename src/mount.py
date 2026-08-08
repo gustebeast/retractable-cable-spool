@@ -45,6 +45,7 @@ from .params import (
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
+    SPACER_H, SPACER_CONE_ENG, FIT_CLR,
 )
 
 _SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
@@ -108,21 +109,26 @@ _PAD_XY = tuple(
     for az in MOUNT_PAD_AZ)
 
 
-def _screw_cut(x, y):
-    """One wood-screw cutter (world pose): Ø4 shaft through, countersink
-    cone opening at the pad's UNDERSIDE — the head sits flush there,
-    driven up into the wood. v2's validated geometry, re-posed."""
-    z0 = FRAME_Z1 - MOUNT_PLATE_T
-    slope = (WOOD_SCREW_HEAD_D - WOOD_SCREW_SHAFT_D) / 2.0 / WOOD_SCREW_HEAD_H
+# the head-pocket cone's radial taper per mm of height — shared by the
+# pad cutter, the spacer's female cut AND its male centring cone
+_CSK_SLOPE = (WOOD_SCREW_HEAD_D - WOOD_SCREW_SHAFT_D) / 2.0 / WOOD_SCREW_HEAD_H
+
+
+def _screw_cut(x, y, z_face, thru):
+    """One wood-screw cutter: Ø4 shaft rising `thru` from the face,
+    countersink cone opening AT z_face (the head seats flush there,
+    driven up into the wood). v2's validated geometry — ONE profile
+    for the pad and the stack spacer (user #936), so the head seats
+    identically wherever it lands."""
     over = 0.5
     shaft = cq.Solid.makeCylinder(
-        WOOD_SCREW_SHAFT_D / 2.0, MOUNT_PLATE_T + 1.0,
-        cq.Vector(x, y, z0 - 0.5), cq.Vector(0, 0, 1))
+        WOOD_SCREW_SHAFT_D / 2.0, thru + 1.0,
+        cq.Vector(x, y, z_face - 0.5), cq.Vector(0, 0, 1))
     cone = cq.Solid.makeCone(
-        WOOD_SCREW_HEAD_D / 2.0 + over * slope,
+        WOOD_SCREW_HEAD_D / 2.0 + over * _CSK_SLOPE,
         WOOD_SCREW_SHAFT_D / 2.0,
         WOOD_SCREW_HEAD_H + over,
-        cq.Vector(x, y, z0 - over), cq.Vector(0, 0, 1))
+        cq.Vector(x, y, z_face - over), cq.Vector(0, 0, 1))
     return cq.Workplane(obj=shaft).union(cq.Workplane(obj=cone))
 
 
@@ -185,8 +191,38 @@ def _build_mount():
         m = m.union(tail.rotate((0, 0, 0), (0, 0, 1), axis_az),
                     clean=False)
     for x, y in _PAD_XY:
-        m = m.cut(_screw_cut(x, y), clean=False)
+        m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PLATE_T,
+                             MOUNT_PLATE_T), clean=False)
     return m
+
+
+def _build_screw_spacer():
+    """SCREW STACK SPACER (user #936): the screws out-reach the desk, so
+    this puck rides between the head and the pad, stealing SPACER_H
+    (5.6) of drilled depth. Pad-footprint block seated FLAT on the
+    pad's underside (the clamp path — the cones only centre); on top a
+    truncated MALE cone (the pocket's cone at FIT_CLR radial shrink,
+    SPACER_CONE_ENG of engagement) noses into the pad's existing
+    countersink; underneath, the IDENTICAL female countersink + shaft
+    bore (_screw_cut — one validated profile). Modeled seated at pad 0;
+    print one per screw. Prints AS MODELED — female opening on the bed,
+    both cone surfaces at ~57° from the bed, self-supporting."""
+    x, y = _PAD_XY[0]
+    z_top = FRAME_Z1 - MOUNT_PLATE_T                 # pad underside = 6.4
+    z_bot = z_top - SPACER_H                         # head face = 0.8
+    body = (cq.Workplane("XY").workplane(offset=z_bot)
+            .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
+            .extrude(SPACER_H))
+    male = cq.Workplane(obj=cq.Solid.makeCone(
+        WOOD_SCREW_HEAD_D / 2.0 - FIT_CLR,
+        WOOD_SCREW_HEAD_D / 2.0 - FIT_CLR - SPACER_CONE_ENG * _CSK_SLOPE,
+        SPACER_CONE_ENG,
+        cq.Vector(x, y, z_top), cq.Vector(0, 0, 1)))
+    return (body.union(male)
+            .cut(_screw_cut(x, y, z_bot, SPACER_H + SPACER_CONE_ENG)))
+
+
+screw_spacer = _build_screw_spacer()
 
 
 def _v_groove_arc(R, a0, a1):
