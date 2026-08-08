@@ -73,6 +73,43 @@ COLOR = {
     "build_num":   "#F0A878",  # salmon — floating build number
 }
 
+# ── PRINT POSE for the per-part STEP exports (user #935): each file
+# lands in Bambu already print-oriented — rotated onto its documented
+# bed face, dropped to z=0, centred on xy. EXPORT-ONLY: the assembly /
+# viewer keeps every part in its as-modeled place (the parts are added
+# to the Assembly below untransformed).
+def _flip_z(p):                    # +z→−z prints: the top face is the bed
+    return p.rotate((0, 0, 0), (1, 0, 0), 180.0)
+
+
+def _outer_y_down(sign):
+    """Levers + pad print standing on their OUTER y face (#886 / v2's
+    pad recipe): rotate that face down onto the bed."""
+    def rot(p):
+        return p.rotate((0, 0, 0), (1, 0, 0), -90.0 * sign)
+    return rot
+
+
+PRINT_ROT = {
+    "frame_top":     _flip_z,            # prints +z→−z
+    "mount_ring":    _flip_z,            # octagon rule: frame_top's direction
+    "horn_cap":      _flip_z,            # prints +z→−z (user #905)
+    "axle_top":      _flip_z,            # bed = the shaft top (flipped print)
+    "lid":           _flip_z,            # prints +z→−z (through slots)
+    "ratchet_lever": _outer_y_down(+1),  # bed = its +y OUTER face
+    "brake_lever":   _outer_y_down(-1),  # bed = its −y OUTER face
+    "brake_pad_tpu": _outer_y_down(-1),  # stands on its −y outer end (v2)
+    # frame_bottom / axle_separator / lever_pin_tpu model as printed
+}
+
+
+def _print_pose(name, part):
+    part = PRINT_ROT.get(name, lambda p: p)(part)
+    bb = part.val().BoundingBox()
+    return part.translate((-(bb.xmin + bb.xmax) / 2.0,
+                           -(bb.ymin + bb.ymax) / 2.0, -bb.zmin))
+
+
 # One STEP per PRINTED part (dummies are assembly-only, cadkit rule).
 PARTS = [
     ("frame_top",   frame_top,   "frame_top.step"),
@@ -114,7 +151,7 @@ def _build_number_model(n):
 
 def main():
     for _name, part, fname in PARTS:
-        export_step(part, str(OUT / fname))
+        export_step(_print_pose(_name, part), str(OUT / fname))
 
     build_n = _bump_build_counter()
 
