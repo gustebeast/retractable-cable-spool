@@ -48,6 +48,10 @@ from .wall import wall_band
 from .params import (
     NOZZLE_D,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
+    LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_HEAD_Y1,
+    LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
+    LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_PIN_SQ, LOCK_PIN_CLR, LOCK_PIN_Z0,
+    LOCK_PIN_L,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
@@ -723,6 +727,43 @@ def _lever_pin_bores():
             .union(_pin_bores_side(BRAKE_PIVOT_Z, -1.0)))
 
 
+def _lock_corbel_top():
+    """TPU-LOCK middle storey (user #939, params LOCK block): a corbel
+    off the +x arm's END face, protruding past the frame face to wall
+    the pin slot 1.6 on every side. In this part's FLIPPED print the
+    model-TOP surface is the overhang, so it is the 45: peaked at the
+    frame face (the LOCK_WELD stub inboard rises 45 too — a flat weld
+    ledge would print as a 1.0 overhang), falling toward +x."""
+    return _xz_prism(
+        [(LOCK_X0 - LOCK_WELD, 0.0),
+         (LOCK_X0 - LOCK_WELD, LOCK_TOPB_Z1 - LOCK_WELD),
+         (LOCK_X0, LOCK_TOPB_Z1),
+         (LOCK_X1, LOCK_TOPB_Z1 - LOCK_BLK_D),
+         (LOCK_X1, 0.0)],
+        -FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+
+
+def _lock_corbel_bot():
+    """TPU-LOCK bottom storey: the beam-end mirror of _lock_corbel_top
+    — this part prints UPRIGHT, so the 45 is the UNDERSIDE, rising
+    toward +x (and rising into the weld stub inboard)."""
+    return _xz_prism(
+        [(LOCK_X0 - LOCK_WELD, 0.0),
+         (LOCK_X1, 0.0),
+         (LOCK_X1, -(LOCK_BOTB_H - LOCK_BLK_D)),
+         (LOCK_X0, -LOCK_BOTB_H),
+         (LOCK_X0 - LOCK_WELD, -(LOCK_BOTB_H - LOCK_WELD))],
+        -FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+
+
+def _lock_slot_cut(z0, z1):
+    """The shared pin-slot plan, cut over [z0, z1] — ONE shape for all
+    three storeys (user's recipe: size the prisms, then cut the TPU
+    pin's shape through everything)."""
+    return _box(LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
+                z0, z1)
+
+
 def _build_frame_bottom():
     # clean=False throughout, one heal at the end (#932 efficiency
     # review — the same fix _build_frame_top got at #910: cq's default
@@ -751,8 +792,10 @@ def _build_frame_bottom():
     # no static fence can exist there; see the #887 report
     fb = fb.union(_cable_guard(-1.0), clean=False)
     fb = fb.union(_HORN_BOTTOM, clean=False)
+    fb = fb.union(_lock_corbel_bot(), clean=False)
     fb = fb.cut(_hand_wedge(), clean=False)
     fb = fb.cut(_lever_pin_bores(), clean=False)
+    fb = fb.cut(_lock_slot_cut(-LOCK_BOTB_H - 1.0, 1.0), clean=False)
     return heal(fb)
 
 
@@ -793,6 +836,7 @@ def _build_frame_top():
     ft = _plus(FRAME_Z0, FRAME_Z1)
     ft = ft.union(cyl(BRG_BOSS_OD, FRAME_Z1 - FRAME_Z0, z=FRAME_Z0))
     ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
+    ft = ft.union(_lock_corbel_top(), clean=False)
     # clean=False through the cut loops: cq's default runs OCC's
     # unify-same-domain over the WHOLE part after EVERY cut — profiled
     # (#910, py-spy) as the frame build's runaway cost. heal(ft) at the
@@ -806,6 +850,7 @@ def _build_frame_top():
     # unify case (#910, 15+ min builds).
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
         ft = ft.cut(c, clean=False)
+    ft = ft.cut(_lock_slot_cut(-1.0, FRAME_Z1), clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top
@@ -828,3 +873,13 @@ _HORN_BOTTOM, _HORN_CAP = _cable_horn()
 frame_bottom = _build_frame_bottom()
 frame_top = _build_frame_top()
 horn_cap = heal(_HORN_CAP)
+
+# the TPU frame-lock pin (user #939, params LOCK block), modeled in
+# place at full insert: top flush with the frame face, tip proud under
+# the beam corbel's 45 (the removal grip). Free in z — the desk caps
+# +z once mounted; goes in from BELOW, after the mount rotation.
+lock_pin_tpu = _box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
+                    LOCK_SLOT_X0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
+                    LOCK_SLOT_Y0 + LOCK_PIN_CLR,
+                    LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
+                    LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L)

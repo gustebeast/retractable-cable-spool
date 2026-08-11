@@ -11,7 +11,7 @@ import sys
 
 from cadkit.overlap_check import run
 
-from src.frame import frame_top, frame_bottom, horn_cap
+from src.frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
 from src.mount import mount_ring, screw_spacer
 from src.axle import axle_top, axle_separator
 from src.lid import lid
@@ -34,6 +34,7 @@ def collect_components():
         ("ratchet_lever", ratchet_lever),
         ("brake_lever",   brake_lever),
         ("brake_pad_tpu", brake_pad_tpu),
+        ("lock_pin_tpu",  lock_pin_tpu),
         ("ratchet_pin", lever_pin_in_place(RATCHET_PIVOT_Z, +1)),
         ("brake_pin",   lever_pin_in_place(BRAKE_PIVOT_Z, -1)),
         ("bearing_608", bearing_608),
