@@ -264,10 +264,16 @@ RSTOP_X0 = _RW_OB0[0] + 0.25                     # shelf under the wing's
 RSTOP_X1 = _RW_OB1[0] - 0.25                     # open-pose footprint
 RSTOP_ZT0 = _RW_OB0[1] + RSTOP_SLOPE * (RSTOP_X0 - _RW_OB0[0])
 RSTOP_Y_ROOT = LEVER_Y_IN - LEVER_SIDE_CLR       # 5.2 — the beam's +y flank
-RSTOP_Y_TIP = RWING_Y_TIP + 1.0                  # 6.7 — overlaps the wing
-                                                 # 1.0, clear of the lever
-                                                 # face by 0.3
-RSTOP_ZBOT = RSTOP_ZT0 - (RSTOP_Y_TIP - RSTOP_Y_ROOT) - 1.6
+RSTOP_Y_TIP = RWING_Y_TIP + 2 * NOZZLE_D         # 6.8 — overlaps the wing
+                                                 # 1.6 (2 beads, user #943 —
+                                                 # was 1.0); 0.2 air to the
+                                                 # lever's inner face
+RSTOP_ZT1 = RSTOP_ZT0 + RSTOP_SLOPE * (RSTOP_X1 - RSTOP_X0)   # top's +x end
+# the bottom CHAINS off the kinematic top plane (bead audit #943): the
+# root face's +x edge — the tallest, the one you measure — is 5 beads,
+# and with the 2-bead tip overlap the tip face's edge lands 2 beads
+# lower (2.4): both visible heights are bead multiples
+RSTOP_ZBOT = RSTOP_ZT1 - 5 * NOZZLE_D
 assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE_D - 1e-9, \
     "A_RSTOP_WIDTH: wing/shelf contact face under 3 beads"
 assert RSTOP_X0 >= RWING_X1 + 0.5 - 1e-9, \
