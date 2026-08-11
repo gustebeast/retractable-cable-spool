@@ -40,7 +40,7 @@ from cadkit.holes import teardrop_hole
 
 from .helpers import chord_x, cone_solid, cyl, drop_stray_shells, heal
 from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
-                     RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_SLOPE,
+                     RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_ZT1,
                      RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT,
                      GUARD_X0, GUARD_PEAK_Z)
 from .mount import mount_channel_cuts
@@ -339,9 +339,8 @@ def _ratchet_stop():
     welded across its whole width — chunky (≥1.6 everywhere), its top
     matched to the wing's open-pose bottom plane; the usual 45° corbel
     underside carries its reach."""
-    top1 = RSTOP_ZT0 + RSTOP_SLOPE * (RSTOP_X1 - RSTOP_X0)
     prism = (cq.Workplane("XZ")
-             .polyline([(RSTOP_X0, RSTOP_ZT0), (RSTOP_X1, top1),
+             .polyline([(RSTOP_X0, RSTOP_ZT0), (RSTOP_X1, RSTOP_ZT1),
                         (RSTOP_X1, RSTOP_ZBOT), (RSTOP_X0, RSTOP_ZBOT)])
              .close().extrude(RSTOP_Y_TIP - (RSTOP_Y_ROOT - 1.0)))
     # whichever way the XZ plane extruded, land the y-span at
