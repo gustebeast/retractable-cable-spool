@@ -46,6 +46,8 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
     SPACER_H, SPACER_CONE_ENG, FIT_CLR,
+    LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_WELD,
+    LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
 )
 
 _SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
@@ -194,6 +196,23 @@ def _build_mount():
     for axis_az in (0.0, 90.0, 180.0, 270.0):
         m = m.union(tail.rotate((0, 0, 0), (0, 0, 1), axis_az),
                     clean=False)
+    # TPU-LOCK jib HEAD (user #939, params LOCK block): the +x arm's
+    # guide tail widens into a slotted head past the frame face — the
+    # TOP storey of the three-part lock stack (corbels on both frames
+    # below, frame.py). Welded LOCK_WELD into the tail rib; its −y
+    # face rides the same arm-flank plane the tail and pads seat on.
+    m = m.union(
+        cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
+        .polyline([(LOCK_X0 - LOCK_WELD, FRAME_RIB / 2.0),
+                   (LOCK_X1, FRAME_RIB / 2.0),
+                   (LOCK_X1, LOCK_HEAD_Y1),
+                   (LOCK_X0 - LOCK_WELD, LOCK_HEAD_Y1)])
+        .close().extrude(FRAME_Z1 - MOUNT_MATE_Z), clean=False)
+    m = m.cut(
+        cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z - 1.0)
+        .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0), (LOCK_SLOT_X1, LOCK_SLOT_Y0),
+                   (LOCK_SLOT_X1, LOCK_SLOT_Y1), (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
+        .close().extrude((FRAME_Z1 - MOUNT_MATE_Z) + 2.0), clean=False)
     for x, y in _PAD_XY:
         m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PLATE_T,
                              MOUNT_PLATE_T), clean=False)

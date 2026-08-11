@@ -107,6 +107,8 @@ _ex("clearance",
     PAD_JOINT_CLR="TPU-in-PETG snug fit (v2 print-proven)",
     PIN_SQ_FRAME_CLR="TPU axle in frame keyway/bore, per side",
     PIN_SQ_LEVER_CLR="TPU axle in the lever pocket, per side",
+    LOCK_PIN_CLR="TPU lock pin in its three slots, per side",
+    LOCK_SWEEP_CLR="lock corbel roof under the jib head's install sweep",
     )
 
 # Tuned knobs pinned by model asserts, kinematic datums, cutter margins.

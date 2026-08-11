@@ -16,7 +16,7 @@ from cadkit.step_export import export_step, print_pose
 from cadkit.cq_colors import color
 from cadkit.freecad import show
 
-from .frame import frame_top, frame_bottom, horn_cap
+from .frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
 from .mount import mount_ring, screw_spacer
 from .axle import axle_top, axle_separator
 from .lid import lid
@@ -108,6 +108,7 @@ PARTS = [
     ("ratchet_lever", ratchet_lever, "ratchet_lever.step"),
     ("brake_lever",   brake_lever,   "brake_lever.step"),
     ("lever_pin_tpu", lever_pin,     "lever_pin_tpu.step"),
+    ("lock_pin_tpu",  lock_pin_tpu,  "lock_pin_tpu.step"),
     ("brake_pad_tpu", brake_pad_tpu, "brake_pad_tpu.step"),
 ]
 
@@ -150,6 +151,8 @@ def main():
     # one screw spacer stacked under pad 0 (print one per screw)
     asm.add(screw_spacer, name="screw_spacer",
             color=color(COLOR["screw_spacer"]))
+    # the TPU frame-lock pin, fully inserted through the lock stack
+    asm.add(lock_pin_tpu, name="lock_pin_tpu", color=color(COLOR["tpu"]))
     # horn cap SEATED on the trough half (its as-modeled place)
     asm.add(horn_cap, name="horn_cap", color=color(COLOR["horn_cap"]))
     asm = (asm

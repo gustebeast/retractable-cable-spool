@@ -845,6 +845,66 @@ MOUNT_GRV_VERT = MOUNT_SPINE_T + JOINT_CLR         # 2.55 — vertical depth
 MOUNT_GRV_FLAT = NOZZLE_D                            # 0.8 — dulled V flat
 MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 
+# ── TPU FRAME LOCK (user #939 — extra assurance the stack stays
+# together): ONE vertical 95A pin at the +x arm's end, dropped through
+# three stacked storeys that all protrude +x PAST THE FRAME FACE into
+# open air — the mount jib tail widened into a slotted HEAD (top,
+# z 8→10.4), a 45° CORBEL off frame_top's arm end face (middle,
+# z 0→7.8, roof falling +x — the 45 for its flipped print), and a
+# mirrored corbel off the beam's end face (bottom, underside RISING +x
+# — the 45 for the upright print). One pin-shaped slot cuts through
+# all three (the user's build recipe); with the pin in, neither the
+# mount joint nor the frame_top↔frame_bottom joint can rotate. The
+# pin is FREE in z (user): the slot is open through, the pin goes in
+# from BELOW after mounting (the desk covers the top face), the desk
+# itself caps +z, and the TPU snug fit holds it; its tip stays proud
+# under the bottom 45 as the removal grip. The lock rides the +y
+# flank — the jib's flank since the #938 hand flip.
+LOCK_PIN_SQ  = 5 * NOZZLE_D        # 4.0 — square pin section (95A TPU)
+LOCK_PIN_CLR = 0.1                 # per-side, all three hosts (TPU snug —
+                                   # PIN_SQ_FRAME_CLR's proven value)
+LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
+                                   # host (a real shared volume —
+                                   # coincident-face unions are OCC's bad
+                                   # day; one bead, it also surfaces as the
+                                   # little flank stub)
+LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.2 — slot square
+LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
+                                   # the slot + 1.6 walls BOTH sides
+                                   # (user's ≥1.6-around rule)
+LOCK_X0      = FRAME_R_OUT                         # 83.83 — storeys start at
+                                                   # the frame's +x face
+LOCK_X1      = LOCK_X0 + LOCK_BLK_D                # 91.23
+LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL               # 85.43
+LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 89.63 — leaves exactly
+                                                   # 1.6 +x of the slot
+LOCK_SLOT_Y0 = FRAME_RIB / 2.0 + STRUCT_WALL       # 6.8 — slot y band sits
+LOCK_SLOT_Y1 = LOCK_SLOT_Y0 + LOCK_SLOT_W          # 11.0   inside the head
+LOCK_HEAD_Y1 = LOCK_SLOT_Y1 + STRUCT_WALL          # 12.6 — head/corbel +y face
+LOCK_SWEEP_CLR = 0.2               # corbel roof under the jib head's swept
+                                   # underside (the mount install rotation)
+LOCK_TOPB_Z1 = MOUNT_MATE_Z - LOCK_SWEEP_CLR       # 7.8 — top corbel roof at
+                                                   # the frame face
+LOCK_BOTB_H  = 13 * NOZZLE_D       # 10.4 — beam corbel depth at the face
+LOCK_PIN_Z0  = -(LOCK_BOTB_H - STRUCT_WALL)        # −8.8 — pin bottom = the
+                                   # corbel underside at the slot's −x wall
+LOCK_PIN_L   = FRAME_Z1 - LOCK_PIN_Z0              # 19.2 — top flush with the
+                                                   # frame face at full insert
+assert LOCK_TOPB_Z1 - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
+    "top corbel's 45 roof leaves under 1.6 of pin engagement at the slot"
+assert LOCK_BOTB_H - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
+    "beam corbel's 45 underside leaves under 1.6 of slot wall depth"
+assert LOCK_TOPB_Z1 - LOCK_BLK_D >= 0.2 - 1e-9, \
+    "top corbel's 45 runs out before its far face"
+assert LOCK_X0 - LOCK_WELD >= MOUNT_RING_R + MOUNT_PAD_W / 2.0 + 0.5, \
+    "lock storeys reach back into the screw pad's zone"
+# the corbels' inner extent must clear the beam arc TENONS' swept
+# radius during the frame_top↔bottom install rotation (the cavities
+# themselves are cut AFTER the corbel union, so they self-correct)
+assert (LOCK_X0 - LOCK_WELD
+        >= FRAMEJ_R + FRAMEJ_W / 2.0 + NOZZLE_D - 1e-9), \
+    "lock corbels sweep through the beam arc tenons on install"
+
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
 # the frame's mount + the wall windows now) ──────────────────────────────────
