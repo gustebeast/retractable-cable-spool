@@ -17,7 +17,7 @@ from cadkit.cq_colors import color
 from cadkit.freecad import show
 
 from .frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
-from .mount import mount_ring, screw_spacer
+from .mount import mount_ring
 from .axle import axle_top, axle_separator
 from .lid import lid
 from .levers import (
@@ -57,9 +57,9 @@ COLOR = {
     "frame_top":   "#4F6D8F",  # slate — top plus (v2's frame_top colour)
     "frame_bottom": "#6B8AAB", # lighter slate — beams + fused wall band +
                                # spoked floor + lever forks (one print)
-    "mount_ring": "#7D8F69",   # sage — desk-mount twist-lock ring
-    "screw_spacer": "#93A278", # pale sage — screw stack spacer (one shown
-                               # seated at pad 0; print one per screw)
+    "mount_ring": "#7D8F69",   # sage — desk-mount twist-lock ring (deep
+                               # screw pads since #947 — the old separate
+                               # stack spacer is fused in)
     "horn_cap":   "#C4A35A",   # ochre — cable-horn tunnel cap (closes
                                # the bore over the laid-in cable)
     "axle_top":    "#A6786B",  # clay — axle top half (lip + tenon)
@@ -100,7 +100,6 @@ PARTS = [
     ("frame_top",   frame_top,   "frame_top.step"),
     ("frame_bottom", frame_bottom, "frame_bottom.step"),
     ("mount_ring",  mount_ring,  "mount_ring.step"),
-    ("screw_spacer", screw_spacer, "screw_spacer.step"),
     ("horn_cap",    horn_cap,    "horn_cap.step"),
     ("axle_top",    axle_top,    "axle_top.step"),
     ("axle_separator", axle_separator, "axle_separator.step"),
@@ -148,9 +147,6 @@ def main():
                 color=color(COLOR["frame_bottom"])))
     # the desk-mount twist-lock ring, SEATED flush in the arms' arc channels
     asm.add(mount_ring, name="mount_ring", color=color(COLOR["mount_ring"]))
-    # one screw spacer stacked under pad 0 (print one per screw)
-    asm.add(screw_spacer, name="screw_spacer",
-            color=color(COLOR["screw_spacer"]))
     # the TPU frame-lock pin, fully inserted through the lock stack
     asm.add(lock_pin_tpu, name="lock_pin_tpu", color=color(COLOR["tpu"]))
     # horn cap SEATED on the trough half (its as-modeled place)

@@ -12,7 +12,7 @@ import sys
 from cadkit.overlap_check import run
 
 from src.frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
-from src.mount import mount_ring, screw_spacer
+from src.mount import mount_ring
 from src.axle import axle_top, axle_separator
 from src.lid import lid
 from src.levers import (ratchet_lever, brake_lever, brake_pad_tpu,
@@ -26,7 +26,6 @@ def collect_components():
         ("frame_top",   frame_top),
         ("frame_bottom", frame_bottom),
         ("mount_ring",  mount_ring),
-        ("screw_spacer", screw_spacer),
         ("horn_cap",    horn_cap),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),
@@ -63,10 +62,6 @@ _INTENDED = {
                                               # rest (exact-negative edge)
         ("horn_cap", "frame_bottom"),  # cap seated flat on the trough
                                        # half at the bore's equator
-        ("screw_spacer", "mount_ring"),  # spacer top flat on the pad's
-                                         # underside (cones ride FIT_CLR)
-        ("screw_spacer", "frame_top"),   # inner face coplanar with the
-                                         # arm flank (as the pad above it)
         ("lock_pin_tpu", "frame_top"),   # pin rides FLUSH on the arm wall
         ("lock_pin_tpu", "frame_bottom"),  # ... and the beam wall below it
                                            # (the wall is the slot's 4th side)

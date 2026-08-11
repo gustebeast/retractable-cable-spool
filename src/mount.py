@@ -45,7 +45,7 @@ from .params import (
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
-    SPACER_H, SPACER_CONE_ENG, FIT_CLR,
+    MOUNT_PAD_H, MOUNT_PAD_INSET_MY, LOCK_PAD_NOTCH_Y_W,
     LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_HEAD_ZB,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
@@ -107,10 +107,13 @@ def _hang(w):
 
 
 # the pads' plan positions — shared by the pad prisms AND their screw
-# cuts (one table, so the screws can never silently miss the pads)
+# cuts (one table, so the screws can never silently miss the pads).
+# The −y arm's pad slides MOUNT_PAD_INSET_MY inboard along its beam
+# (params #947 comment: its deep countersink must clear the TPU lock)
 _PAD_XY = tuple(
     (MOUNT_RING_R * math.cos(math.radians(az)),
-     MOUNT_RING_R * math.sin(math.radians(az)))
+     MOUNT_RING_R * math.sin(math.radians(az))
+     + (MOUNT_PAD_INSET_MY if abs(az - 270.0) < 45.0 else 0.0))
     for az in MOUNT_PAD_AZ)
 
 
@@ -174,11 +177,28 @@ def _build_mount():
     # AXIS-ALIGNED screw pads hugging the arms (use the pair on your
     # beam's axis); screws at the outer ring line. Pads and their screw
     # cuts share ONE placement table so they cannot drift apart.
+    # DEEP pads (user #947: the #936 stack spacer FUSED in — pads run
+    # the full MOUNT_PAD_H, everything else keeps its section)
     for x, y in _PAD_XY:
         m = m.union(
-            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PLATE_T)
+            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PAD_H)
             .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
-            .extrude(MOUNT_PLATE_T), clean=False)
+            .extrude(MOUNT_PAD_H), clean=False)
+    # the −y arm's deep pad vs the TPU lock's top corbel (params
+    # LOCK_PAD_NOTCH comment): its outboard strip keeps the old
+    # 4.0-plate underside and follows the jib head's 45 outward — the
+    # wedge's 45 matches the corbel roof, so the relief only OPENS
+    # during the install sweep, exactly like the head's underside
+    m = m.cut(
+        cq.Workplane("XZ")
+        .polyline([(4.0, FRAME_Z1 - MOUNT_PLATE_T),
+                   (FRAME_RIB / 2.0 + (MOUNT_MATE_Z
+                                       - (FRAME_Z1 - MOUNT_PLATE_T)),
+                    FRAME_Z1 - MOUNT_PLATE_T),
+                   (FRAME_RIB / 2.0 + MOUNT_MATE_Z, 0.0),
+                   (4.0, 0.0)])
+        .close().extrude(MOUNT_PAD_W + 1.0)
+        .translate((0.0, LOCK_PAD_NOTCH_Y_W, 0.0)), clean=False)
     # GUIDE TAILS (user, corrected #880: AXIS-ALIGNED, hugging the arm's
     # flank — not radial at the pad's offset azimuth): a 2.4 × 2.4 bar
     # running parallel to the wood beam from each pad's outboard end to
@@ -225,38 +245,13 @@ def _build_mount():
         .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
         .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
     for x, y in _PAD_XY:
-        m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PLATE_T,
-                             MOUNT_PLATE_T), clean=False)
+        m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PAD_H,
+                             MOUNT_PAD_H), clean=False)
     return m
 
 
-def _build_screw_spacer():
-    """SCREW STACK SPACER (user #936): the screws out-reach the desk, so
-    this puck rides between the head and the pad, stealing SPACER_H
-    (5.6) of drilled depth. Pad-footprint block seated FLAT on the
-    pad's underside (the clamp path — the cones only centre); on top a
-    truncated MALE cone (the pocket's cone at FIT_CLR radial shrink,
-    SPACER_CONE_ENG of engagement) noses into the pad's existing
-    countersink; underneath, the IDENTICAL female countersink + shaft
-    bore (_screw_cut — one validated profile). Modeled seated at pad 0;
-    print one per screw. Prints AS MODELED — female opening on the bed,
-    both cone surfaces at ~57° from the bed, self-supporting."""
-    x, y = _PAD_XY[0]
-    z_top = FRAME_Z1 - MOUNT_PLATE_T                 # pad underside = 6.4
-    z_bot = z_top - SPACER_H                         # head face = 0.8
-    body = (cq.Workplane("XY").workplane(offset=z_bot)
-            .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
-            .extrude(SPACER_H))
-    male = cq.Workplane(obj=cq.Solid.makeCone(
-        WOOD_SCREW_HEAD_D / 2.0 - FIT_CLR,
-        WOOD_SCREW_HEAD_D / 2.0 - FIT_CLR - SPACER_CONE_ENG * _CSK_SLOPE,
-        SPACER_CONE_ENG,
-        cq.Vector(x, y, z_top), cq.Vector(0, 0, 1)))
-    return (body.union(male)
-            .cut(_screw_cut(x, y, z_bot, SPACER_H + SPACER_CONE_ENG)))
-
-
-screw_spacer = _build_screw_spacer()
+# (the #936 screw_spacer part is RETIRED — user #947: fused into the
+# deep pads above; same 5.6 of drilled depth stolen, zero loose parts)
 
 
 def _v_groove_arc(R, a0, a1):

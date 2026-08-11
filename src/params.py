@@ -716,21 +716,15 @@ MOUNT_PLATE_T = 5 * NOZZLE_D         # 4.0 — pad/spine thickness: the MINIMUM
 assert MOUNT_PLATE_T >= WOOD_SCREW_HEAD_H - 1e-9, \
     "mount plate too thin to countersink the wood screw flush"
 
-# SCREW SPACER (user #936: the validated screws out-reach the desk —
-# the tips would break through the far side): a per-screw puck stacked
-# between the head and the pad's countersink, stealing SPACER_H of
-# drilled depth. Pad footprint (MOUNT_PAD_W sq); a truncated MALE cone
-# (the pocket's own cone, FIT_CLR radial shrink) centres it in the
-# pad's existing female cone, and its underside carries the IDENTICAL
-# female countersink + shaft bore (one cutter, mount.py), so the head
-# seats exactly as before — SPACER_H lower. Clamp load runs flat face
-# on flat face (spacer top ↔ pad underside); the cones only centre.
-SPACER_H        = 7 * NOZZLE_D     # 5.6 — drilled-length reduction (user)
-SPACER_CONE_ENG = 2 * NOZZLE_D     # 1.6 — male-cone engagement height
-assert SPACER_H - WOOD_SCREW_HEAD_H >= 2 * NOZZLE_D - 1e-9, \
-    "spacer web between its countersink tip and its top face under the tier"
-assert SPACER_CONE_ENG <= WOOD_SCREW_HEAD_H - 1e-9, \
-    "spacer male cone bottoms out in the pad's countersink"
+# DEEP SCREW PADS (user #947 — FUSES the #936 screw_spacer into the
+# mount: the separate per-screw puck is retired, only the PADS deepen,
+# the spine/rings/tails keep their sections): each pad runs the full
+# MOUNT_PAD_H from the frame face, its countersink opening at the new
+# underside — the same 5.6 of drilled depth stolen, zero loose parts.
+MOUNT_PAD_H = 12 * NOZZLE_D        # 9.6 — pad z depth (the old 4.0 plate
+                                   # + the 5.6 spacer, one piece)
+assert MOUNT_PAD_H >= WOOD_SCREW_HEAD_H + 2 * NOZZLE_D - 1e-9, \
+    "deep pad too thin to countersink the head with a tier of web"
 
 MOUNT_TEN_W  = 5 * NOZZLE_D          # 4.0 — joint width: the largest whose
                                    # OCTAGON swallow fits above the 1.6
@@ -810,6 +804,14 @@ MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE_D     # 10.9 — square screw pad
 MOUNT_PAD_AZ_OFF = math.degrees(math.asin(
     (BEAM_SIZE / 2.0 + MOUNT_PAD_W / 2.0) / MOUNT_RING_R))   # ≈ 8.6°
 MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
+MOUNT_PAD_INSET_MY = NOZZLE_D      # 0.8 — the −Y ARM's pad (and its screw)
+                                   # slides ONE BEAD inboard along its beam
+                                   # (#947: the DEEP pad's countersink mouth
+                                   # must clear the TPU lock's corbel band +
+                                   # sweep clearance; the flank edge — the
+                                   # seating stop — is untouched, and one
+                                   # screw 0.8 off the ring line is nothing
+                                   # to a wood beam)
 assert TOP_JOINT_SEAT_CLR > 0.0, \
     "the pads-stop-first scheme needs a positive joint seat clearance"
 assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE_D - 1e-9, \
@@ -932,9 +934,11 @@ assert LOCK_TOPB_Z1 - LOCK_BLK_D >= 0.2 - 1e-9, \
 # flank; as-drawn flank edge (FRAME_RIB/2) → the beam's outer end
 LOCK_SHIFT_X = FRAME_RIB / 2.0 - LOCK_X0
 LOCK_SHIFT_Y = -FRAME_R_OUT - FRAME_RIB / 2.0
-# the −y arm's screw pad: its outboard edge, in the stack's LOCAL y
+# the −y arm's screw pad: its outboard edge along the arm (the #947
+# one-bead inset applied — this pad slid inboard for the deep-pad
+# countersink)
 _PAD_OUT_R   = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
-                + MOUNT_PAD_W / 2.0)               # ≈75.9 — along the arm
+                + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY)   # ≈75.9
 LOCK_NOTCH_Y = (FRAME_R_OUT + FRAME_RIB / 2.0
                 - (_PAD_OUT_R + LOCK_SWEEP_CLR))   # ≈11.8 (local) — corbel
                                                    # keeps full height inboard
@@ -955,6 +959,18 @@ assert (LOCK_NOTCH_Z - (LOCK_HEAD_Y1 - LOCK_NOTCH_Y)
     "pad notch consumes the slot's +y wall (under 1.6 of height left)"
 assert LOCK_NOTCH_Y > LOCK_SLOT_Y1 - LOCK_SLOT_W - 1e-9, \
     "pad notch reaches across the slot to the −y wall"
+# the −y arm's DEEP pad (#947) vs the lock's top corbel: the pad's
+# outboard strip — past the countersink mouth's tangent plane — keeps
+# the OLD 4.0-plate underside over the corbel and follows the head's
+# 45 beyond it (mount.py cuts the strip with a wedge); the strip's
+# face stays ≥ the sweep clearance off the corbel's +y face, and the
+# pad only moves AWAY from the stack during the install sweep
+LOCK_PAD_NOTCH_Y_W = -(_PAD_OUT_R - MOUNT_PAD_W / 2.0
+                       + WOOD_SCREW_HEAD_D / 2.0)   # ≈ −75.07 — the pocket
+                                                    # mouth's tangent plane
+assert (LOCK_PAD_NOTCH_Y_W - (LOCK_SHIFT_Y + LOCK_HEAD_Y1)
+        >= LOCK_SWEEP_CLR - 1e-9), \
+    "deep-pad strip face inside the corbel's sweep clearance"
 assert LOCK_HEAD_Y1 - FRAME_RIB / 2.0 <= BEAM_SIZE + 1e-9, \
     "lock stack overruns the beam's footprint along the arm"
 # the frame arc joint at this beam: its tenon spans the ENTRY half of
