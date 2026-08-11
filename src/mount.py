@@ -78,16 +78,18 @@ _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
 # with the frame arc joints (same seat/overshoot constants, same seating
 # chirality): tenon anchored at the arm's ENTRY face spanning
 # MOUNT_TEN_ARC (half the crossing — the stop-side half stays solid arm).
-# hand="ccw" — the CHIRALITY AUDIT (user's worry: joints working
-# undone): pulling the cable out torques the whole assembly CW about
-# the axis (the cable's line of action is tangent on the drum's
-# CW-driving side), so the hanging assembly must seat rotating CW
-# relative to the fixed mount ≡ the mount TENONS seat CCW relative to
-# frame_top. Pull-out then PRESSES the stops; uninstall = a deliberate
-# CCW twist of the assembly, which no sustained load produces.
+# hand="cw" — the #938 chirality FLIP (user, field failure): the #915
+# audit seated against PULL-OUT torque (assembly CW, viewed +z), but a
+# fast retract SLAMS the cable into the exit horn and that impulse
+# torques the assembly the OTHER way — exactly the uninstall twist —
+# and spun it off the mount. The slam is impulsive and dominates the
+# slow, hand-damped pull, so the joint now seats against the SLAM:
+# the hanging assembly seats rotating CCW relative to the fixed mount
+# ≡ the mount TENONS seat CW relative to frame_top. Retract-slam
+# torque PRESSES the stops; uninstall = a deliberate CW twist.
 _CROSS = {R: MOUNT_J.crossing(R, FRAME_RIB, MOUNT_TEN_ARC,
                               seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER,
-                              hand="ccw")
+                              hand="cw")
           for R in _RINGS}
 
 # the shared install rotation: the DEEPER offset of the two rings' entries
@@ -182,9 +184,11 @@ def _build_mount():
     # tips mark exactly how far the assembled frame will reach.
     pad_cx = MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
     x0 = pad_cx + MOUNT_PAD_W / 2.0 - 0.5          # buried into the pad
+    # tails flush along the CCW arm flank now — the flank the pads seat
+    # against since the #938 hand flip
     tail = (cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
             .center((x0 + FRAME_R_OUT) / 2.0,
-                    -(FRAME_RIB / 2.0 + MOUNT_SPINE_W / 2.0))
+                    FRAME_RIB / 2.0 + MOUNT_SPINE_W / 2.0)
             .rect(FRAME_R_OUT - x0, MOUNT_SPINE_W)
             .extrude(MOUNT_SPINE_T))
     for axis_az in (0.0, 90.0, 180.0, 270.0):

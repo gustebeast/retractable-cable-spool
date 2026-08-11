@@ -797,13 +797,17 @@ MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE_D     # 10.9 — square screw pad
 # edge lands FLAT ON its arm's flank — the pads ARE the seating stop
 # (user's call). The arc joints keep TOP_JOINT_SEAT_CLR (0.15) at
 # their stop ends, so the joinery never bottoms out first. Pads sit
-# CW (−) of the arms now — the hand="ccw" chirality flip: the mount's
-# tenons seat rotating CCW relative to the frame, so the pads trail on
-# the CW side and land on the arms' CW flanks; pull-out torque (the
-# assembly CW ≡ the mount CCW relative to it) presses them tighter.
+# CCW (+) of the arms — the #938 chirality FLIP (user, field failure:
+# a fast retract SLAMS the cable into the exit horn and the impulse
+# torque — opposite the pull-out torque the #915 audit optimised for
+# — spun the assembly off the mount): the mount's tenons seat
+# rotating CW relative to the frame now (hand="cw", mount.py), so the
+# pads trail on the CCW side and land on the arms' CCW flanks; the
+# retract-slam torque presses them tighter, and the slow, hand-damped
+# pull-out is what friction has to hold instead of the slam.
 MOUNT_PAD_AZ_OFF = math.degrees(math.asin(
     (BEAM_SIZE / 2.0 + MOUNT_PAD_W / 2.0) / MOUNT_RING_R))   # ≈ 8.6°
-MOUNT_PAD_AZ = tuple(a - MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
+MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
 assert TOP_JOINT_SEAT_CLR > 0.0, \
     "the pads-stop-first scheme needs a positive joint seat clearance"
 assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE_D - 1e-9, \
