@@ -1045,8 +1045,10 @@ HORN_CH_W  = snap(1.5 * CABLE_D,
                                    # 10.0 — proved the derived footing
                                    # depth + chamfer rules track any
                                    # bore; override retired at #928)
-HORN_WALL_T = 3 * NOZZLE_D           # 2.4 — meat beside the tunnel
-HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 11.2 — block width
+HORN_WALL_T = 4 * NOZZLE_D           # 3.2 — meat beside the tunnel (grew
+                                   # with the #946 bell: the side flats
+                                   # stay one bead, WALL_T = BELL_R + 0.8)
+HORN_W      = HORN_CH_W + 2 * HORN_WALL_T      # 12.8 — block width
 HORN_ROOF_T = 4 * NOZZLE_D           # 3.2 — meat above the tunnel.
                                    # Sized so the cap keeps ≥ 1.6 over
                                    # the rail cavities (user #908), with
@@ -1064,12 +1066,19 @@ HORN_BLOCK_L = BEAM_SIZE           # 10.4 — tunnel block length along x,
                                    # face carries it exactly — no
                                    # overhang, no exposed ledge): two
                                    # bells + straight middle
-HORN_BELL_R = 2 * NOZZLE_D           # 1.6 — mouth bell, BOTH ends: a
+HORN_BELL_R = 3 * NOZZLE_D           # 2.4 — mouth bell, BOTH ends: a
                                    # quarter-round trumpet revolved
                                    # around the tunnel axis (tangent to
                                    # the bore, tangent to the face);
                                    # leaves NOZZLE_D dull flats at the
-                                   # block's side faces
+                                   # block's side faces. GENTLER at
+                                   # #946 (user: softer in/out taper —
+                                   # was 1.6): the LARGEST bead multiple
+                                   # the cap rail allows — the rail
+                                   # room assert in frame.py caps it at
+                                   # 3.05 (HORN_BLOCK_L/2 − HORNJ half
+                                   # slot); the footing depth and the
+                                   # corner-chamfer twins re-derive
 # cap ATTACHMENT (user #906, single rail #915): ONE central cadkit
 # MUSHROOM rail (hosts print in opposite z directions), install sliding
 # − to + y. Two TENON segments rise off the trough strips' tops (2.4
