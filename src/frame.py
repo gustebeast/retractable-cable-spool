@@ -51,7 +51,7 @@ from .params import (
     LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_HEAD_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_PIN_SQ, LOCK_PIN_CLR, LOCK_PIN_Z0,
-    LOCK_PIN_L,
+    LOCK_PIN_L, LOCK_SHIFT_X, LOCK_SHIFT_Y, LOCK_NOTCH_Y, LOCK_NOTCH_Z,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
@@ -727,41 +727,59 @@ def _lever_pin_bores():
             .union(_pin_bores_side(BRAKE_PIVOT_Z, -1.0)))
 
 
+def _lock_place(w):
+    """As-drawn lock geometry → its world spot on the −y beam's +x
+    flank (user #941: translated, never rotated)."""
+    return w.translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0))
+
+
 def _lock_corbel_top():
-    """TPU-LOCK middle storey (user #939, params LOCK block): a corbel
-    off the +x arm's END face, protruding past the frame face to wall
+    """TPU-LOCK middle storey (user #939/#941, params LOCK block): a
+    corbel off the −y beam's +x FLANK, growing +x far enough to wall
     the pin slot 1.6 on every side. In this part's FLIPPED print the
     model-TOP surface is the overhang, so it is the 45: peaked at the
-    frame face (the LOCK_WELD stub inboard rises 45 too — a flat weld
-    ledge would print as a 1.0 overhang), falling toward +x."""
-    return _xz_prism(
+    flank (the LOCK_WELD stub buried in the arm rises 45 too — a flat
+    weld ledge would print as an overhang), falling toward +x. Its
+    outboard-top corner wears the PAD NOTCH: full height ends at
+    LOCK_NOTCH_Y and a 45 falls away under this arm's screw pad
+    (LOCK_SWEEP_CLR of air; the pad only moves AWAY during the mount
+    install sweep)."""
+    w = _xz_prism(
         [(LOCK_X0 - LOCK_WELD, 0.0),
          (LOCK_X0 - LOCK_WELD, LOCK_TOPB_Z1 - LOCK_WELD),
          (LOCK_X0, LOCK_TOPB_Z1),
          (LOCK_X1, LOCK_TOPB_Z1 - LOCK_BLK_D),
          (LOCK_X1, 0.0)],
-        -FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+        FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+    notch = _yz_prism(
+        [(LOCK_NOTCH_Y, LOCK_TOPB_Z1 + 1.0),
+         (LOCK_NOTCH_Y, LOCK_NOTCH_Z),
+         (LOCK_NOTCH_Y + LOCK_NOTCH_Z + 1.0, -1.0),
+         (LOCK_HEAD_Y1 + 2.0, -1.0),
+         (LOCK_HEAD_Y1 + 2.0, LOCK_TOPB_Z1 + 1.0)],
+        LOCK_X0 - LOCK_WELD - 1.0, LOCK_X1 + 1.0)
+    return _lock_place(w.cut(notch))
 
 
 def _lock_corbel_bot():
-    """TPU-LOCK bottom storey: the beam-end mirror of _lock_corbel_top
-    — this part prints UPRIGHT, so the 45 is the UNDERSIDE, rising
-    toward +x (and rising into the weld stub inboard)."""
-    return _xz_prism(
+    """TPU-LOCK bottom storey: the flank mirror of _lock_corbel_top —
+    this part prints UPRIGHT, so the 45 is the UNDERSIDE, rising
+    toward +x (and rising into the weld stub buried in the beam)."""
+    return _lock_place(_xz_prism(
         [(LOCK_X0 - LOCK_WELD, 0.0),
          (LOCK_X1, 0.0),
          (LOCK_X1, -(LOCK_BOTB_H - LOCK_BLK_D)),
          (LOCK_X0, -LOCK_BOTB_H),
          (LOCK_X0 - LOCK_WELD, -(LOCK_BOTB_H - LOCK_WELD))],
-        -FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+        FRAME_RIB / 2.0, LOCK_HEAD_Y1))
 
 
 def _lock_slot_cut(z0, z1):
     """The shared pin-slot plan, cut over [z0, z1] — ONE shape for all
     three storeys (user's recipe: size the prisms, then cut the TPU
-    pin's shape through everything)."""
-    return _box(LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
-                z0, z1)
+    pin's shape through everything), placed on the lock's beam."""
+    return _lock_place(_box(LOCK_SLOT_X0, LOCK_SLOT_X1,
+                            LOCK_SLOT_Y0, LOCK_SLOT_Y1, z0, z1))
 
 
 def _build_frame_bottom():
@@ -878,8 +896,8 @@ horn_cap = heal(_HORN_CAP)
 # place at full insert: top flush with the frame face, tip proud under
 # the beam corbel's 45 (the removal grip). Free in z — the desk caps
 # +z once mounted; goes in from BELOW, after the mount rotation.
-lock_pin_tpu = _box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
-                    LOCK_SLOT_X0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
-                    LOCK_SLOT_Y0 + LOCK_PIN_CLR,
-                    LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
-                    LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L)
+lock_pin_tpu = _lock_place(_box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
+                                LOCK_SLOT_X0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
+                                LOCK_SLOT_Y0 + LOCK_PIN_CLR,
+                                LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
+                                LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L))

@@ -858,8 +858,19 @@ MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 # pin is FREE in z (user): the slot is open through, the pin goes in
 # from BELOW after mounting (the desk covers the top face), the desk
 # itself caps +z, and the TPU snug fit holds it; its tip stays proud
-# under the bottom 45 as the removal grip. The lock rides the +y
-# flank — the jib's flank since the #938 hand flip.
+# under the bottom 45 as the removal grip. PLACEMENT (user #941): on
+# the −Y BEAM's +x FLANK, growing +x — NOT past the beam's −y end —
+# and the geometry keeps its original +x-arm ORIENTATION, TRANSLATED
+# there (user: move it, don't rotate it). The stack sits flush with
+# the beam's outer end; that flank is the jib tail's flank (the CCW
+# side since the #938 flip), so the mount storey welds straight into
+# the tail via their overlap — the head carries NO −x weld stub (past
+# the flank plane is frame-arm material). The −y arm's screw pad ends
+# 0.58 shy of clearing the stack, so the top corbel wears a 45° NOTCH
+# riding LOCK_SWEEP_CLR under the pad's seated + swept envelope (the
+# pad only moves away from the stack during the install sweep).
+# Dims below stay in the AS-DRAWN (+x-arm) frame; builders translate
+# by (LOCK_SHIFT_X, LOCK_SHIFT_Y).
 LOCK_PIN_SQ  = 5 * NOZZLE_D        # 4.0 — square pin section (95A TPU)
 LOCK_PIN_CLR = 0.1                 # per-side, all three hosts (TPU snug —
                                    # PIN_SQ_FRAME_CLR's proven value)
@@ -872,8 +883,9 @@ LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.2 — slot square
 LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
                                    # the slot + 1.6 walls BOTH sides
                                    # (user's ≥1.6-around rule)
-LOCK_X0      = FRAME_R_OUT                         # 83.83 — storeys start at
-                                                   # the frame's +x face
+LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
+                                                   # (LOCK_SHIFT_X maps it
+                                                   # onto the beam's flank)
 LOCK_X1      = LOCK_X0 + LOCK_BLK_D                # 91.23
 LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL               # 85.43
 LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 89.63 — leaves exactly
@@ -896,14 +908,44 @@ assert LOCK_BOTB_H - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
     "beam corbel's 45 underside leaves under 1.6 of slot wall depth"
 assert LOCK_TOPB_Z1 - LOCK_BLK_D >= 0.2 - 1e-9, \
     "top corbel's 45 runs out before its far face"
-assert LOCK_X0 - LOCK_WELD >= MOUNT_RING_R + MOUNT_PAD_W / 2.0 + 0.5, \
-    "lock storeys reach back into the screw pad's zone"
-# the corbels' inner extent must clear the beam arc TENONS' swept
-# radius during the frame_top↔bottom install rotation (the cavities
-# themselves are cut AFTER the corbel union, so they self-correct)
-assert (LOCK_X0 - LOCK_WELD
-        >= FRAMEJ_R + FRAMEJ_W / 2.0 + NOZZLE_D - 1e-9), \
-    "lock corbels sweep through the beam arc tenons on install"
+# world placement: as-drawn base plane (LOCK_X0) → the −y beam's +x
+# flank; as-drawn flank edge (FRAME_RIB/2) → the beam's outer end
+LOCK_SHIFT_X = FRAME_RIB / 2.0 - LOCK_X0
+LOCK_SHIFT_Y = -FRAME_R_OUT - FRAME_RIB / 2.0
+# the −y arm's screw pad: its outboard edge, in the stack's LOCAL y
+_PAD_OUT_R   = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+                + MOUNT_PAD_W / 2.0)               # ≈75.9 — along the arm
+LOCK_NOTCH_Y = (FRAME_R_OUT + FRAME_RIB / 2.0
+                - (_PAD_OUT_R + LOCK_SWEEP_CLR))   # ≈11.8 (local) — corbel
+                                                   # keeps full height inboard
+                                                   # of this; a 45 falls away
+                                                   # beyond it, under the pad
+LOCK_NOTCH_Z = FRAME_Z1 - MOUNT_PLATE_T - LOCK_SWEEP_CLR   # 6.2 — notch
+                                                   # shoulder: 0.2 under the
+                                                   # pad's underside (the pad
+                                                   # only moves AWAY during
+                                                   # the install sweep)
+# the notch caps the slot's +y wall (the pad edge lands ~0.03 outboard
+# of the wall's inner face, so full height cannot survive there) — but
+# the wall keeps its full 1.6 THICKNESS, its roof riding the notch 45;
+# require ≥ the tier of wall HEIGHT at the wall's far (+y) edge, the
+# 45's lowest point
+assert (LOCK_NOTCH_Z - (LOCK_HEAD_Y1 - LOCK_NOTCH_Y)
+        >= 2 * NOZZLE_D - 1e-9), \
+    "pad notch consumes the slot's +y wall (under 1.6 of height left)"
+assert LOCK_NOTCH_Y > LOCK_SLOT_Y1 - LOCK_SLOT_W - 1e-9, \
+    "pad notch reaches across the slot to the −y wall"
+assert LOCK_HEAD_Y1 - FRAME_RIB / 2.0 <= BEAM_SIZE + 1e-9, \
+    "lock stack overruns the beam's footprint along the arm"
+# the frame arc joint at this beam: its tenon spans the ENTRY half of
+# the crossing and its cavity stop ends TOP_JOINT_SEAT_CLR past the
+# beam centre — the corbels' weld face must stay clear of that (the
+# stack rides the joint's SOLID half; frame cuts also run after the
+# corbel unions, so an overlap could not close the channel anyway)
+assert (FRAME_RIB / 2.0 - LOCK_WELD
+        >= FRAMEJ_TEN_ARC - BEAM_SIZE / 2.0 + TOP_JOINT_SEAT_CLR
+        + NOZZLE_D - 1e-9), \
+    "lock corbel weld reaches the frame arc joint's cavity stop"
 
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
