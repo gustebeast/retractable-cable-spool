@@ -893,11 +893,13 @@ frame_top = _build_frame_top()
 horn_cap = heal(_HORN_CAP)
 
 # the TPU frame-lock pin (user #939, params LOCK block), modeled in
-# place at full insert: top flush with the frame face, tip proud under
-# the beam corbel's 45 (the removal grip). Free in z — the desk caps
-# +z once mounted; goes in from BELOW, after the mount rotation.
-lock_pin_tpu = _lock_place(_box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
-                                LOCK_SLOT_X0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
+# place at full insert: top flush with the frame face, −x face FLUSH
+# on the beam/arm wall (user #942 — the wall is the slot's fourth
+# side), tip LOCK_PIN_GRIP proud below the beam corbel's deepest edge
+# (the pliers grab). Free in z — the desk caps +z once mounted; goes
+# in from BELOW, after the mount rotation.
+lock_pin_tpu = _lock_place(_box(LOCK_X0,
+                                LOCK_X0 + LOCK_PIN_SQ,
                                 LOCK_SLOT_Y0 + LOCK_PIN_CLR,
                                 LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
                                 LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L))
