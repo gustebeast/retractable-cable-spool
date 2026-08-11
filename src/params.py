@@ -607,7 +607,9 @@ STUB_BOSS_D  = STUB_D + 4 * NOZZLE_D # 11.2 — inner-race seat shoulder (lands
 STUB_BOSS_Z1 = BOT_BRG_Z0          # boss shoulder top = inner race bottom
 STUB_Z1      = BOT_BRG_Z1          # stub tip flush with the bearing top
 STUB_FLARE   = 3 * NOZZLE_D          # 2.4 — 45° base flare (strength)
-STUB_TIP_CH  = NOZZLE_D              # 0.8 — 45° entry chamfer at the tip
+# (STUB_TIP_CH is RETIRED — user #945: the 0.8 entry chamfer stole
+# grip from the inner race; the stub runs full-Ø to a flat top at
+# STUB_Z1, the same −37 tip height)
 
 assert BOT_CONE_CAP_Z > BOT_SEAT_CONE_Z0 + 0.5, \
     "seat cone has no height before its cap — check the bearing z-chain"

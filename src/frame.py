@@ -61,7 +61,7 @@ from .params import (
     FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
     FLOOR_HUB_R, FLOOR_RING_RC,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
-    STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE, STUB_TIP_CH,
+    STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE,
     JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
@@ -621,9 +621,11 @@ def _floor():
     # STUB AXLE (user's redesign — replaces the 45° rest lip): the static
     # spindle for the separator's bottom 608 — shoulder boss up to the
     # inner race's seat plane (lands on the face annulus, like the top
-    # axle's lip), then the proven Ø7.95 slip shaft through the bore,
-    # 45° entry chamfer at the tip. 45° base flare for strength, inside
-    # the guide sleeve's bore (asserted).
+    # axle's lip), then the shaft at the 608's nominal bore, STRAIGHT to
+    # its FLAT tip (user #945: the 0.8 entry chamfer retired — full-
+    # cylinder grip on the inner race over the stub's whole reach; the
+    # upright print never needed the chamfer). 45° base flare for
+    # strength, inside the guide sleeve's bore (asserted).
     f = f.union(cyl(STUB_BOSS_D, STUB_BOSS_Z1 - FLOOR_Z0, z=FLOOR_Z0),
                 clean=False)
     f = f.union(cone_solid(d_bottom=STUB_BOSS_D + 2.0 * STUB_FLARE,
@@ -631,11 +633,6 @@ def _floor():
                            z_base=FLOOR_Z1), clean=False)
     f = f.union(cyl(STUB_D, STUB_Z1 - STUB_BOSS_Z1, z=STUB_BOSS_Z1),
                 clean=False)
-    tip = (cyl(STUB_D + 2.0, STUB_TIP_CH, z=STUB_Z1 - STUB_TIP_CH)
-           .cut(cone_solid(d_bottom=STUB_D,
-                           d_top=STUB_D - 2.0 * STUB_TIP_CH,
-                           h=STUB_TIP_CH, z_base=STUB_Z1 - STUB_TIP_CH)))
-    f = f.cut(tip, clean=False)
     return f
 
 
