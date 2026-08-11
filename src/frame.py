@@ -194,8 +194,8 @@ def _trim_to_bore(w, z_top):
 # fans/climbs; with the floor fused, nothing needs to pass below, so the
 # columns stand straight on the foot pad). Verticals + 45° ramps only →
 # −Z→+Z support-free. ────────────────────────────────────────────────────────
-_SB_Y0 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR         # 18.8 — side-column inner face
-_SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.0 — side-column outer face
+_SB_Y0 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR         # 19.0 — side-column inner face
+_SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.6 — side-column outer face
 # arch-turn start, PER SIDE (user: each fork sets its own roof — reusing
 # the ratchet's on the brake wasted ~19 of fork): the band's turn sits
 # _ARCH_CLR above that side's swept ceiling. RATCHET: the swing-invariant

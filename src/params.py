@@ -1105,12 +1105,17 @@ POST_OUT_T = snap(BEAM_SIZE / 2.0,
 BOSS_RING_W    = contact_rib_size(NOZZLE_D)      # 1.6 — thrust ring width & proud
 BOSS_BORE_ID   = PIN_SQ_S * math.sqrt(2.0) + 0.4   # 6.62 — clears the square's
                                                    # rotating envelope
-LEVER_SIDE_CLR = BOSS_RING_W + 0.2 # 1.8 — air each side of the lever plates
-LEVER_Y_IN     = BEAM_SIZE / 2.0 + LEVER_SIDE_CLR  # 7.0 — inner plate face
+LEVER_SIDE_CLR = BOSS_RING_W + 0.1 # 1.7 — ring + 0.1 air each side of the
+                                   # lever plates (user #944: was 0.2 —
+                                   # tightened by pulling the side COLUMNS
+                                   # in 0.2/side; lever and ring widths
+                                   # stay on their bead multiples, the
+                                   # plates ride 0.1 further inboard)
+LEVER_Y_IN     = BEAM_SIZE / 2.0 + LEVER_SIDE_CLR  # 6.9 — inner plate face
 RATCHET_LEV_Y0 = LEVER_Y_IN                        # ratchet plate on +Y side
-RATCHET_LEV_Y1 = LEVER_Y_IN + LEVER_T              # 17.0
+RATCHET_LEV_Y1 = LEVER_Y_IN + LEVER_T              # 17.3
 BRAKE_LEV_Y1   = -LEVER_Y_IN                       # brake plate on −Y side
-BRAKE_LEV_Y0   = -LEVER_Y_IN - LEVER_T             # −17.0
+BRAKE_LEV_Y0   = -LEVER_Y_IN - LEVER_T             # −17.3
 LEVER_PIVOT_X  = (BEAM_IR + BOSS_BORE_ID / 2.0 + BOSS_RING_W
                   + NOZZLE_D / 2.0)                  # 78.74 — v2's derivation
                                    # (rings flush at the beam's inner edge)
