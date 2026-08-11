@@ -67,6 +67,9 @@ _INTENDED = {
                                          # underside (cones ride FIT_CLR)
         ("screw_spacer", "frame_top"),   # inner face coplanar with the
                                          # arm flank (as the pad above it)
+        ("lock_pin_tpu", "frame_top"),   # pin rides FLUSH on the arm wall
+        ("lock_pin_tpu", "frame_bottom"),  # ... and the beam wall below it
+                                           # (the wall is the slot's 4th side)
         ("brake_pad_tpu", "brake_lever"),     # hook slide joint seated
         ("ratchet_pin", "frame_bottom"),      # keyed diamond bores
         ("brake_pin",   "frame_bottom"),

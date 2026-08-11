@@ -879,17 +879,22 @@ LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
                                    # coincident-face unions are OCC's bad
                                    # day; one bead, it also surfaces as the
                                    # little flank stub)
-LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.2 — slot square
-LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
-                                   # the slot + 1.6 walls BOTH sides
-                                   # (user's ≥1.6-around rule)
+LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.2 — slot y width
+                                   # (clearance both sides along the beam)
 LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
                                                    # (LOCK_SHIFT_X maps it
                                                    # onto the beam's flank)
-LOCK_X1      = LOCK_X0 + LOCK_BLK_D                # 91.23
-LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL               # 85.43
-LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 89.63 — leaves exactly
-                                                   # 1.6 +x of the slot
+# the slot opens AT the flank plane (user #942: the pin rides FLUSH on
+# the beam wall — the wall IS the slot's −x side, a 1.6 storey wall
+# there was redundant and left the pin floating 1.7 off the wall below
+# the corbels): pin flush in −x, LOCK_PIN_CLR on +x only
+LOCK_SLOT_X0 = LOCK_X0
+LOCK_SLOT_X1 = LOCK_X0 + LOCK_PIN_SQ + LOCK_PIN_CLR   # 4.1 deep in x
+LOCK_BLK_D   = (LOCK_SLOT_X1 - LOCK_SLOT_X0) + STRUCT_WALL   # 5.7 —
+                                   # protrusion depth: the slot + the 1.6
+                                   # wall on +x (user's ≥1.6 rule; −x is
+                                   # the beam wall itself)
+LOCK_X1      = LOCK_X0 + LOCK_BLK_D
 LOCK_SLOT_Y0 = FRAME_RIB / 2.0 + STRUCT_WALL       # 6.8 — slot y band sits
 LOCK_SLOT_Y1 = LOCK_SLOT_Y0 + LOCK_SLOT_W          # 11.0   inside the head
 LOCK_HEAD_Y1 = LOCK_SLOT_Y1 + STRUCT_WALL          # 12.6 — head/corbel +y face
@@ -898,9 +903,22 @@ LOCK_SWEEP_CLR = 0.2               # corbel roof under the jib head's swept
 LOCK_TOPB_Z1 = MOUNT_MATE_Z - LOCK_SWEEP_CLR       # 7.8 — top corbel roof at
                                                    # the frame face
 LOCK_BOTB_H  = 13 * NOZZLE_D       # 10.4 — beam corbel depth at the face
-LOCK_PIN_Z0  = -(LOCK_BOTB_H - STRUCT_WALL)        # −8.8 — pin bottom = the
-                                   # corbel underside at the slot's −x wall
-LOCK_PIN_L   = FRAME_Z1 - LOCK_PIN_Z0              # 19.2 — top flush with the
+# the MOUNT storey is a TRAPEZOID (user #942: cover more pin, better
+# grip): flat top at the frame face, underside FOLLOWING the top
+# corbel's 45 roof at LOCK_SWEEP_CLR — its slot walls grip the pin
+# from 10.4 down to ~2.3 instead of stopping at the 8.0 mating plane.
+# Printable for free: in the mount's flipped print that underside is
+# a print-TOP face. At the flank it lands exactly on MOUNT_MATE_Z
+# (= roof peak + clearance), so the head still meets the tail rib
+# flush; the 45-on-45 sweep only OPENS during install (tangential
+# motion at the −y beam is ±x, and the head enters displaced +x).
+LOCK_HEAD_ZB = LOCK_TOPB_Z1 - LOCK_BLK_D + LOCK_SWEEP_CLR   # 2.3 — head
+                                                   # underside at its +x face
+LOCK_PIN_GRIP = 5 * NOZZLE_D       # 4.0 — pin stub proud BELOW the beam
+                                   # corbel's deepest edge: the pliers
+                                   # grab for uninstall (user #942)
+LOCK_PIN_Z0  = -LOCK_BOTB_H - LOCK_PIN_GRIP        # −14.4 — pin bottom
+LOCK_PIN_L   = FRAME_Z1 - LOCK_PIN_Z0              # 24.8 — top flush with the
                                                    # frame face at full insert
 assert LOCK_TOPB_Z1 - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
     "top corbel's 45 roof leaves under 1.6 of pin engagement at the slot"

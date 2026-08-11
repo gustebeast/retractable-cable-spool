@@ -46,7 +46,7 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
     SPACER_H, SPACER_CONE_ENG, FIT_CLR,
-    LOCK_X0, LOCK_X1, LOCK_HEAD_Y1,
+    LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_HEAD_ZB,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
 )
@@ -197,27 +197,32 @@ def _build_mount():
     for axis_az in (0.0, 90.0, 180.0, 270.0):
         m = m.union(tail.rotate((0, 0, 0), (0, 0, 1), axis_az),
                     clean=False)
-    # TPU-LOCK jib HEAD (user #939/#941, params LOCK block): the −y
-    # beam's guide tail widens into a slotted head growing +x off the
-    # beam's flank — the TOP storey of the three-part lock stack
+    # TPU-LOCK jib HEAD (user #939/#941/#942, params LOCK block): the
+    # −y beam's guide tail widens into a slotted head growing +x off
+    # the beam's flank — the TOP storey of the three-part lock stack
     # (corbels on both frames below, frame.py). As-drawn geometry
-    # TRANSLATED into place (user: move, don't rotate). NO −x weld
-    # stub: past the flank plane is frame-arm material — the head
-    # welds through its real overlap with the tail rib (and this
-    # arm's screw pad), all mount material.
+    # TRANSLATED into place (user: move, don't rotate). TRAPEZOID
+    # section (user #942 — cover more of the pin): flat top at the
+    # frame face, underside riding the top corbel's 45 roof at
+    # LOCK_SWEEP_CLR, meeting the tail flush at MOUNT_MATE_Z on the
+    # flank; in the flipped print that underside is a print-TOP face.
+    # NO −x weld stub: past the flank plane is frame-arm material —
+    # the head welds through its real overlap with the tail rib (and
+    # this arm's screw pad), all mount material.
     m = m.union(
-        cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
-        .polyline([(LOCK_X0, FRAME_RIB / 2.0),
-                   (LOCK_X1, FRAME_RIB / 2.0),
-                   (LOCK_X1, LOCK_HEAD_Y1),
-                   (LOCK_X0, LOCK_HEAD_Y1)])
-        .close().extrude(FRAME_Z1 - MOUNT_MATE_Z)
-        .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
+        cq.Workplane("XZ")
+        .polyline([(LOCK_X0, FRAME_Z1), (LOCK_X1, FRAME_Z1),
+                   (LOCK_X1, LOCK_HEAD_ZB), (LOCK_X0, MOUNT_MATE_Z)])
+        .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0)
+        .translate((LOCK_SHIFT_X, LOCK_HEAD_Y1 + LOCK_SHIFT_Y, 0.0)),
+        clean=False)
     m = m.cut(
-        cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z - 1.0)
-        .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0), (LOCK_SLOT_X1, LOCK_SLOT_Y0),
-                   (LOCK_SLOT_X1, LOCK_SLOT_Y1), (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
-        .close().extrude((FRAME_Z1 - MOUNT_MATE_Z) + 2.0)
+        cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 1.0)
+        .polyline([(LOCK_SLOT_X0 - 1.0, LOCK_SLOT_Y0),
+                   (LOCK_SLOT_X1, LOCK_SLOT_Y0),
+                   (LOCK_SLOT_X1, LOCK_SLOT_Y1),
+                   (LOCK_SLOT_X0 - 1.0, LOCK_SLOT_Y1)])
+        .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
         .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
     for x, y in _PAD_XY:
         m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PLATE_T,
