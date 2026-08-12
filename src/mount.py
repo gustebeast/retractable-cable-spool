@@ -236,12 +236,17 @@ def _build_mount():
         .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0)
         .translate((LOCK_SHIFT_X, LOCK_HEAD_Y1 + LOCK_SHIFT_Y, 0.0)),
         clean=False)
+    # the slot is a CLOSED pocket in the head — the −x wall between the
+    # flank and the slot is the lock itself (user #948: the mount's
+    # uninstall motion here is +x, and that wall is what drives the
+    # pin against the frame corbels' +x walls; the #942 open-slot
+    # variant slid straight off the pin)
     m = m.cut(
         cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 1.0)
-        .polyline([(LOCK_SLOT_X0 - 1.0, LOCK_SLOT_Y0),
+        .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0),
                    (LOCK_SLOT_X1, LOCK_SLOT_Y0),
                    (LOCK_SLOT_X1, LOCK_SLOT_Y1),
-                   (LOCK_SLOT_X0 - 1.0, LOCK_SLOT_Y1)])
+                   (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
         .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
         .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
     for x, y in _PAD_XY:
