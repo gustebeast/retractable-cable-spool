@@ -820,38 +820,48 @@ MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
 # the countersink seat, recessed MOUNT_SCREW_SEAT along the axis so the
 # TILTED head disc sits fully inside the pad (its outboard rim lands
 # flush with the underside); the Ø4 shaft then climbs to the wood face
-# staying ≥ one bead inside the pad's INBOARD wall — past that wall is
-# the frame arm. The pad grows ACROSS the arm (MOUNT_PAD_LY, from the
-# flank outward) to house the tilted bore; ALONG the arm it keeps one
-# bead either side of the bore.
+# staying inside the pad's INBOARD wall — past that wall is the frame
+# arm. EVERY boss wall is sized to STRUCT_WALL (1.6, two beads — user
+# #971: the first tilted cut left one-bead walls). In a print slice the
+# tilted bore and shaft read r/cos(tilt) wide ACROSS the arm, so: the
+# screw entry moves out until the shaft keeps 1.6 to the flank at the
+# wood face, the pad grows across the arm until the bore keeps 1.6 to
+# the outboard face at the underside, and along the arm the pad keeps
+# 1.6 either side of the bore.
 MOUNT_SCREW_TILT_DEG = 30.0
 MOUNT_SCREW_BORE_D = WOOD_SCREW_HEAD_D + 2 * FIT_CLR   # 9.6 — head-pass bore
 MOUNT_SCREW_SEAT = (WOOD_SCREW_HEAD_D / 2.0
                     * math.tan(math.radians(MOUNT_SCREW_TILT_DEG)))
                                    # 2.68 — countersink base recess (axial)
-MOUNT_PAD_W   = snap(MOUNT_SCREW_BORE_D + 2 * NOZZLE_D, NOZZLE_D, "up")
-                                   # 11.2 — pad ALONG the arm (bore + beads)
-MOUNT_PAD_LY  = 19 * NOZZLE_D        # 15.2 — pad ACROSS the arm, flank outward
-MOUNT_PAD_SCREW_Y = 11 * NOZZLE_D    # 8.8 — screw entry (at the underside)
-                                   # off the arm flank
 _SCREW_T = math.tan(math.radians(MOUNT_SCREW_TILT_DEG))
 _SCREW_C = math.cos(math.radians(MOUNT_SCREW_TILT_DEG))
+MOUNT_PAD_W   = snap(MOUNT_SCREW_BORE_D + 2 * STRUCT_WALL, NOZZLE_D, "up")
+                                   # 12.8 — pad ALONG the arm
+MOUNT_PAD_SCREW_Y = snap(STRUCT_WALL + WOOD_SCREW_SHAFT_D / 2.0 / _SCREW_C
+                         + MOUNT_PAD_H * _SCREW_T, NOZZLE_D, "up")
+                                   # 9.6 — screw entry (at the underside)
+                                   # off the arm flank
+MOUNT_PAD_LY  = snap(MOUNT_PAD_SCREW_Y + MOUNT_SCREW_BORE_D / 2.0 / _SCREW_C
+                     + STRUCT_WALL, NOZZLE_D, "up")
+                                   # 16.8 — pad ACROSS the arm, flank outward
 MOUNT_SCREW_WOOD_Y = (BEAM_SIZE / 2.0 + MOUNT_PAD_SCREW_Y
-                      - MOUNT_PAD_H * _SCREW_T)     # ≈ 8.5 — where the shaft
+                      - MOUNT_PAD_H * _SCREW_T)     # ≈ 9.3 — where the shaft
                                    # enters the wood, off the arm's axis
 assert (MOUNT_PAD_SCREW_Y - MOUNT_PAD_H * _SCREW_T
-        - WOOD_SCREW_SHAFT_D / 2.0 / _SCREW_C >= NOZZLE_D - 1e-9), \
-    "tilted shaft breaks out of the pad's inboard wall at the wood face"
+        - WOOD_SCREW_SHAFT_D / 2.0 / _SCREW_C >= STRUCT_WALL - 1e-9), \
+    "tilted shaft leaves under 1.6 of inboard wall at the wood face"
 assert (MOUNT_PAD_LY - (MOUNT_PAD_SCREW_Y + MOUNT_SCREW_BORE_D / 2.0 / _SCREW_C)
-        >= NOZZLE_D - 1e-9), \
-    "tilted head bore breaks out of the pad's outboard wall"
+        >= STRUCT_WALL - 1e-9), \
+    "tilted head bore leaves under 1.6 of outboard wall"
+assert (MOUNT_PAD_W - MOUNT_SCREW_BORE_D) / 2.0 >= STRUCT_WALL - 1e-9, \
+    "head bore leaves under 1.6 of wall along the arm"
 assert ((MOUNT_SCREW_SEAT + WOOD_SCREW_HEAD_H) * _SCREW_C + 2 * NOZZLE_D
         <= MOUNT_PAD_H + 1e-9), \
     "tilted countersink cone reaches the wood face"
 # screw pads HUG THE AXES (user: the screws must land on a wooden BEAM
 # running along x OR y — use whichever pad pair matches the beam; the
 # beam just has to be wide enough for both screws of the pair —
-# the tilted screws enter the wood ~±8.5 off-axis, MOUNT_SCREW_WOOD_Y). The pads sit at ZERO gap: seated, each pad's inner
+# the tilted screws enter the wood ~±9.3 off-axis, MOUNT_SCREW_WOOD_Y). The pads sit at ZERO gap: seated, each pad's inner
 # edge lands FLAT ON its arm's flank — the pads ARE the seating stop
 # (user's call). The arc joints keep TOP_JOINT_SEAT_CLR (0.15) at
 # their stop ends, so the joinery never bottoms out first. Pads sit
@@ -884,14 +894,16 @@ MOUNT_TAIL_TIP_X = FRAME_R_OUT + snap(MOUNT_COUCH_SETBACK, NOZZLE_D, "up")
                                    # the set-back (#959: the wider pad did)
 MOUNT_TAIL_VIS = MOUNT_TAIL_TIP_X - _PAD_EDGE_X    # ≈9.8 past the pad edge
 assert MOUNT_TAIL_TIP_X - FRAME_R_OUT >= MOUNT_COUCH_SETBACK - 1e-9,     "guide tails end inside the rotate-on set-back"
-MOUNT_PAD_INSET_MY = NOZZLE_D      # 0.8 — the −Y ARM's pad (and its screw)
-                                   # slides ONE BEAD inboard along its beam
-                                   # (#947: the DEEP pad's countersink mouth
-                                   # must clear the TPU lock's corbel band +
-                                   # sweep clearance; the flank edge — the
-                                   # seating stop — is untouched, and one
-                                   # screw 0.8 off the ring line is nothing
-                                   # to a wood beam)
+MOUNT_PAD_INSET_MY = 3 * NOZZLE_D  # 2.4 — the −Y ARM's pad (and its screw)
+                                   # slides inboard along its beam until
+                                   # its outboard edge CLEARS the TPU lock's
+                                   # top corbel by the sweep clearance
+                                   # (#971: the two-bead boss left no room
+                                   # for the old wedge relief over the
+                                   # corbel — asserted in the LOCK block;
+                                   # the flank edge — the seating stop — is
+                                   # untouched, and 2.4 off the ring line is
+                                   # nothing to a wood beam)
 assert TOP_JOINT_SEAT_CLR > 0.0, \
     "the pads-stop-first scheme needs a positive joint seat clearance"
 assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE_D - 1e-9, \
@@ -957,14 +969,15 @@ MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 # Dims below stay in the AS-DRAWN (+x-arm) frame; builders translate
 # by (LOCK_SHIFT_X, LOCK_SHIFT_Y).
 LOCK_PIN_SQ  = 5 * NOZZLE_D        # 4.0 — square pin section (95A TPU)
-LOCK_PIN_CLR = 0.1                 # per-side, all three hosts (TPU snug —
-                                   # PIN_SQ_FRAME_CLR's proven value)
+LOCK_PIN_CLR = 0.15                # per-side, all three hosts — 4.3 sq
+                                   # slots (user #972: the 0.1 / 4.2 fit
+                                   # printed too tight to insert)
 LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
                                    # host (a real shared volume —
                                    # coincident-face unions are OCC's bad
                                    # day; one bead, it also surfaces as the
                                    # little flank stub)
-LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.2 — slot y width
+LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.3 — slot y width
                                    # (clearance both sides along the beam)
 LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
                                                    # (LOCK_SHIFT_X maps it
@@ -978,7 +991,7 @@ LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
 # braces on the frame corbels' +x walls). The pin rides 1.6 off the
 # beam wall again, clearance all around.
 LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL
-LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 4.2 sq slot
+LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 4.3 sq slot
 LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
                                    # the slot + 1.6 walls BOTH sides
                                    # (the −x one is the LOCK)
@@ -1048,18 +1061,15 @@ assert (LOCK_NOTCH_Z - (LOCK_HEAD_Y1 - LOCK_NOTCH_Y)
     "pad notch consumes the slot's +y wall (under 1.6 of height left)"
 assert LOCK_NOTCH_Y > LOCK_SLOT_Y1 - LOCK_SLOT_W - 1e-9, \
     "pad notch reaches across the slot to the −y wall"
-# the −y arm's DEEP pad (#947) vs the lock's top corbel: the pad's
-# outboard strip — past the countersink mouth's tangent plane — keeps
-# the OLD 4.0-plate underside over the corbel and follows the head's
-# 45 beyond it (mount.py cuts the strip with a wedge); the strip's
-# face stays ≥ the sweep clearance off the corbel's +y face, and the
-# pad only moves AWAY from the stack during the install sweep
-LOCK_PAD_NOTCH_Y_W = -(_PAD_OUT_R - MOUNT_PAD_W / 2.0
-                       + MOUNT_SCREW_BORE_D / 2.0)  # the head-bore mouth's
-                                                    # tangent plane
-assert (LOCK_PAD_NOTCH_Y_W - (LOCK_SHIFT_Y + LOCK_HEAD_Y1)
+# the −y arm's DEEP pad vs the lock's top corbel (#971): the pad ends
+# ≥ the sweep clearance INBOARD of the corbel's face, so it never
+# overhangs the lock stack — the mount's old wedge relief is retired,
+# and the corbel's pad notch above derives to nothing (LOCK_NOTCH_Y
+# lands past LOCK_HEAD_Y1). The pad only moves AWAY from the stack
+# during the install sweep.
+assert (-(LOCK_SHIFT_Y + LOCK_HEAD_Y1) - _PAD_OUT_R
         >= LOCK_SWEEP_CLR - 1e-9), \
-    "deep-pad strip face inside the corbel's sweep clearance"
+    "the −y arm's screw pad reaches into the lock corbel's sweep clearance"
 assert LOCK_HEAD_Y1 - FRAME_RIB / 2.0 <= BEAM_SIZE + 1e-9, \
     "lock stack overruns the beam's footprint along the arm"
 # the frame arc joint at this beam: its tenon spans the ENTRY half of

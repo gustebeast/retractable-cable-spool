@@ -47,7 +47,7 @@ from .params import (
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
-    MOUNT_PAD_H, MOUNT_PAD_INSET_MY, LOCK_PAD_NOTCH_Y_W,
+    MOUNT_PAD_H, MOUNT_PAD_INSET_MY,
     LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_HEAD_ZB,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
@@ -210,21 +210,8 @@ def _build_mount():
     pad = _pad_proto()
     for base_az in (0.0, 90.0, 180.0, 270.0):
         m = m.union(_site_place(pad, base_az), clean=False)
-    # the −y arm's deep pad vs the TPU lock's top corbel (params
-    # LOCK_PAD_NOTCH comment): its outboard strip keeps the old
-    # 4.0-plate underside and follows the jib head's 45 outward — the
-    # wedge's 45 matches the corbel roof, so the relief only OPENS
-    # during the install sweep, exactly like the head's underside
-    m = m.cut(
-        cq.Workplane("XZ")
-        .polyline([(4.0, FRAME_Z1 - MOUNT_PLATE_T),
-                   (FRAME_RIB / 2.0 + (MOUNT_MATE_Z
-                                       - (FRAME_Z1 - MOUNT_PLATE_T)),
-                    FRAME_Z1 - MOUNT_PLATE_T),
-                   (FRAME_RIB / 2.0 + MOUNT_MATE_Z, 0.0),
-                   (4.0, 0.0)])
-        .close().extrude(MOUNT_PAD_W + 1.0)
-        .translate((0.0, LOCK_PAD_NOTCH_Y_W, 0.0)), clean=False)
+    # (the −y pad's wedge relief over the TPU lock corbel is RETIRED —
+    # #971: that pad is inset clear of the lock stack instead, params)
     # GUIDE TAILS (user, corrected #880: AXIS-ALIGNED, hugging the arm's
     # flank — not radial at the pad's offset azimuth): a 2.4 × 2.4 bar
     # running parallel to the wood beam from each pad's outboard end to
@@ -233,7 +220,9 @@ def _build_mount():
     # along the arm-flank plane the pad seats against. Screw the bare
     # mount to the beam and the tail tips mark where the assembled frame
     # reaches — or, on the couch, where the front beam must sit.
-    x0 = _PAD_CX + MOUNT_PAD_W / 2.0 - 0.5         # buried into the pad
+    # buried into EVERY pad — the −y one is inset MOUNT_PAD_INSET_MY, and
+    # its tail is what welds the lock's jib head back to the ring
+    x0 = _PAD_CX + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY - 0.5
     # tails flush along the CCW arm flank now — the flank the pads seat
     # against since the #938 hand flip
     tail = (cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
