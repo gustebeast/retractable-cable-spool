@@ -61,10 +61,10 @@ SPRING_STRIP_T   = 0.2       # strip steel thickness (v2-measured)
 SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 
 # ── Cable (hardware) ─────────────────────────────────────────────────────────
-CABLE_D        = 3.85        # working-cable Ø (user's measurement,
-                             # bumped from 3.0 at #883)
-CABLE_CAPACITY = 1000.0      # 1 m of wrapped cable (user's call at #884;
-                             # was 6 ft / 1828.8)
+CABLE_D        = 3.3         # working-cable Ø (user's measurement,
+                             # 3.85 → 3.3 at #952; was 3.0 before #883)
+CABLE_CAPACITY = 7 * 304.8   # 7 ft / 2133.6 of wrapped cable (user's call
+                             # at #952; was 1 m since #884, 6 ft before)
 
 # ── Axle (rotating arbor) ────────────────────────────────────────────────────
 AXLE_D       = 8.0                   # nominal — the 608's bore
@@ -85,6 +85,19 @@ FRAME_RIB   = 13 * NOZZLE_D    # 10.4 — plus-arm section (was v2's 10.0 even;
 # with the beams' outer faces, v2's pattern.)
 FRAME_Z0 = 0.0               # frame underside — the v3 z datum
 FRAME_Z1 = FRAME_Z0 + FRAME_RIB
+
+# ── COUCH VERSION (user #954): the couch's front beam (COUCH_* block
+# below) catches the ratchet lever at ~half its pull; the fix is to hang
+# the whole assembly LOWER off the wood. frame_top alone grows a slab on
+# its +z end — the mount channels, anchor wall, bearing pocket and lock
+# slot follow the new top face; every other printed part is untouched
+# (the mount ring simply seats COUCH_TOP_PAD higher in the assembly).
+# 13 beads = 10.4 (the user's 10 snapped up onto the grid; the lever
+# needs ≥ 7.0 to clear at 20°). False = the desk build, pad 0.
+COUCH_VERSION = True
+COUCH_TOP_PAD = 13 * NOZZLE_D if COUCH_VERSION else 0.0   # 10.4 / 0
+FRAME_TOP_Z1  = FRAME_Z1 + COUCH_TOP_PAD   # frame_top's ACTUAL top face
+                                           # (the wood / mount plane)
 
 # Bearing pocket: drops in from the TOP onto a lip UNDER the outer race —
 # the hanging load (axle + spring + future drum) pulls the bearing DOWN
@@ -607,6 +620,15 @@ STUB_BOSS_D  = STUB_D + 4 * NOZZLE_D # 11.2 — inner-race seat shoulder (lands
 STUB_BOSS_Z1 = BOT_BRG_Z0          # boss shoulder top = inner race bottom
 STUB_Z1      = BOT_BRG_Z1          # stub tip flush with the bearing top
 STUB_FLARE   = 3 * NOZZLE_D          # 2.4 — 45° base flare (strength)
+# HUB WEBS (user #970 — stiffen frame_bottom's centre): N_HUB_WEB radial
+# ribs inside the guide sleeve's bore, tying the stub boss to the sleeve
+# wall and the floor plate, at the BEAM azimuths so they continue the
+# beam-wide floor spokes' load path. Vertical walls in the upright
+# print; they top out with the sleeve, 2.4 under the rotating disk and
+# well under the bottom 608 (which sits above the sleeve top).
+N_HUB_WEB  = 4
+HUB_WEB_W  = FLOOR_SPOKE_W           # 2.4 — spoke section
+HUB_WEB_Z1 = SLEEVE_Z1               # flush with the sleeve top
 # (STUB_TIP_CH is RETIRED — user #945: the 0.8 entry chamfer stole
 # grip from the inner race; the stub runs full-Ø to a flat top at
 # STUB_Z1, the same −37 tip height)
@@ -754,13 +776,18 @@ MOUNT_RING_R = snap(FRAMEJ_R - FRAMEJ_W / 2.0 - JOINT_CLR
                                    # pinned 71.2 — DERIVED since #884 so
                                    # capacity resizes flow through; the
                                    # keep-out stays asserted in frame.py)
-MOUNT_RING2_R = snap(MOUNT_RING_R / 2.0,
-                     NOZZLE_D)       # INNER ring at half the diameter, on the
+MOUNT_RING2_R = min(snap(MOUNT_RING_R / 2.0, NOZZLE_D),
+                    snap(ANCH_IR - MOUNT_TEN_W / 2.0 - JOINT_CLR
+                         - 2 * NOZZLE_D, NOZZLE_D, "down"))
+                                   # INNER ring at half the diameter, on the
                                    # bead grid (derived since #884)
                                    # (user: one ring is flimsy) — its own
-                                   # arc joinery in all four arms; its
-                                   # cavities stop exactly one 1.6 web
-                                   # inboard of the +x anchor rib (assert)
+                                   # arc joinery in all four arms; CAPPED
+                                   # so its cavities keep the 1.6 web
+                                   # inboard of the +x anchor rib (the
+                                   # 7 ft capacity at #952 grew the frame
+                                   # past the half-diameter fit: 38.4 vs
+                                   # the 36.0 cap; assert below)
 MOUNT_SPINE_W = 3 * NOZZLE_D         # 2.4 — ring section (user: one square
                                    # 2.4 x 2.4 for rings/spokes/tails; the
                                    # tenon stem matches it via cadkit's
@@ -785,11 +812,46 @@ MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
                                    # their own circles; only the spokes
                                    # and pads move over the plan, and the
                                    # quadrants are 90° wide vs ~17° travel)
-MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE_D     # 10.9 — square screw pads
+# ANGLED SCREWS (user #959): each screw drives MOUNT_SCREW_TILT_DEG
+# INWARD — toward the arm its pad hugs — so its wood entry lands well
+# inside a narrow beam (a vertical screw at the old pad centre sat
+# ~4.3 off a 30 beam's edge). Tilted geometry: a head-pass BORE
+# (Ø HEAD + 2·FIT) rides the tilted axis from the pad's underside up to
+# the countersink seat, recessed MOUNT_SCREW_SEAT along the axis so the
+# TILTED head disc sits fully inside the pad (its outboard rim lands
+# flush with the underside); the Ø4 shaft then climbs to the wood face
+# staying ≥ one bead inside the pad's INBOARD wall — past that wall is
+# the frame arm. The pad grows ACROSS the arm (MOUNT_PAD_LY, from the
+# flank outward) to house the tilted bore; ALONG the arm it keeps one
+# bead either side of the bore.
+MOUNT_SCREW_TILT_DEG = 30.0
+MOUNT_SCREW_BORE_D = WOOD_SCREW_HEAD_D + 2 * FIT_CLR   # 9.6 — head-pass bore
+MOUNT_SCREW_SEAT = (WOOD_SCREW_HEAD_D / 2.0
+                    * math.tan(math.radians(MOUNT_SCREW_TILT_DEG)))
+                                   # 2.68 — countersink base recess (axial)
+MOUNT_PAD_W   = snap(MOUNT_SCREW_BORE_D + 2 * NOZZLE_D, NOZZLE_D, "up")
+                                   # 11.2 — pad ALONG the arm (bore + beads)
+MOUNT_PAD_LY  = 19 * NOZZLE_D        # 15.2 — pad ACROSS the arm, flank outward
+MOUNT_PAD_SCREW_Y = 11 * NOZZLE_D    # 8.8 — screw entry (at the underside)
+                                   # off the arm flank
+_SCREW_T = math.tan(math.radians(MOUNT_SCREW_TILT_DEG))
+_SCREW_C = math.cos(math.radians(MOUNT_SCREW_TILT_DEG))
+MOUNT_SCREW_WOOD_Y = (BEAM_SIZE / 2.0 + MOUNT_PAD_SCREW_Y
+                      - MOUNT_PAD_H * _SCREW_T)     # ≈ 8.5 — where the shaft
+                                   # enters the wood, off the arm's axis
+assert (MOUNT_PAD_SCREW_Y - MOUNT_PAD_H * _SCREW_T
+        - WOOD_SCREW_SHAFT_D / 2.0 / _SCREW_C >= NOZZLE_D - 1e-9), \
+    "tilted shaft breaks out of the pad's inboard wall at the wood face"
+assert (MOUNT_PAD_LY - (MOUNT_PAD_SCREW_Y + MOUNT_SCREW_BORE_D / 2.0 / _SCREW_C)
+        >= NOZZLE_D - 1e-9), \
+    "tilted head bore breaks out of the pad's outboard wall"
+assert ((MOUNT_SCREW_SEAT + WOOD_SCREW_HEAD_H) * _SCREW_C + 2 * NOZZLE_D
+        <= MOUNT_PAD_H + 1e-9), \
+    "tilted countersink cone reaches the wood face"
 # screw pads HUG THE AXES (user: the screws must land on a wooden BEAM
 # running along x OR y — use whichever pad pair matches the beam; the
-# beam just has to be wide enough for both screws of the pair, ~±10.7
-# off-axis here). The pads sit at ZERO gap: seated, each pad's inner
+# beam just has to be wide enough for both screws of the pair —
+# the tilted screws enter the wood ~±8.5 off-axis, MOUNT_SCREW_WOOD_Y). The pads sit at ZERO gap: seated, each pad's inner
 # edge lands FLAT ON its arm's flank — the pads ARE the seating stop
 # (user's call). The arc joints keep TOP_JOINT_SEAT_CLR (0.15) at
 # their stop ends, so the joinery never bottoms out first. Pads sit
@@ -802,8 +864,26 @@ MOUNT_PAD_W   = WOOD_SCREW_HEAD_D + 2 * NOZZLE_D     # 10.9 — square screw pad
 # retract-slam torque presses them tighter, and the slow, hand-damped
 # pull-out is what friction has to hold instead of the slam.
 MOUNT_PAD_AZ_OFF = math.degrees(math.asin(
-    (BEAM_SIZE / 2.0 + MOUNT_PAD_W / 2.0) / MOUNT_RING_R))   # ≈ 8.6°
+    (BEAM_SIZE / 2.0 + MOUNT_PAD_LY / 2.0) / MOUNT_RING_R))   # ≈ 9.6°
 MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
+# GUIDE-TAIL TIP (user #958): the tails run from each pad's outboard
+# edge along the arm flank; their tips are the install reference — the
+# rotate-on install needs the face set back
+# MOUNT_COUCH_SETBACK (3.06 probed: frame_bottom's lever-mount corner
+# sweeping on a ~91 radius at the mate angle) from the front beam — so
+# the visible tail grows from the 6.37 to-the-face length to 12 beads
+# (9.6), and its tip is where the front beam goes.
+_PAD_EDGE_X = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+               + MOUNT_PAD_W / 2.0)                # ≈81.5 — pad outboard edge
+MOUNT_COUCH_SETBACK = 3.06         # probed clearance (#958), the floor
+MOUNT_TAIL_TIP_X = FRAME_R_OUT + snap(MOUNT_COUCH_SETBACK, NOZZLE_D, "up")
+                                   # face + 3.2 (4 beads), EVERY build (user
+                                   # #962: only frame_top's height is couch-
+                                   # gated) — anchored to the FACE, not the
+                                   # pad edge, so pad changes can't erode
+                                   # the set-back (#959: the wider pad did)
+MOUNT_TAIL_VIS = MOUNT_TAIL_TIP_X - _PAD_EDGE_X    # ≈9.8 past the pad edge
+assert MOUNT_TAIL_TIP_X - FRAME_R_OUT >= MOUNT_COUCH_SETBACK - 1e-9,     "guide tails end inside the rotate-on set-back"
 MOUNT_PAD_INSET_MY = NOZZLE_D      # 0.8 — the −Y ARM's pad (and its screw)
                                    # slides ONE BEAD inboard along its beam
                                    # (#947: the DEEP pad's countersink mouth
@@ -818,14 +898,15 @@ assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / 2.0 >= 2 * NOZZLE_D - 1e-9,
     "mount cavity leaves the arm's side walls under the 1.6 tier"
 assert (BEAM_SIZE - (MOUNT_TEN_W + 2 * JOINT_CLR)) / BEAM_SIZE >= 0.49, \
     "mount cavities eat more than ~half the arm's width (user's bound)"
-assert (MOUNT_RING_R + MOUNT_PAD_W * math.sqrt(2.0) / 2.0
+assert (math.hypot(MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+                   + MOUNT_PAD_W / 2.0, BEAM_SIZE / 2.0 + MOUNT_PAD_LY)
         <= FRAME_R_OUT - 1e-9), \
     "mount screw pads poke past the frame's plan silhouette"
 assert (ANCH_IR - (MOUNT_RING2_R + MOUNT_TEN_W / 2.0 + JOINT_CLR)
         >= 2 * NOZZLE_D - 1e-9), \
     "inner mount ring's cavities reach the +x anchor rib"
 assert abs(MOUNT_RING_R * math.sin(math.radians(MOUNT_PAD_AZ_OFF))
-           - MOUNT_PAD_W / 2.0 - BEAM_SIZE / 2.0) < 1e-6, \
+           - MOUNT_PAD_LY / 2.0 - BEAM_SIZE / 2.0) < 1e-6, \
     "seated pads must land exactly on the arm flanks (they are the stop)"
 # annular V-GROOVE for the spine over each arm's stop-wall zone (the
 # groove's floor is the roof of the slot in the frame's +z→−z print —
@@ -926,8 +1007,12 @@ LOCK_PIN_GRIP = 5 * NOZZLE_D       # 4.0 — pin stub proud BELOW the beam
                                    # wall: the pliers grab (user #942)
 LOCK_PIN_Z0  = (-(LOCK_BOTB_H - STRUCT_WALL)
                 - LOCK_PIN_GRIP)                   # −12.8 — pin bottom
-LOCK_PIN_L   = FRAME_Z1 - LOCK_PIN_Z0              # 23.2 — top flush with the
-                                                   # frame face at full insert
+LOCK_PIN_L   = FRAME_TOP_Z1 - LOCK_PIN_Z0          # 23.2 (33.6 couch) — top
+                                                   # flush with frame_top's
+                                                   # ACTUAL face at full insert
+                                                   # (follows COUCH_TOP_PAD:
+                                                   # the pin must still reach
+                                                   # the mount head, #955)
 assert LOCK_TOPB_Z1 - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
     "top corbel's 45 roof leaves under 1.6 of pin engagement at the slot"
 assert LOCK_BOTB_H - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
@@ -970,8 +1055,8 @@ assert LOCK_NOTCH_Y > LOCK_SLOT_Y1 - LOCK_SLOT_W - 1e-9, \
 # face stays ≥ the sweep clearance off the corbel's +y face, and the
 # pad only moves AWAY from the stack during the install sweep
 LOCK_PAD_NOTCH_Y_W = -(_PAD_OUT_R - MOUNT_PAD_W / 2.0
-                       + WOOD_SCREW_HEAD_D / 2.0)   # ≈ −75.07 — the pocket
-                                                    # mouth's tangent plane
+                       + MOUNT_SCREW_BORE_D / 2.0)  # the head-bore mouth's
+                                                    # tangent plane
 assert (LOCK_PAD_NOTCH_Y_W - (LOCK_SHIFT_Y + LOCK_HEAD_Y1)
         >= LOCK_SWEEP_CLR - 1e-9), \
     "deep-pad strip face inside the corbel's sweep clearance"
@@ -986,6 +1071,32 @@ assert (FRAME_RIB / 2.0 - LOCK_WELD
         >= FRAMEJ_TEN_ARC - BEAM_SIZE / 2.0 + TOP_JOINT_SEAT_CLR
         + NOZZLE_D - 1e-9), \
     "lock corbel weld reaches the frame arc joint's cavity stop"
+
+# ── COUCH beams (hardware — the new install site, assembly-only dummies) ──────
+# A 30 sq TOP beam running along X (the mount screws to it), and a FRONT
+# beam running along Y that sits flush against the assembly's +x face
+# (levers + cable exit). Modelled true (user-measured); placement in
+# dummies.py.
+COUCH_TOP_BEAM_W  = 30.0           # top beam section (y and z), runs along x
+COUCH_FRONT_T     = 38.0           # front beam thickness (x)
+COUCH_FRONT_H     = 77.0           # front beam height (z)
+# the X-axis pads' screws must land on the 30 top beam with the shaft
+# fully inside its width (the tilt is what buys this, #959)
+assert (MOUNT_SCREW_WOOD_Y + WOOD_SCREW_SHAFT_D / 2.0
+        <= COUCH_TOP_BEAM_W / 2.0 - 1e-9), \
+    "mount screws enter the wood outside the couch top beam's width"
+# CABLE-EXIT +x EXTENT (user #963/#965, couch-gated): the tunnel
+# block's +x face. Desk: the frame's outer radius (flush with the frame
+# face). Couch: the 10.4 tunnel block CENTRED under the FRONT BEAM —
+# the frame sits MOUNT_COUCH_SETBACK behind the beam (the guide-tail
+# tips), the beam is COUCH_FRONT_T thick, and the exit runs out under
+# it to its mid-thickness. frame.py's horn support (footing, 45° strut,
+# bed foot, brace) renders itself from this one number — see _cable_horn.
+HORN_X1 = ((MOUNT_TAIL_TIP_X + (COUCH_FRONT_T + BEAM_SIZE) / 2.0)
+           if COUCH_VERSION else FRAME_R_OUT)  # ≈115.3 couch / 87.9 desk
+                                   # (BEAM_SIZE = HORN_BLOCK_L, the tunnel
+                                   # block's x length — defined below)
+assert HORN_X1 >= FRAME_R_OUT - 1e-9, "cable exit pulled inside the frame face"
 
 # ── Levers (v2's design "worked well" — constants re-anchored to the v3
 # bands; the lever PARTS + kinematics suite land next round, these drive
@@ -1177,11 +1288,24 @@ RATCHET_OPEN_CLR = 3 * NOZZLE_D      # 2.4 — the OVER-PULL STOP pose (user):
                                    # no more levering the axle by yanking
                                    # the ratchet (RATCHET_OPEN_DEG derives
                                    # in levers.py; shelf in frame.py)
-HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −69.5 — grip-disc
+HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −75.1 — grip-disc
                                    # centre placed so the handles' round
                                    # ends land FLUSH with the assembly's
                                    # −z extent (user's call); pulling only
                                    # raises them
+# BENT HANDLES (user #966 — easier to reach; COUCH-gated, #967): below
+# the pivots the handles no longer drop straight to the grip. Each runs vertically
+# from its pivot down to LEVER_BEND_Z — the BRAKE pivot's own height,
+# so the brake's bend is AT its axle and the ratchet's vertical stretch
+# ends level with it — then 45° toward +x −z to the unchanged
+# HANDLE_Z_BOT. Both 45° runs start from the same (x, z), so both grip
+# discs land at the same spot, HANDLE_X_BOT.
+LEVER_BEND_Z = BRAKE_PIVOT_Z                     # −49.5 — the shared knee
+HANDLE_X_BOT = (LEVER_PIVOT_X + (LEVER_BEND_Z - HANDLE_Z_BOT)
+                if COUCH_VERSION else LEVER_PIVOT_X)   # ≈108.4 couch —
+                                   # grip-disc centre x (45°: the run's
+                                   # drop equals its reach); DESK: under
+                                   # the pivot = the straight handle
 RATCHET_PHASE_DEG = math.degrees(math.asin(
     ((RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0) / (RIM_OD / 2.0)))   # ≈ 9.95 —
                                    # one catch face lands at the pawl's

@@ -39,7 +39,7 @@ from .params import (
     SEP_Z0, SEP_Z1, BRAKE_H, R_OUT_COIL, CABLE_D,
     LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
     RATCHET_LEV_Y0, RATCHET_LEV_Y1, BRAKE_LEV_Y0, BRAKE_LEV_Y1,
-    RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HANDLE_Z_BOT,
+    RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HANDLE_Z_BOT, LEVER_BEND_Z, HANDLE_X_BOT,
     PIN_SQ_S, PIN_SQ_LEVER_CLR, LEVER_BOSS_OD,
     PIN_PRETWIST_DEG, PIN_KEY_BASE_DEG, BRAKE_RUBBER_T,
     PAD_JOINT_CLR, PAD_SPEC, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
@@ -90,11 +90,50 @@ def _pivot_hole(pivot_x, pivot_z, y_outer, y_inner):
                     PIN_KEY_BASE_DEG - PIN_PRETWIST_DEG))
 
 
+def _handle(y0, y1, z_top):
+    """The HANDLE plate below z_top (params BENT HANDLES, user #966): a
+    LEVER_HANDLE_W-wide vertical bar on the pivot's x from z_top down
+    to the shared knee LEVER_BEND_Z, a round knee, then a bar of the
+    same width running to the grip disc at (HANDLE_X_BOT, HANDLE_Z_BOT)
+    — 45° toward +x −z in the couch version, straight down on the desk
+    build (params). For the brake z_top is above its
+    pivot and the knee IS the pivot (the boss covers it); the ratchet's
+    vertical stretch ends level with the brake's axle. In the plate's
+    along-y print every face here is a vertical wall."""
+    y_len = y1 - y0
+
+    def _xz(wp):
+        return wp.extrude(-y_len).translate((0, y0, 0))
+
+    vert = _xz(cq.Workplane("XZ")
+               .polyline([(LEVER_PIVOT_X - _HW, LEVER_BEND_Z),
+                          (LEVER_PIVOT_X + _HW, LEVER_BEND_Z),
+                          (LEVER_PIVOT_X + _HW, z_top),
+                          (LEVER_PIVOT_X - _HW, z_top)]).close())
+    knee = _xz(cq.Workplane("XZ").center(LEVER_PIVOT_X, LEVER_BEND_Z)
+               .circle(_HW))
+    # the knee→grip run: half-width _HW measured PERPENDICULAR to the
+    # run (45° toward +x −z in the couch version; straight down on the
+    # desk build, where HANDLE_X_BOT sits under the pivot — params)
+    dx, dz = HANDLE_X_BOT - LEVER_PIVOT_X, HANDLE_Z_BOT - LEVER_BEND_Z
+    L = math.hypot(dx, dz)
+    nx, nz = -dz / L * _HW, dx / L * _HW          # unit normal × half-width
+    diag = _xz(cq.Workplane("XZ")
+               .polyline([(LEVER_PIVOT_X - nx, LEVER_BEND_Z - nz),
+                          (LEVER_PIVOT_X + nx, LEVER_BEND_Z + nz),
+                          (HANDLE_X_BOT + nx, HANDLE_Z_BOT + nz),
+                          (HANDLE_X_BOT - nx, HANDLE_Z_BOT - nz)]).close())
+    grip = _xz(cq.Workplane("XZ").center(HANDLE_X_BOT, HANDLE_Z_BOT)
+               .circle(_HW))
+    return vert.union(knee).union(diag).union(grip)
+
+
 # ── Ratchet lever (v2 verbatim, v3 anchors) ──────────────────────────────────
 def _build_ratchet_lever():
     """(1) horizontal pawl block minus the separator's tooth solid (exact
-    negative) + the chord-tracking catch bump; (2) vertical handle through
-    the pivot; (3) grip-end disc."""
+    negative) + the chord-tracking catch bump; (2) the handle through the
+    pivot — vertical to the shared knee, then 45° out to the grip disc
+    (_handle)."""
     y0, y1 = RATCHET_LEV_Y0, RATCHET_LEV_Y1
     y_len = y1 - y0
 
@@ -155,17 +194,7 @@ def _build_ratchet_lever():
                    (RWING_X1, y0 + 1.0), (RWING_X0, y0 + 1.0)])
         .close().extrude(PAWL_Z_HI - PAWL_Z_LO))
 
-    vert_top = RATCHET_PIVOT_Z + _HW
-    vert = (cq.Workplane("XZ")
-            .polyline([(LEVER_PIVOT_X - _HW, HANDLE_Z_BOT),
-                       (LEVER_PIVOT_X + _HW, HANDLE_Z_BOT),
-                       (LEVER_PIVOT_X + _HW, vert_top),
-                       (LEVER_PIVOT_X - _HW, vert_top)]).close()
-            .extrude(-y_len).translate((0, y0, 0)))
-    bottom = (cq.Workplane("XZ").center(LEVER_PIVOT_X, HANDLE_Z_BOT)
-              .circle(_HW).extrude(-y_len).translate((0, y0, 0)))
-
-    part = horiz.union(vert).union(bottom)
+    part = horiz.union(_handle(y0, y1, RATCHET_PIVOT_Z + _HW))
     part = part.union(_pivot_boss(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y0, y1))
     # pin inserts from the +y (outer) side → pocket opens at y1
     part = part.cut(_pivot_hole(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y1, y0))
@@ -461,7 +490,8 @@ def brake_pad_rect_corners(h=None):
 
 def _build_brake_lever():
     """(1) the straight pad arm — contact-frame box trimmed to the tilted
-    joint plane, back-rotated to rest; (2) vertical handle; (3) grip disc."""
+    joint plane, back-rotated to rest; (2) the handle — vertical above the
+    pivot, 45° out from the pivot to the grip disc (_handle)."""
     y0, y1 = BRAKE_LEV_Y0, BRAKE_LEV_Y1
     y_len = y1 - y0
     h_x_hi = LEVER_PIVOT_X + _HW
@@ -479,16 +509,7 @@ def _build_brake_lever():
         .close().extrude(PAD_FLANGE_H + 8.0))
 
     vert_top = _rest_xz(LEVER_PIVOT_X - _HW, Z_TOP_C)[1]
-    vert = (cq.Workplane("XZ")
-            .polyline([(LEVER_PIVOT_X - _HW, HANDLE_Z_BOT),
-                       (LEVER_PIVOT_X + _HW, HANDLE_Z_BOT),
-                       (LEVER_PIVOT_X + _HW, vert_top),
-                       (LEVER_PIVOT_X - _HW, vert_top)]).close()
-            .extrude(-y_len).translate((0, y0, 0)))
-    bottom = (cq.Workplane("XZ").center(LEVER_PIVOT_X, HANDLE_Z_BOT)
-              .circle(_HW).extrude(-y_len).translate((0, y0, 0)))
-
-    part = horiz.union(vert).union(bottom)
+    part = horiz.union(_handle(y0, y1, vert_top))
     part = part.union(_pivot_boss(LEVER_PIVOT_X, BRAKE_PIVOT_Z, y0, y1))
     # mortise channel cut AFTER every union (v2's refill lesson)
     part = part.cut(_to_rest(_pad_joint(tenon=False)))

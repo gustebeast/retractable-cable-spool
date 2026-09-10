@@ -80,6 +80,9 @@ _ex("hardware",
     WOOD_SCREW_SHAFT_D="v2-validated wood screw shaft Ø4",
     WOOD_SCREW_HEAD_D="wood screw countersunk head Ø9.3 (measured)",
     WOOD_SCREW_HEAD_H="wood screw head cone depth (measured)",
+    COUCH_TOP_BEAM_W="couch top beam 30 sq (user-measured wood)",
+    COUCH_FRONT_T="couch front beam thickness 38 (user-measured wood)",
+    COUCH_FRONT_H="couch front beam height 77 (user-measured wood)",
     )
 
 _ex("hardware",
@@ -109,6 +112,7 @@ _ex("clearance",
     PIN_SQ_LEVER_CLR="TPU axle in the lever pocket, per side",
     LOCK_PIN_CLR="TPU lock pin in its three slots, per side",
     LOCK_SWEEP_CLR="lock corbel roof under the jib head's install sweep",
+    MOUNT_COUCH_SETBACK="probed rotate-on clearance to the couch front beam (air)",
     )
 
 # Tuned knobs pinned by model asserts, kinematic datums, cutter margins.

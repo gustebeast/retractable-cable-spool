@@ -47,7 +47,7 @@ from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
     NOZZLE_D,
-    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1,
+    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1, FRAME_TOP_Z1, COUCH_TOP_PAD,
     LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_HEAD_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_PIN_SQ, LOCK_PIN_CLR, LOCK_PIN_Z0,
@@ -62,6 +62,7 @@ from .params import (
     FLOOR_HUB_R, FLOOR_RING_RC,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
     STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE,
+    N_HUB_WEB, HUB_WEB_W, HUB_WEB_Z1,
     JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
@@ -71,7 +72,7 @@ from .params import (
     HORN_W, HORN_Z1, HORN_CH_W, HORN_BLOCK_H, STRUCT_WALL,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
     HORNJ_W, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
-    HORN_WALL_T,
+    HORN_WALL_T, HORN_X1,
     PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
     POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
     MOUNT_RING_R, MOUNT_TEN_W,
@@ -381,6 +382,16 @@ def _cable_horn():
     upper half is the HORN CAP, its own part (flat top face on the
     bed, trough up — also overhang-free). The cable lays into the
     trough from above and the cap closes the circle.
+    +x EXTENT (user #963): the block's +x face is params.HORN_X1 —
+    the frame face on the desk build, the couch's front-beam FRONT
+    face in the couch version (the exit runs out under the beam).
+    A, B and C are written off that face, so they follow it: the
+    strut's bed landing moves out with the block (past the frame's
+    plan when extended — printable, it is on the bed). The brace D
+    descends 45° from the sill onto the strut's inboard face; once
+    the block is out of its 45° reach it lands on the bed foot's top
+    instead (user #964: keep the strut), tying the band wall to the
+    foot just inboard of the strut's base.
     ATTACHMENT (user #906, single rail #915, params HORNJ_*): ONE
     central cadkit MUSHROOM rail, the cap sliding on − to + y: two
     TENON segments rise off the trough strips' tops (up-printed: 45°
@@ -395,8 +406,8 @@ def _cable_horn():
     yc = HORN_YC
     ch2 = HORN_CH_W / 2.0
     zc = HORN_Z1 + ch2             # tunnel axis: bore floor = the sill
-    xb0 = _R_OUT - HORN_BLOCK_L    # block x-span [xb0, _R_OUT]
-    x_mid = (xb0 + _R_OUT) / 2.0
+    xb0 = HORN_X1 - HORN_BLOCK_L   # block x-span [xb0, HORN_X1]
+    x_mid = (xb0 + HORN_X1) / 2.0
     y_lo, y_hi = yc - HORN_W / 2.0, yc + HORN_W / 2.0
     rim = HORN_BELL_R + STRUCT_WALL          # bell mouth + its kept wall
     diag = math.sqrt(2.0) * (ch2 + rim)      # the 45° bell-wall diagonal —
@@ -404,7 +415,7 @@ def _cable_horn():
                                    # rule so the two BIND by construction
 
     def _blk(z0, z1, pad=0.0):     # the block footprint, from z0 to z1
-        return _box(xb0 - pad, _R_OUT + pad, y_lo - pad, y_hi + pad,
+        return _box(xb0 - pad, HORN_X1 + pad, y_lo - pad, y_hi + pad,
                     z0, z1)
 
     def _chord(R):                 # band chord at the support's far edge
@@ -441,9 +452,9 @@ def _cable_horn():
     p = _blk(z_a0, HORN_Z1)                                 # A
     d_bed = z_a0 - FLOOR_Z0
     y_s0, y_s1 = yc - POST_OUT_T / 2.0, yc + POST_OUT_T / 2.0
-    strut = _xz_prism([(_R_OUT, z_a0),                      # B
-                       (_R_OUT - d_bed, FLOOR_Z0),
-                       (_R_OUT - d_bed - HORN_BLOCK_L, FLOOR_Z0),
+    strut = _xz_prism([(HORN_X1, z_a0),                     # B
+                       (HORN_X1 - d_bed, FLOOR_Z0),
+                       (HORN_X1 - d_bed - HORN_BLOCK_L, FLOOR_Z0),
                        (xb0, z_a0)], y_s0, y_s1)
     # C: from the band's bore chord at the strut's FAR-y edge (the #890
     # membrane lesson) to EXACTLY where B's 45° underside lands on the
@@ -451,7 +462,7 @@ def _cable_horn():
     # sticking out from under the slope; flush, the end face is buried
     # in the strut's foot wedge)
     x_c0 = _chord(WALL_IR) - 1.0
-    foot = _box(x_c0, _R_OUT - d_bed, y_s0, y_s1,           # C
+    foot = _box(x_c0, HORN_X1 - d_bed, y_s0, y_s1,          # C
                 FLOOR_Z0, FLOOR_Z0 + BEAM_SIZE)
     # D: top edge at the sill, its outboard END flush with the band's
     # OUTER face at the far-y corner (user #921: it poked 4.98 past the
@@ -462,10 +473,26 @@ def _cable_horn():
     sink = 0.5                    # into B — volumetric fusion
     x_m1 = (HORN_Z1 + x_d0 + x_land + sink - FLOOR_Z0) / 2.0
     x_m2 = x_m1 + HORN_BLOCK_L / 2.0
-    brace = _xz_prism([(x_d0, HORN_Z1),                     # D
-                       (x_d0 + HORN_BLOCK_L, HORN_Z1),
-                       (x_m2, HORN_Z1 - (x_m2 - x_d0 - HORN_BLOCK_L)),
-                       (x_m1, HORN_Z1 - (x_m1 - x_d0))], y_s0, y_s1)
+    z_c1 = FLOOR_Z0 + BEAM_SIZE   # the foot's top
+    if HORN_Z1 - (x_m1 - x_d0) >= FLOOR_Z0 + STRUCT_WALL - 1e-9:
+        # D lands on B's inboard 45° face, its toe ≥ a tier above the
+        # bed (the desk build, and moderate extensions — #965)
+        brace = _xz_prism([(x_d0, HORN_Z1),                 # D
+                           (x_d0 + HORN_BLOCK_L, HORN_Z1),
+                           (x_m2, HORN_Z1 - (x_m2 - x_d0 - HORN_BLOCK_L)),
+                           (x_m1, HORN_Z1 - (x_m1 - x_d0))], y_s0, y_s1)
+    else:
+        # EXTENDED exit (user #964: the strut is out of D's 45° reach,
+        # but the brace stays): the same 45° descent from the sill now
+        # lands on the FOOT's top, sunk `sink` — tying the band wall to
+        # the foot just inboard of the strut's base
+        x_m1 = x_d0 + (HORN_Z1 - (z_c1 - sink))
+        x_m2 = x_m1 + HORN_BLOCK_L
+        assert x_m2 <= HORN_X1 - d_bed + 1e-9,             "extended-exit brace lands past the foot's end"
+        brace = _xz_prism([(x_d0, HORN_Z1),                 # D
+                           (x_d0 + HORN_BLOCK_L, HORN_Z1),
+                           (x_m2, z_c1 - sink),
+                           (x_m1, z_c1 - sink)], y_s0, y_s1)
     support = _trim_to_bore(
         strut.union(foot, clean=False).union(brace, clean=False), HORN_Z1)
     p = p.union(support, clean=False)
@@ -489,7 +516,7 @@ def _cable_horn():
         p = p.cut(_yz_prism([(yk, z_a0),
                              (yk + s * (d_ch + 4.0), z_a0),
                              (yk + s * (d_ch + 4.0), z_a0 + d_ch + 4.0)],
-                            xb0 - 1.0, _R_OUT + 1.0), clean=False)
+                            xb0 - 1.0, HORN_X1 + 1.0), clean=False)
     # cut 1 — the TUNNEL (round; the mid-bore overhang is moot since the
     # #905 equator split — each half prints trough-up)
     p = p.cut(
@@ -501,7 +528,7 @@ def _cable_horn():
     # around the bore axis; s = which way the mouth opens
     r = HORN_BELL_R
     s45 = math.sqrt(0.5)
-    for x_f, s in ((_R_OUT, +1.0), (xb0, -1.0)):
+    for x_f, s in ((HORN_X1, +1.0), (xb0, -1.0)):
         bell = (cq.Workplane("XZ")
                 .moveTo(x_f - s * r, ch2)
                 .threePointArc(
@@ -522,7 +549,7 @@ def _cable_horn():
     # CAP only — the bottom prism keeps its size, user), flush with the
     # cap's top face
     cap = cap.union(
-        _box(xb0, _R_OUT, y_lo - HORN_STOP_T, y_lo,
+        _box(xb0, HORN_X1, y_lo - HORN_STOP_T, y_lo,
              zc - HORN_STOP_DROP, HORN_Z1 + HORN_BLOCK_H), clean=False)
     # MUSHROOM rail (cadkit): local +X (the slide) → global −y — the
     # CAP travels +y over the fixed tenons; local Y → global +x
@@ -633,6 +660,14 @@ def _floor():
                            z_base=FLOOR_Z1), clean=False)
     f = f.union(cyl(STUB_D, STUB_Z1 - STUB_BOSS_Z1, z=STUB_BOSS_Z1),
                 clean=False)
+    # HUB WEBS (params, user #970): radial ribs boss -> sleeve wall,
+    # floor plate -> sleeve top, buried 0.5 into each neighbour
+    web = _box(STUB_D / 2.0, SLEEVE_OD / 2.0 - SLEEVE_T + 0.5,
+               -HUB_WEB_W / 2.0, HUB_WEB_W / 2.0,
+               FLOOR_Z1 - 0.5, HUB_WEB_Z1)
+    for i in range(N_HUB_WEB):
+        f = f.union(web.rotate((0, 0, 0), (0, 0, 1), i * 360.0 / N_HUB_WEB),
+                    clean=False)
     return f
 
 
@@ -740,21 +775,32 @@ def _lock_corbel_top():
     LOCK_NOTCH_Y and a 45 falls away under this arm's screw pad
     (LOCK_SWEEP_CLR of air; the pad only moves AWAY during the mount
     install sweep)."""
+    # COUCH version (#955): the LOCK_* z's are MOUNT-local (the head is
+    # an unchanged part seating COUCH_TOP_PAD higher), so this storey is
+    # drawn with its foot dropped by the pad and then lifted — its roof
+    # rides under the raised head at the same LOCK_SWEEP_CLR, and the
+    # extra height is solid corbel down to the frame underside
+    zb = -COUCH_TOP_PAD
+    # the notch's far edge must sit PAST the 45's foot — a foot beyond the
+    # edge folds the outline into a bow-tie, an INVALID solid whose cut
+    # came back as the overlap and left a 1 mm³ corbel (#955, latent
+    # since the notch landed: the corbel was never actually there)
+    y_far = max(LOCK_HEAD_Y1 + 2.0, LOCK_NOTCH_Y + (LOCK_NOTCH_Z - zb) + 2.0)
     w = _xz_prism(
-        [(LOCK_X0 - LOCK_WELD, 0.0),
+        [(LOCK_X0 - LOCK_WELD, zb),
          (LOCK_X0 - LOCK_WELD, LOCK_TOPB_Z1 - LOCK_WELD),
          (LOCK_X0, LOCK_TOPB_Z1),
          (LOCK_X1, LOCK_TOPB_Z1 - LOCK_BLK_D),
-         (LOCK_X1, 0.0)],
+         (LOCK_X1, zb)],
         FRAME_RIB / 2.0, LOCK_HEAD_Y1)
     notch = _yz_prism(
         [(LOCK_NOTCH_Y, LOCK_TOPB_Z1 + 1.0),
          (LOCK_NOTCH_Y, LOCK_NOTCH_Z),
-         (LOCK_NOTCH_Y + LOCK_NOTCH_Z + 1.0, -1.0),
-         (LOCK_HEAD_Y1 + 2.0, -1.0),
-         (LOCK_HEAD_Y1 + 2.0, LOCK_TOPB_Z1 + 1.0)],
+         (LOCK_NOTCH_Y + (LOCK_NOTCH_Z - zb) + 1.0, zb - 1.0),
+         (y_far, zb - 1.0),
+         (y_far, LOCK_TOPB_Z1 + 1.0)],
         LOCK_X0 - LOCK_WELD - 1.0, LOCK_X1 + 1.0)
-    return _lock_place(w.cut(notch))
+    return _lock_place(w.cut(notch)).translate((0.0, 0.0, COUCH_TOP_PAD))
 
 
 def _lock_corbel_bot():
@@ -826,7 +872,7 @@ def _anchor_wall():
     trustworthy seat — the old 12 bay wobbled)."""
     w = (cq.Workplane("XZ")
          .polyline([(ANCH_IR, ANCH_Z0), (ANCH_OR, ANCH_Z0),
-                    (ANCH_OR, FRAME_Z1), (ANCH_IR, FRAME_Z1)])
+                    (ANCH_OR, FRAME_TOP_Z1), (ANCH_IR, FRAME_TOP_Z1)])
          .close().revolve(ANCH_A_NEG + ANCH_A_POS, (0, 0), (0, 1))
          .rotate((0, 0, 0), (0, 0, 1), -ANCH_A_NEG))
     y0 = ANCH_WIN_Y0                             # HOLD edge (beam's +y face)
@@ -847,8 +893,11 @@ def _anchor_wall():
 
 
 def _build_frame_top():
-    ft = _plus(FRAME_Z0, FRAME_Z1)
-    ft = ft.union(cyl(BRG_BOSS_OD, FRAME_Z1 - FRAME_Z0, z=FRAME_Z0))
+    # +z end grows COUCH_TOP_PAD in the couch version (params block):
+    # the arms, boss and anchor wall rise to FRAME_TOP_Z1; everything
+    # cut from the TOP face (mount channels, lock slot, pocket) follows
+    ft = _plus(FRAME_Z0, FRAME_TOP_Z1)
+    ft = ft.union(cyl(BRG_BOSS_OD, FRAME_TOP_Z1 - FRAME_Z0, z=FRAME_Z0))
     ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
     ft = ft.union(_lock_corbel_top(), clean=False)
     # clean=False through the cut loops: cq's default runs OCC's
@@ -863,17 +912,17 @@ def _build_frame_top():
     # cutters ever carve float-identical walls — OCC's pathological
     # unify case (#910, 15+ min builds).
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
-        ft = ft.cut(c, clean=False)
-    ft = ft.cut(_lock_slot_cut(-1.0, FRAME_Z1), clean=False)
+        ft = ft.cut(c.translate((0.0, 0.0, COUCH_TOP_PAD)), clean=False)
+    ft = ft.cut(_lock_slot_cut(-1.0, FRAME_TOP_Z1), clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top
-    ft = ft.cut(cyl(BRG_LIP_ID, (FRAME_Z1 - FRAME_Z0) + 1.0,
+    ft = ft.cut(cyl(BRG_LIP_ID, (FRAME_TOP_Z1 - FRAME_Z0) + 1.0,
                     z=FRAME_Z0 - 0.5), clean=False)
     ft = ft.cut(cone_solid(d_bottom=BRG_LIP_ID, d_top=BRG_BORE,
                            h=BRG_SEAT_CONE_Z1 - BRG_SEAT_CONE_Z0,
                            z_base=BRG_SEAT_CONE_Z0), clean=False)
-    ft = ft.cut(cyl(BRG_BORE, (FRAME_Z1 - BRG_SEAT_CONE_Z1) + 0.5,
+    ft = ft.cut(cyl(BRG_BORE, (FRAME_TOP_Z1 - BRG_SEAT_CONE_Z1) + 0.5,
                     z=BRG_SEAT_CONE_Z1), clean=False)
     # the groove-arc lap bands imprint orphan open-shell debris where
     # they die inside the cavity slots — rebuild from closed shells

@@ -40,8 +40,10 @@ from .params import (
     MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
-    MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_AZ,
-    MOUNT_PAD_AZ_OFF,
+    MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_LY,
+    MOUNT_PAD_SCREW_Y, MOUNT_SCREW_TILT_DEG, MOUNT_SCREW_BORE_D,
+    MOUNT_SCREW_SEAT,
+    MOUNT_PAD_AZ_OFF, MOUNT_TAIL_TIP_X,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
@@ -106,38 +108,64 @@ def _hang(w):
     return w.mirror("XY").translate((0.0, 0.0, MOUNT_MATE_Z))
 
 
-# the pads' plan positions — shared by the pad prisms AND their screw
-# cuts (one table, so the screws can never silently miss the pads).
-# The −y arm's pad slides MOUNT_PAD_INSET_MY inboard along its beam
-# (params #947 comment: its deep countersink must clear the TPU lock)
-_PAD_XY = tuple(
-    (MOUNT_RING_R * math.cos(math.radians(az)),
-     MOUNT_RING_R * math.sin(math.radians(az))
-     + (MOUNT_PAD_INSET_MY if abs(az - 270.0) < 45.0 else 0.0))
-    for az in MOUNT_PAD_AZ)
+# PAD SITES — one PROTOTYPE (the +x arm's pad: hugging the arm's +y
+# flank, growing +y, screw tilted toward −y = toward the arm) placed
+# at the four arms by rotation, so the pad prism, its screw cut and
+# its tilt can never drift apart. The −y arm's pad slides
+# MOUNT_PAD_INSET_MY inboard along its beam (params #947 comment: its
+# deep countersink must clear the TPU lock) — applied to the prototype
+# along −x BEFORE the rotation.
+_PAD_CX = MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+_PAD_Y0 = FRAME_RIB / 2.0                 # the flank the pad seats on
 
 
-# the head-pocket cone's radial taper per mm of height — shared by the
-# pad cutter, the spacer's female cut AND its male centring cone
+def _site_place(w, base_az):
+    inset = MOUNT_PAD_INSET_MY if base_az == 270.0 else 0.0
+    return (w.translate((-inset, 0.0, 0.0))
+            .rotate((0, 0, 0), (0, 0, 1), base_az))
+
+
+def _pad_proto():
+    return (cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PAD_H)
+            .center(_PAD_CX, _PAD_Y0 + MOUNT_PAD_LY / 2.0)
+            .rect(MOUNT_PAD_W, MOUNT_PAD_LY).extrude(MOUNT_PAD_H))
+
+
+# the head-pocket cone's radial taper per mm of height
 _CSK_SLOPE = (WOOD_SCREW_HEAD_D - WOOD_SCREW_SHAFT_D) / 2.0 / WOOD_SCREW_HEAD_H
 
 
-def _screw_cut(x, y, z_face, thru):
-    """One wood-screw cutter: Ø4 shaft rising `thru` from the face,
-    countersink cone opening AT z_face (the head seats flush there,
-    driven up into the wood). v2's validated geometry — ONE profile
-    for the pad and the stack spacer (user #936), so the head seats
-    identically wherever it lands."""
+def _screw_cut_proto():
+    """The TILTED wood-screw cutter (user #959, params ANGLED SCREWS):
+    axis entering the pad's underside MOUNT_PAD_SCREW_Y off the flank
+    and leaning MOUNT_SCREW_TILT_DEG toward the arm as it climbs. A
+    head-pass bore from the underside to the countersink base (recessed
+    MOUNT_SCREW_SEAT so the tilted head disc sits inside the pad, its
+    outboard rim flush with the underside), v2's validated cone from
+    there, then the Ø4 shaft out through the wood face."""
+    t = math.radians(MOUNT_SCREW_TILT_DEG)
+    a = cq.Vector(0.0, -math.sin(t), math.cos(t))          # up and inward
+    e = cq.Vector(_PAD_CX, _PAD_Y0 + MOUNT_PAD_SCREW_Y,
+                  FRAME_Z1 - MOUNT_PAD_H)                  # underside entry
     over = 0.5
+    # the cylinders start a full MOUNT_SCREW_SEAT (= r·tan tilt, the
+    # axial run their tilted start cap needs to clear the underside
+    # plane) + 1 BELOW the entry — a 1.0 overshoot alone left the
+    # start cap slicing through the mouth on the outboard side (#959
+    # probe: the head could not pass)
+    back = MOUNT_SCREW_SEAT + 1.0
     shaft = cq.Solid.makeCylinder(
-        WOOD_SCREW_SHAFT_D / 2.0, thru + 1.0,
-        cq.Vector(x, y, z_face - 0.5), cq.Vector(0, 0, 1))
+        WOOD_SCREW_SHAFT_D / 2.0, MOUNT_PAD_H / math.cos(t) + back + 1.0,
+        e - a * back, a)
+    bore = cq.Solid.makeCylinder(
+        MOUNT_SCREW_BORE_D / 2.0, MOUNT_SCREW_SEAT + back, e - a * back, a)
     cone = cq.Solid.makeCone(
         WOOD_SCREW_HEAD_D / 2.0 + over * _CSK_SLOPE,
         WOOD_SCREW_SHAFT_D / 2.0,
         WOOD_SCREW_HEAD_H + over,
-        cq.Vector(x, y, z_face - over), cq.Vector(0, 0, 1))
-    return cq.Workplane(obj=shaft).union(cq.Workplane(obj=cone))
+        e + a * (MOUNT_SCREW_SEAT - over), a)
+    return (cq.Workplane(obj=shaft).union(cq.Workplane(obj=bore))
+            .union(cq.Workplane(obj=cone)))
 
 
 def _annulus(r0, r1, z0, z1):
@@ -175,15 +203,13 @@ def _build_mount():
             .extrude(MOUNT_SPINE_T)
             .rotate((0, 0, 0), (0, 0, 1), az), clean=False)
     # AXIS-ALIGNED screw pads hugging the arms (use the pair on your
-    # beam's axis); screws at the outer ring line. Pads and their screw
-    # cuts share ONE placement table so they cannot drift apart.
-    # DEEP pads (user #947: the #936 stack spacer FUSED in — pads run
-    # the full MOUNT_PAD_H, everything else keeps its section)
-    for x, y in _PAD_XY:
-        m = m.union(
-            cq.Workplane("XY").workplane(offset=FRAME_Z1 - MOUNT_PAD_H)
-            .center(x, y).rect(MOUNT_PAD_W, MOUNT_PAD_W)
-            .extrude(MOUNT_PAD_H), clean=False)
+    # beam's axis); one prototype rotated to the four arms, so the pads
+    # and their (tilted) screw cuts cannot drift apart. DEEP pads (user
+    # #947: the #936 stack spacer FUSED in — pads run the full
+    # MOUNT_PAD_H, everything else keeps its section)
+    pad = _pad_proto()
+    for base_az in (0.0, 90.0, 180.0, 270.0):
+        m = m.union(_site_place(pad, base_az), clean=False)
     # the −y arm's deep pad vs the TPU lock's top corbel (params
     # LOCK_PAD_NOTCH comment): its outboard strip keeps the old
     # 4.0-plate underside and follows the jib head's 45 outward — the
@@ -202,17 +228,18 @@ def _build_mount():
     # GUIDE TAILS (user, corrected #880: AXIS-ALIGNED, hugging the arm's
     # flank — not radial at the pad's offset azimuth): a 2.4 × 2.4 bar
     # running parallel to the wood beam from each pad's outboard end to
-    # the top frame's outer radius, flush along the arm-flank plane the
-    # pad seats against. Screw the bare mount to the beam and the tail
-    # tips mark exactly how far the assembled frame will reach.
-    pad_cx = MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
-    x0 = pad_cx + MOUNT_PAD_W / 2.0 - 0.5          # buried into the pad
+    # MOUNT_TAIL_TIP_X (params: the frame's outer radius on the desk
+    # build; the rotate-on SET-BACK past it in the couch version), flush
+    # along the arm-flank plane the pad seats against. Screw the bare
+    # mount to the beam and the tail tips mark where the assembled frame
+    # reaches — or, on the couch, where the front beam must sit.
+    x0 = _PAD_CX + MOUNT_PAD_W / 2.0 - 0.5         # buried into the pad
     # tails flush along the CCW arm flank now — the flank the pads seat
     # against since the #938 hand flip
     tail = (cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
-            .center((x0 + FRAME_R_OUT) / 2.0,
+            .center((x0 + MOUNT_TAIL_TIP_X) / 2.0,
                     FRAME_RIB / 2.0 + MOUNT_SPINE_W / 2.0)
-            .rect(FRAME_R_OUT - x0, MOUNT_SPINE_W)
+            .rect(MOUNT_TAIL_TIP_X - x0, MOUNT_SPINE_W)
             .extrude(MOUNT_SPINE_T))
     for axis_az in (0.0, 90.0, 180.0, 270.0):
         m = m.union(tail.rotate((0, 0, 0), (0, 0, 1), axis_az),
@@ -249,9 +276,9 @@ def _build_mount():
                    (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
         .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
         .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
-    for x, y in _PAD_XY:
-        m = m.cut(_screw_cut(x, y, FRAME_Z1 - MOUNT_PAD_H,
-                             MOUNT_PAD_H), clean=False)
+    screw = _screw_cut_proto()
+    for base_az in (0.0, 90.0, 180.0, 270.0):
+        m = m.cut(_site_place(screw, base_az), clean=False)
     return m
 
 
