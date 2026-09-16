@@ -27,8 +27,7 @@ from .levers import (
 )
 from .params import (RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, LEVER_PIVOT_X,
                      COUCH_TOP_PAD)
-from .dummies import (bearing_608, bearing_608_bottom, spring,
-                      couch_top_beam, couch_front_beam)
+from .dummies import bearing_608, bearing_608_bottom, spring
 
 # ── Viewer pose (revertable) — both levers at REST (canonical pose). Set
 # BRAKE_POSE_DEG = BRAKE_CONTACT_DEG to preview the pad flush on the band;
@@ -88,7 +87,6 @@ COLOR = {
                                  # colour reserved for TPU)
     "bearing_608": "#9FA8B2",  # steel — dummy 608 (assembly-only)
     "spring":      "#6E7B8B",  # gunmetal — dummy spring, flanges on (assembly-only)
-    "wood":        "#8B5A2B",  # brown — couch beams (assembly-only dummies)
     "build_num":   "#F0A878",  # salmon — floating build number
 }
 
@@ -196,11 +194,7 @@ def main():
            .add(T(bearing_608), name="bearing_608", color=color(COLOR["bearing_608"]))
            .add(T(bearing_608_bottom), name="bearing_608_bottom",
                 color=color(COLOR["bearing_608"]))
-           .add(T(spring),      name="spring",      color=color(COLOR["spring"]))
-           # the couch install site: top beam on the frame face, front
-           # beam flush against the +x lever/exit face
-           .add(couch_top_beam, name="couch_top_beam", color=color(COLOR["wood"]))
-           .add(couch_front_beam, name="couch_front_beam", color=color(COLOR["wood"])))
+           .add(T(spring),      name="spring",      color=color(COLOR["spring"])))
 
     num = _build_number_model(build_n)
     if num is not None:

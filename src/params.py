@@ -66,6 +66,9 @@ CABLE_D        = 3.3         # working-cable Ø (user's measurement,
 CABLE_CAPACITY = 7 * 304.8   # 7 ft / 2133.6 of wrapped cable (user's call
                              # at #952; was 1 m since #884, 6 ft before)
 
+assert CABLE_D - 3 * NOZZLE_D >= NOZZLE_D - 1e-9, \
+    "floor viewing slits (FLOOR_SLIT_W) are wide enough to swallow the cable"
+
 # ── Axle (rotating arbor) ────────────────────────────────────────────────────
 AXLE_D       = 8.0                   # nominal — the 608's bore
 AXLE_PRINT_D = AXLE_D                # 8.0 — printed AT the 608's nominal bore
@@ -529,18 +532,34 @@ FLOOR_T   = 3 * NOZZLE_D             # 2.4 — floor plate thickness (user: 1.6
                                    # ALL the bottom webbing went to 2.4)
 FLOOR_Z1  = CH_BOT_Z               # ≈ −70.9 — floor top = the chamber floor
 FLOOR_Z0  = FLOOR_Z1 - FLOOR_T     # ≈ −72.5 — the part's bed plane
-FLOOR_SPOKE_N = 16                 # doubled from 8 (user's call): the hub
-                                   # carries the whole rotating stack now
-                                   # (stub → bottom 608 → separator), so
-                                   # the floor is weight-bearing, not just
-                                   # anti-tangle webbing
-FLOOR_SPOKE_W = 3 * NOZZLE_D         # 2.4 — spoke width (user: stiffen the
-                                   # bottom webbing, with the plate)
+# SOLID FLOOR (user #977 — the cable JAMMED in the old sparse spoke
+# web's openings): the floor is a full plate out to the wall band now,
+# relieved only by narrow VIEWING SLITS. Each slit is FLOOR_SLIT_W
+# wide, NARROWER THAN THE CABLE, so no wrap can drop into one — you
+# keep the look into the tray (the user's reason not to simply close
+# it) and lose the traps. (FLOOR_SPOKE_N and the two tie rings are
+# retired with the web; FLOOR_SPOKE_W lives on as the hub-web section.)
+FLOOR_SPOKE_W = 3 * NOZZLE_D         # 2.4 — hub-web section (was the floor
+                                   # spoke width, hence the name)
 FLOOR_HUB_R   = 22 * NOZZLE_D        # 17.6 — centre disc tying the spokes AND
                                    # landing the sleeve's flared root (was
                                    # 9.6 before the sleeve arrived)
-FLOOR_RING_RC = (33.6, 56.0)       # two spoke-width tie rings under the
-                                   # coil span (42 / 70 beads)
+# HEX-GRID viewing holes (user #980: round holes tile far tighter than
+# the first cut's arc slits — same cable rule, ~4x the open area): Ø
+# FLOOR_HOLE_D, which is UNDER the cable Ø, so neither a wrap nor the
+# cable's end can enter one; packed on a triangular lattice at the
+# two-bead web, which is as many as the plate can carry.
+FLOOR_HOLE_D   = 3 * NOZZLE_D        # 2.4 — hole Ø (< CABLE_D, asserted)
+FLOOR_HOLE_WEB = 2 * NOZZLE_D        # 1.6 — plate between holes (the tier)
+FLOOR_HOLE_R0  = FLOOR_HUB_R       # 17.6 — hub stays SOLID inside this (it
+                                   # carries the stub axle and the sleeve)
+FLOOR_HOLE_R1  = WALL_IR - 3 * NOZZLE_D      # ≈72.7 — solid rim out to the
+                                   # band: the weld, and the coil's own
+                                   # outermost wraps, ride it
+FLOOR_RIB_W    = BEAM_SIZE         # 10.4 — four CARDINAL ribs stay solid,
+                                   # under the beams: the hub's load path
+                                   # out to the band/beam feet (what the
+                                   # old beam-wide floor spokes did)
 BEAM_Z0 = FLOOR_Z0                 # beams stand on the bed with the floor
 BEAM_Z1 = FRAME_Z0                 # beams end at the top plus underside
 
@@ -806,12 +825,54 @@ MOUNT_SPOKE_W  = 3 * NOZZLE_D        # 2.4 — ring-tie spokes (user: ONE
                                    # for rings, spokes and the screw-pad
                                    # guide tails; spokes ride the rings'
                                    # own z-band now, not the full plate)
-MOUNT_SPOKE_AZ = (45.0, 135.0, 225.0, 315.0)   # mid-quadrant: the spokes
-                                   # stay over open air at EVERY install
-                                   # angle (rotation keeps the rings on
-                                   # their own circles; only the spokes
-                                   # and pads move over the plan, and the
-                                   # quadrants are 90° wide vs ~17° travel)
+N_MOUNT_SPOKE = 3                  # ring-tie spokes PER QUADRANT (user
+                                   # #974, up from the single mid-quadrant
+                                   # one): with both rings deep now
+                                   # (STIFFENING WEBS) the spokes are what
+                                   # makes the pair act as ONE truss rather
+                                   # than two rings bending separately —
+                                   # and the bare mount, alone on the wood
+                                   # while its screws are driven, has no
+                                   # other tie. NOTHING can tie the rings
+                                   # ACROSS an arm (user #975 asked): the
+                                   # mount's top face is flush against the
+                                   # wood, so a radial bar there would have
+                                   # to pass through the arm's top, and it
+                                   # sweeps MOUNT_MATE_DEG along the arm
+                                   # during the install — the pocket that
+                                   # needs is wider than the arm. The arm
+                                   # IS that tie once the assembly is on
+                                   # (both rings land a tenon in it). So
+                                   # the spokes crowd the arms instead;
+                                   # azimuths derive in mount.py
+                                   # (_spoke_layout), the outermost pair
+                                   # sitting as close to each arm as the
+                                   # sweep allows — and they BOUND that
+                                   # quadrant's deep ring webs, so every
+                                   # tall-to-short step in a rim lands ON
+                                   # a spoke instead of floating mid-span
+                                   # (user #976).
+# STIFFENING WEBS (user #973 — the bare mount BENT while its screws were
+# driven and the assembly seated crooked): the ring/spoke wireframe is
+# only MOUNT_SPINE_T deep, i.e. a floppy plate in z. So every span that
+# does NOT sit in a frame arm's channel hangs a WEB down to the screw
+# pads' underside plane: those members go from 2.4 to MOUNT_PAD_H deep
+# (~60x the bending stiffness), and because the pads already reach that
+# plane the deep spans simply fuse into them — pad, ring and spoke
+# become one deep girder instead of a pad hanging off a ribbon.
+# Room: the quadrants are OPEN AIR under the mount in both variants
+# (frame_top is a plus), and the web stops one bead above the frame's
+# underside — the couch build's frame is COUCH_TOP_PAD taller, so its
+# webs clear everything below by that much more. The angular keep-outs
+# live in mount.py: they need the install sweep (MOUNT_MATE_DEG).
+MOUNT_WEB_Z0 = FRAME_Z1 - MOUNT_PAD_H   # 0.8 — web bottom = the screw
+                                        # pads' underside (ONE datum, so a
+                                        # deeper pad deepens the webs with it)
+MOUNT_WEB_CLR_DEG = 2.0            # angular margin a deep span keeps off an
+                                   # arm, on top of the install sweep
+assert MOUNT_WEB_Z0 - FRAME_Z0 >= NOZZLE_D - 1e-9, \
+    "mount webs reach the frame's underside plane"
+
 # ANGLED SCREWS (user #959): each screw drives MOUNT_SCREW_TILT_DEG
 # INWARD — toward the arm its pad hugs — so its wood entry lands well
 # inside a narrow beam (a vertical screw at the old pad centre sat
@@ -969,15 +1030,15 @@ MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 # Dims below stay in the AS-DRAWN (+x-arm) frame; builders translate
 # by (LOCK_SHIFT_X, LOCK_SHIFT_Y).
 LOCK_PIN_SQ  = 5 * NOZZLE_D        # 4.0 — square pin section (95A TPU)
-LOCK_PIN_CLR = 0.15                # per-side, all three hosts — 4.3 sq
-                                   # slots (user #972: the 0.1 / 4.2 fit
+LOCK_PIN_CLR = 0.20                # per-side, all three hosts — 4.4 sq
+                                   # slots (user #978: 4.2 then 4.3 both
                                    # printed too tight to insert)
 LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
                                    # host (a real shared volume —
                                    # coincident-face unions are OCC's bad
                                    # day; one bead, it also surfaces as the
                                    # little flank stub)
-LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.3 — slot y width
+LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.4 — slot y width
                                    # (clearance both sides along the beam)
 LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
                                                    # (LOCK_SHIFT_X maps it
@@ -991,7 +1052,7 @@ LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
 # braces on the frame corbels' +x walls). The pin rides 1.6 off the
 # beam wall again, clearance all around.
 LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL
-LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 4.3 sq slot
+LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 4.4 sq slot
 LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
                                    # the slot + 1.6 walls BOTH sides
                                    # (the −x one is the LOCK)
@@ -1082,11 +1143,14 @@ assert (FRAME_RIB / 2.0 - LOCK_WELD
         + NOZZLE_D - 1e-9), \
     "lock corbel weld reaches the frame arc joint's cavity stop"
 
-# ── COUCH beams (hardware — the new install site, assembly-only dummies) ──────
+# ── COUCH beams (the install site's wood — REFERENCE DIMENSIONS) ─────────────
 # A 30 sq TOP beam running along X (the mount screws to it), and a FRONT
-# beam running along Y that sits flush against the assembly's +x face
-# (levers + cable exit). Modelled true (user-measured); placement in
-# dummies.py.
+# beam running along Y that the assembly's +x face meets (levers + cable
+# exit). User-measured. The brown DUMMIES that drew them are RETIRED
+# (user #981 — they had served their fit-check); the numbers stay
+# because real geometry derives from them: the cable exit centres under
+# the front beam (HORN_X1) and the tilted mount screws must land inside
+# the top beam's width (asserted below).
 COUCH_TOP_BEAM_W  = 30.0           # top beam section (y and z), runs along x
 COUCH_FRONT_T     = 38.0           # front beam thickness (x)
 COUCH_FRONT_H     = 77.0           # front beam height (z)
@@ -1157,15 +1221,11 @@ BRAKE_STOP_GAP      = -0.25        # vertical INTERFERENCE at the pad's top
 # (BRAKE_STOP_TIP_OVER retired at #886 — the corbel's reach past the
 # contact plane is TOP_T − NOZZLE_D now: the 45° underside ends on a
 # vertical one-bead face instead of a knife point, user's call)
-# CABLE-GUARD chevrons (user #887): a ^ of GUARD_T square section
-# fences each lever bay window at the wall line — the full-height
-# windows that let fingers in would also let a slack coil escape into
-# the levers; the open V underneath keeps the finger room. The peak
-# clears the BRAKE side's swept envelope by GUARD_LEVER_CLR and BOTH
-# bays share the height (user); peak z derives in levers.py.
-GUARD_T         = 2 * NOZZLE_D       # 1.6 — chevron bar section (user)
-GUARD_LEVER_CLR = 3 * NOZZLE_D       # 2.4 — peak clearance under the brake
-                                   # side's swept envelope (user)
+# (the #887 CABLE-GUARD chevrons are RETIRED — user #977: with the
+# handles bent out of the way the bay WALL comes back instead, and a
+# wall closes the bay better than a fence across it. GUARD_LEVER_CLR
+# lives on as that wall's clearance under the swept lever.)
+GUARD_LEVER_CLR = 3 * NOZZLE_D       # 2.4 — bay wall / lever sweep clearance
 
 # ── CABLE HORN (user #889) — the grab station at the exit window: a
 # TUNNEL BLOCK at the frame's +x edge, its top half the separate
@@ -1291,13 +1351,18 @@ LEVER_BOSS_OD  = ((PIN_SQ_S + 2.0 * PIN_SQ_LEVER_CLR) * math.sqrt(2.0)
 RATCHET_PIVOT_Z = SEP_Z1 + 10.0                    # −24.4
 BRAKE_PIVOT_Z   = SEP_Z0 - 5.5                     # −49.5 — below the band
 LEVER_TRAVEL_DEG = 20.0            # equal pull travel, both levers (v2)
-RATCHET_OPEN_CLR = 3 * NOZZLE_D      # 2.4 — the OVER-PULL STOP pose (user):
+RATCHET_OPEN_CLR = 2 * NOZZLE_D      # 1.6 — the OVER-PULL STOP pose (user):
                                    # the pull angle where the pawl clears
                                    # the tooth tips by this much is where
-                                   # the frame's shelf catches the pawl —
-                                   # no more levering the axle by yanking
-                                   # the ratchet (RATCHET_OPEN_DEG derives
-                                   # in levers.py; shelf in frame.py)
+                                   # the frame's RIB catches the pawl's wing
+                                   # (RATCHET_OPEN_DEG derives in levers.py,
+                                   # rib in frame.py). Cut from 2.4 at #979:
+                                   # 2.4 put the stop at 20.0°, the whole
+                                   # modeled travel and ~2x the 10.6° the
+                                   # pawl needs to clear the teeth — all of
+                                   # that over-travel was creeping the TPU
+                                   # axle. 1.6 stops it at 17.0° and still
+                                   # doubles the 1.0 the kinematics demand.
 HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −75.1 — grip-disc
                                    # centre placed so the handles' round
                                    # ends land FLUSH with the assembly's

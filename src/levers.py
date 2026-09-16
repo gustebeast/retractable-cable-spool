@@ -46,7 +46,7 @@ from .params import (
     PAD_FLANGE_H, PAD_FLANGE_T,
     LEVER_PIN_L, PIN_TIP_END_Y, LEVER_Y_IN, BEAM_SIZE, POST_OUT_T, PIN_GRIP_L,
     WALL_IR, WALL_OR, BRAKE_STOP_GAP, RATCHET_OPEN_CLR, LEVER_SIDE_CLR,
-    BEAM_IR, GUARD_T, GUARD_LEVER_CLR,
+    BEAM_IR, GUARD_LEVER_CLR, FLOOR_Z1,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -224,30 +224,27 @@ RATCHET_PAWL_CLEAR_DEG  = _ratchet_pawl_clear_angle()
 BRAKE_CONTACT_DELAY_DEG = 3.0                     # dead zone after pawl-clear
 BRAKE_CONTACT_DEG = RATCHET_PAWL_CLEAR_DEG + BRAKE_CONTACT_DELAY_DEG
 
-# ── RATCHET OVER-PULL STOP anchor (user: nothing stopped a hard pull —
-# the lever could swing on and lever the axle). frame.py grows a SHELF
-# out of the bay's beam-side wall edge, under the pawl block's inner
-# end; the pawl's BOTTOM lands on it — full-face — at the pose where
-# the pawl clears the tooth tips by RATCHET_OPEN_CLR. Geometry pinned
-# HERE (the kinematics live here); the numbers below are all world mm.
+# ── RATCHET OVER-PULL STOP (user: nothing stopped a hard pull — the
+# lever could swing on and creep the TPU axle). REDESIGNED at #979
+# after the print: the #880 scheme landed the pawl's WING on a sloped
+# SHELF, and a landing face is the wrong shape here — at the stop the
+# wing's motion runs ~96% ALONG that face, so a hard pull skids the
+# wing off its end (probed on the build: first contact at 20.0°, the
+# entire modeled travel, over ~5 mm² of sliding contact). The stop is a
+# BUTTING face now: a RIB on the +X beam's flank, in the bay's inner
+# air strip (the one place static frame material may live — the plate's
+# own y-band is swept by the handle), whose −x end is the exact
+# negative of the WING's leading face at the stop pose. Contact is pure
+# compression, ~11 mm², normal to the motion. frame.py carves it by
+# CUTTING a blank with the wing's own swept volume (ratchet_wing_swept
+# below), so the face can never drift out of match, and the sweep
+# starts at the axle-install lean — the install stays workable by
+# construction. Geometry pinned HERE (the kinematics live here).
 RATCHET_OPEN_DEG = _ratchet_pawl_clear_angle(R_RIM + RATCHET_OPEN_CLR)
-_RO = math.radians(RATCHET_OPEN_DEG)
-_RS_DZ = PAWL_Z_LO - RATCHET_PIVOT_Z
-
-
-def _pawl_bottom_open(x_world):
-    """z of the pawl's bottom plane at the OPEN pose, at world x."""
-    dx = ((x_world - LEVER_PIVOT_X + _RS_DZ * math.sin(_RO))
-          / math.cos(_RO))
-    return RATCHET_PIVOT_Z + dx * math.sin(_RO) + _RS_DZ * math.cos(_RO)
-
-
-# 2.4 of radial clearance costs ~20° (near tangency the gap grows
-# slowly with angle) — the shelf pose IS the design travel limit now
-# (the kinematics suite below is run AT this angle; the old sill-era
-# RATCHET_STOP_DEG 15 reference is superseded)
 assert RATCHET_OPEN_DEG <= LEVER_TRAVEL_DEG + 1e-9, \
-    "A_RSTOP_TRAVEL: the 2.4-clearance pose exceeds the modeled travel"
+    "A_RSTOP_TRAVEL: the stop pose exceeds the modeled travel"
+assert RATCHET_OPEN_DEG > RATCHET_PAWL_CLEAR_DEG + 1e-9, \
+    "A_RSTOP_CLEAR: the stop catches before the pawl clears the teeth"
 
 # THE CATCH ARCHITECTURE (#880 rework after the sweep audit + user's
 # three corrections — ≥1.6 geometry, weld to the side wall, reach the
@@ -274,43 +271,43 @@ RWING_Y_TIP = LEVER_Y_IN - LEVER_SIDE_CLR        # 5.2 — tip FLUSH on the
                                                  # contact, zero volume)
 # inner edge at the separator-rim clearance limit (rim-derived so the
 # wing tracks cable/capacity resizes); 4.0 of chunk outboard of it
+RWING_Y_OUT = RATCHET_LEV_Y0 + 1.0               # 7.9 — the wing's far y
+                                                 # (1.0 into the plate)
 RWING_X0 = math.sqrt((R_RIM + 0.8) ** 2 - RWING_Y_TIP ** 2) + 0.05
 RWING_X1 = RWING_X0 + 4.0
-_ROC, _ROS = math.cos(_RO), math.sin(_RO)
-
-
-def _open_xz(x, z):
-    """A lever point at the OPEN pose (rotated −RATCHET_OPEN_DEG)."""
-    dx, dz = x - LEVER_PIVOT_X, z - RATCHET_PIVOT_Z
-    return (LEVER_PIVOT_X + dx * _ROC - dz * _ROS,
-            RATCHET_PIVOT_Z + dx * _ROS + dz * _ROC)
-
-
-_RW_OB0 = _open_xz(RWING_X0, PAWL_Z_LO)          # wing bottom-inner at open
-_RW_OB1 = _open_xz(RWING_X1, PAWL_Z_LO)          # wing bottom-outer at open
-RSTOP_SLOPE = math.tan(_RO)
-RSTOP_X0 = _RW_OB0[0] + 0.25                     # shelf under the wing's
-RSTOP_X1 = _RW_OB1[0] - 0.25                     # open-pose footprint
-RSTOP_ZT0 = _RW_OB0[1] + RSTOP_SLOPE * (RSTOP_X0 - _RW_OB0[0])
-RSTOP_Y_ROOT = LEVER_Y_IN - LEVER_SIDE_CLR       # 5.2 — the beam's +y flank
-RSTOP_Y_TIP = RWING_Y_TIP + 2 * NOZZLE_D         # 6.8 — overlaps the wing
-                                                 # 1.6 (2 beads, user #943 —
-                                                 # was 1.0); 0.2 air to the
+RSTOP_Y_TIP = RWING_Y_TIP + 2 * NOZZLE_D         # 6.8 — the rib's free face:
+                                                 # overlaps the wing 1.6 (2
+                                                 # beads), 0.1 off the
                                                  # lever's inner face
-RSTOP_ZT1 = RSTOP_ZT0 + RSTOP_SLOPE * (RSTOP_X1 - RSTOP_X0)   # top's +x end
-# the bottom CHAINS off the kinematic top plane (bead audit #943): the
-# root face's +x edge — the tallest, the one you measure — is 5 beads,
-# and with the 2-bead tip overlap the tip face's edge lands 2 beads
-# lower (2.4): both visible heights are bead multiples
-RSTOP_ZBOT = RSTOP_ZT1 - 5 * NOZZLE_D
-assert RSTOP_X1 - RSTOP_X0 >= 3 * NOZZLE_D - 1e-9, \
-    "A_RSTOP_WIDTH: wing/shelf contact face under 3 beads"
-assert RSTOP_X0 >= RWING_X1 + 0.5 - 1e-9, \
-    "A_RSTOP_REST: the resting wing overlaps the shelf in x"
-assert RSTOP_X0 >= BEAM_IR - 1e-9, \
-    "A_RSTOP_WELD: shelf starts inboard of the beam's inner-x face"
-assert RSTOP_X1 <= BEAM_IR + BEAM_SIZE - 0.5 + 1e-9, \
-    "A_RSTOP_WELD2: shelf runs past the beam flank's x extent"
+RSTOP_WELD = NOZZLE_D                            # 0.8 — rib buried into
+                                                 # the beam flank (one bead of
+                                                 # real shared volume, the
+                                                 # cadkit fusion rule)
+
+
+def ratchet_wing_swept(n=32):
+    """The WING's swept volume over the lever's whole life — the
+    axle-install lean (−PIN_PRETWIST) through the over-pull stop. The
+    frame's stop rib is a blank CUT BY THIS: what survives is rib, and
+    the face it leaves is exactly the wing's leading face at
+    RATCHET_OPEN_DEG (so the stop can never drift out of match, and
+    nothing static ever stands in the install swing)."""
+    box = (cq.Workplane("XY").workplane(offset=PAWL_Z_LO)
+           .polyline([(RWING_X0, RWING_Y_TIP - RSTOP_WELD - 0.5),
+                      (RWING_X1, RWING_Y_TIP - RSTOP_WELD - 0.5),
+                      (RWING_X1, RWING_Y_OUT), (RWING_X0, RWING_Y_OUT)])
+           .close().extrude(PAWL_Z_HI - PAWL_Z_LO))
+    swept = None
+    for i in range(n + 1):
+        d = -PIN_PRETWIST_DEG + (RATCHET_OPEN_DEG + PIN_PRETWIST_DEG) * i / n
+        w = box.rotate((LEVER_PIVOT_X, 0, RATCHET_PIVOT_Z),
+                       (LEVER_PIVOT_X, 1, RATCHET_PIVOT_Z), -d)
+        swept = w if swept is None else swept.union(w, clean=False)
+    return swept
+
+
+assert RWING_X1 <= BEAM_IR + BEAM_SIZE - 0.5 + 1e-9, \
+    "A_RSTOP_WELD: the rib blank starts past the beam flank's x extent"
 assert math.hypot(RWING_X0, RWING_Y_TIP) >= R_RIM + 0.8 - 1e-9, \
     "A_RSTOP_RIM: the wing reaches within 0.8 of the separator's rim"
 
@@ -552,14 +549,60 @@ def brake_pad_tall_demo(h):
     return _build_brake_pad(h)
 
 
-# ── CABLE-GUARD peak (user #887, params block): the ^ chevrons fence
-# the bay windows at the wall line; the peak sits GUARD_LEVER_CLR under
-# the BRAKE side's swept envelope within the guard's radial window (the
-# pad's bottom corners dive there at full pull), and both bays share
-# the height. Rotation about y is y-independent in (x, z), and z' is
-# linear along edges, so sweeping the profile CORNERS is exact. ──────────────
-GUARD_X0 = math.sqrt(WALL_IR ** 2 - (LEVER_Y_IN - LEVER_SIDE_CLR) ** 2)
-_G_X1 = GUARD_X0 + GUARD_T
+# ── BAY WALL sill (user #977 — give the cable tray its wall back) ───────────
+# The bay windows ran FULL HEIGHT because a hand had to reach in and
+# grip a handle hanging straight down. The handles bend 45° outward
+# below the knee now (params BENT HANDLES), so the wall can come back
+# wherever no lever material can reach — and that wall matters: it is
+# the cable TRAY's surface, and without it a wrap drops into the bay
+# and jams. PER BAY (they differ a lot), the sill sits GUARD_LEVER_CLR
+# under the LOWEST z that lever's material reaches inside the wall
+# band's radial window, swept over the lever's whole life: the
+# axle-install lean (−PIN_PRETWIST, handle INBOARD — this is what holds
+# the RATCHET bay's sill low) through full pull. Rotation about y is
+# y-independent in (x, z), so sweeping outline points is exact; the
+# solids are probed against the result after each build.
+# (The #887 chevrons are RETIRED with this: a wall beats a fence.)
+def _handle_outline(z_top, n=24):
+    """(x, z) samples around the handle bar: both edges of the vertical
+    run and of the 45° run, plus the knee and grip discs."""
+    pts = []
+    for i in range(n + 1):
+        z = LEVER_BEND_Z + (z_top - LEVER_BEND_Z) * i / n
+        pts += [(LEVER_PIVOT_X - _HW, z), (LEVER_PIVOT_X + _HW, z)]
+    dx, dz = HANDLE_X_BOT - LEVER_PIVOT_X, HANDLE_Z_BOT - LEVER_BEND_Z
+    ln = math.hypot(dx, dz)
+    nx, nz = (-dz / ln * _HW, dx / ln * _HW) if ln > 1e-9 else (_HW, 0.0)
+    for i in range(n + 1):
+        x = LEVER_PIVOT_X + dx * i / n
+        z = LEVER_BEND_Z + dz * i / n
+        pts += [(x - nx, z - nz), (x + nx, z + nz)]
+    for cx, cz in ((LEVER_PIVOT_X, LEVER_BEND_Z),
+                   (HANDLE_X_BOT, HANDLE_Z_BOT)):
+        for k in range(n):
+            a = 2.0 * math.pi * k / n
+            pts.append((cx + _HW * math.cos(a), cz + _HW * math.sin(a)))
+    return pts
+
+
+def _bay_sill(pts, pivot_z):
+    """Sill for a bay: GUARD_LEVER_CLR under the lowest point of `pts`
+    that enters the wall band, over install-lean → full pull."""
+    lo = 1e9
+    for i in range(-int(PIN_PRETWIST_DEG * 4),
+                   int(LEVER_TRAVEL_DEG * 4) + 1):
+        a = math.radians(i / 4.0)                  # >0 = pull, <0 = install
+        c, s = math.cos(a), math.sin(a)
+        for x, z in pts:
+            dx, dz = x - LEVER_PIVOT_X, z - pivot_z
+            xr = LEVER_PIVOT_X + dx * c - dz * s
+            if WALL_IR - 0.5 <= xr <= WALL_OR + 0.5:
+                lo = min(lo, pivot_z + dx * s + dz * c)
+    assert lo < 1e8, "A_BAY_SILL: no lever point crosses the wall band?"
+    return lo - GUARD_LEVER_CLR
+
+
+# the BRAKE's pad + joint corners (the lowest brake material there)
 _g_pts = []
 for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
     for _zc in (Z_BOT_C, PAD_FLANGE_BOT, Z_TOP_C):
@@ -567,25 +610,19 @@ for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
         _g_pts.append(_rest_xz(_x_face2(_y), _zc))
 _g_pts.append(_rest_xz(LEVER_PIVOT_X + _HW + 2.0, PAD_FLANGE_BOT))
 _g_pts.append(_rest_xz(LEVER_PIVOT_X - _HW, PAD_FLANGE_BOT))
-_g_low = 1e9
-for _i in range(0, int(LEVER_TRAVEL_DEG * 10) + 1):
-    _ga = math.radians(_i / 10.0)                  # pull = − rotation
-    _gc, _gs = math.cos(_ga), math.sin(_ga)
-    for _gx, _gz in _g_pts:
-        _gdx, _gdz = _gx - LEVER_PIVOT_X, _gz - BRAKE_PIVOT_Z
-        _xr = LEVER_PIVOT_X + _gdx * _gc - _gdz * _gs
-        _zr = BRAKE_PIVOT_Z + _gdx * _gs + _gdz * _gc
-        if GUARD_X0 - 0.5 <= _xr <= _G_X1 + 0.5:
-            _g_low = min(_g_low, _zr)
-assert _g_low < 0.0, "A_GUARD: no brake point crosses the guard window?"
-GUARD_PEAK_Z = _g_low - GUARD_LEVER_CLR
-# the chevron's wall ends (peak − half-span − bury, minus the bar) must
-# stay above the grip zone or the fingers lose their doorway
-_g_half = ((RATCHET_LEV_Y1 + LEVER_SIDE_CLR)
-           - (LEVER_Y_IN - LEVER_SIDE_CLR)) / 2.0
-assert (GUARD_PEAK_Z - (_g_half + 1.0) - GUARD_T * math.sqrt(2.0)
-        >= HANDLE_Z_BOT + LEVER_HANDLE_W / 2.0 + 2.0 - 1e-9), (
-    "A_GUARD_HAND: the chevron's wall ends reach down into the grip zone")
+
+_R_PTS = _handle_outline(RATCHET_PIVOT_Z + _HW)
+for _x in (56.0, LEVER_PIVOT_X + _HW):             # the pawl block's span
+    for _z in (PAWL_Z_LO, PAWL_Z_HI):
+        _R_PTS.append((_x, _z))
+_B_PTS = _handle_outline(_rest_xz(LEVER_PIVOT_X - _HW, Z_TOP_C)[1]) + _g_pts
+
+BAY_WALL_Z1_RATCHET = _bay_sill(_R_PTS, RATCHET_PIVOT_Z)
+BAY_WALL_Z1_BRAKE = _bay_sill(_B_PTS, BRAKE_PIVOT_Z)
+# the restored wall is worth having at all only if it covers a real
+# slice of the tray (the coil's own z band)
+assert min(BAY_WALL_Z1_RATCHET, BAY_WALL_Z1_BRAKE) > FLOOR_Z1 + 5.0, \
+    "A_BAY_WALL: a bay sill lands within 5 of the tray floor — no wall left"
 
 
 # ── Kinematic assertions — fire at import ────────────────────────────────────

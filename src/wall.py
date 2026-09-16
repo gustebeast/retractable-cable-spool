@@ -5,10 +5,12 @@ are all RETIRED — frame.py fuses this band into frame_bottom and nothing
 slides). Everything that used to close in wall_top's inverted print
 closes with 45° geometry in the band's upright print instead:
 
-  · lever bay windows — FULL-HEIGHT slots now, bed → THROUGH the band's
-    top rim (user's call: the 45° gable crown between the levers and
-    the lid was an overhang — remove it; the band's arcs are carried by
-    the bay webs / fork columns instead of a closed ring);
+  · lever bay windows — open THROUGH the band's top rim (user's call:
+    the 45° gable crown between the levers and the lid was an overhang
+    — remove it; the band's arcs are carried by the bay webs / fork
+    columns instead of a closed ring), but no longer full-height: each
+    bay keeps its WALL up to its own sill (levers.BAY_WALL_Z1_*, user
+    #977 — the tray needs that surface or the coil jams in the bay);
   · cable EXIT port — NO ceiling either (user's call: the sawtooth roof
     was an unnecessary overhang — the port cuts open through the top
     rim over its ~30° span);
@@ -24,9 +26,10 @@ import math
 import cadquery as cq
 
 from .helpers import chord_x, cyl
+from .levers import BAY_WALL_Z1_BRAKE, BAY_WALL_Z1_RATCHET
 from .params import (
     WALL_IR, WALL_OR, WALL_Z1, WALL_ZB,
-    LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0,
+    LEVER_WIN_Y0, LEVER_WIN_Y1,
     CABLE_EXIT_Y_LO, CABLE_EXIT_Y_HI, CABLE_EXIT_Z0,
     ENTRY_PORT_W, ENTRY_PORT_SILL, ENTRY_PORT_AZ_DEG,
 )
@@ -37,10 +40,13 @@ def _ring(id_, od, z, h):
 
 
 def _lever_window(y0, y1, z0):
-    """Bay window through the wall at the +X lever azimuth: a full-width,
-    FULL-HEIGHT slot, open through the band's top rim (user's call: the
-    old 45° gable crown between the levers and the lid was an overhang
-    — gone; hand access and the lever swing own the whole bay now)."""
+    """Bay window through the wall at the +X lever azimuth: full-width,
+    open through the band's top rim (user's call: the old 45° gable
+    crown between the levers and the lid was an overhang — gone), from
+    the bay's own SILL z0 up (user #977: the wall below the sill is the
+    cable tray's surface, restored now that the bent handles no longer
+    need a hand inside the bay). In the upright print the sill is a
+    plain flat top face."""
     return (cq.Workplane("YZ")
             .polyline([(y0, z0), (y1, z0),
                        (y1, WALL_Z1 + 1.0), (y0, WALL_Z1 + 1.0)])
@@ -92,13 +98,14 @@ def _entry_port():
 def _build_wall_full():
     # the one band: bed → the lid's top plane
     w = _ring(2 * WALL_IR, 2 * WALL_OR, WALL_ZB, WALL_Z1 - WALL_ZB)
-    # lever bays: FULL-HEIGHT slots, bed → through the top rim (user's
-    # calls: no band −z of the levers — hand access wins; windows cut
-    # from below the band's bottom face, the #847 lesson; and no crown
-    # ABOVE them either — the gable ring between the levers and the lid
-    # was an overhang, removed)
-    w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1, FLOOR_Z0 - 0.5))
-    w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0, FLOOR_Z0 - 0.5))
+    # lever bays: each from ITS OWN sill → through the top rim (user
+    # #977: the wall below the sill is back, since the bent handles are
+    # gripped outside the band now; no crown above them either — the
+    # gable ring between the levers and the lid was an overhang)
+    w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
+                            BAY_WALL_Z1_RATCHET))      # +y bay
+    w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
+                            BAY_WALL_Z1_BRAKE))        # −y bay
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
     # NO heal here: the band's only consumer is frame_bottom, which runs

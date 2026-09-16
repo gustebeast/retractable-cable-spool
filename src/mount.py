@@ -11,6 +11,14 @@ the open quadrants), rotate ~11° to the stops. Rotation keeps both
 rings on their own circles, so only the spokes and pads move over the
 frame's plan — and they live in the 90°-wide quadrants.
 
+STIFFNESS (user #973 — the bare mount bent while its screws were
+driven): every span that is not sitting in an arm's channel hangs a
+WEB down to the screw pads' underside plane, so the ring arcs across
+the quadrants, the mid-quadrant spokes and the pads are one deep
+girder. The spans stop clear of the arms by the install sweep (see
+_web_span); the quadrants are open air under the mount, which is what
+makes the depth free.
+
 Joint: cadkit's OCTAGON (stop-sign) ARC — the standard for two hosts
 printing the same direction (+z→−z): the cavities CLOSE on their
 one-bead roofs inside the arms with a ≥1.6 floor below (user's call —
@@ -40,7 +48,9 @@ from .params import (
     MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
-    MOUNT_SPOKE_W, MOUNT_SPOKE_AZ, MOUNT_PAD_W, MOUNT_PAD_LY,
+    MOUNT_WEB_Z0, MOUNT_WEB_CLR_DEG,
+    MOUNT_SPOKE_W, N_MOUNT_SPOKE, MOUNT_PAD_W, MOUNT_PAD_LY,
+    ANCH_IR, ANCH_A_POS,
     MOUNT_PAD_SCREW_Y, MOUNT_SCREW_TILT_DEG, MOUNT_SCREW_BORE_D,
     MOUNT_SCREW_SEAT,
     MOUNT_PAD_AZ_OFF, MOUNT_TAIL_TIP_X,
@@ -101,6 +111,66 @@ _CROSS = {R: MOUNT_J.crossing(R, FRAME_RIB, MOUNT_TEN_ARC,
 MOUNT_MATE_DEG = max(c.free for c in _CROSS.values()) + 1.0     # ≈ 11.1°
 
 
+def _web_span(R):
+    """The azimuth band, within one quadrant, where a DEEP web may hang
+    off a ring at radius `R` (params STIFFENING WEBS). Two different
+    keep-outs, because the install sweep is one-way: the mount enters
+    MOUNT_MATE_DEG CCW of its seat and rotates CW onto the stops, so
+    material just CCW of an arm only ever swings AWAY from it (the
+    screw pads live there and already land ON the flank), while
+    material on an arm's CW side passes over that arm on the way in and
+    must clear the whole sweep as well."""
+    half = math.degrees(math.asin((FRAME_RIB / 2.0) / R))   # arm half-angle
+    a0 = half + MOUNT_WEB_CLR_DEG
+    a1 = 90.0 - (half + MOUNT_MATE_DEG + MOUNT_WEB_CLR_DEG)
+    assert a1 - a0 > 10.0, \
+        "no room left between the arms for a stiffening web at this radius"
+    return a0, a1
+
+
+# the +x arm's spring-anchor wall (ANCH_IR..ANCH_OR) rises through the
+# frame at azimuths out to ANCH_A_POS, and a radial spoke crosses
+# exactly those radii — so in THAT quadrant the spoke band starts past
+# the wall (plus the bar's own half-angle there, plus the margin). The
+# wall's −y side needs no rule: the previous quadrant's band ends long
+# before it. (The RINGS are radially clear of the wall at every
+# azimuth — this bounds the spokes only.)
+_ANCH_BLOCK = (ANCH_A_POS
+               + math.degrees(math.asin((MOUNT_SPOKE_W / 2.0) / ANCH_IR))
+               + MOUNT_WEB_CLR_DEG)
+
+
+def _spoke_layout():
+    """Per quadrant: (site, spoke azimuths). N_MOUNT_SPOKE bars, the
+    outermost pair pushed HARD AGAINST the arms at each end of the
+    usable band (user #975 — over the arm is impossible, see the params
+    note) and the rest spread evenly between. That outermost pair also
+    BOUNDS this quadrant's deep ring webs (user #976), so a ring's
+    tall-to-short step always lands on a spoke.
+
+    The band is _web_span at the bar's INNERMOST radius — an arm
+    subtends its widest angle there, so that end governs the whole bar
+    — inset by the bar's half-angle, so its EDGE keeps the clearance,
+    not its centreline."""
+    r0 = MOUNT_RING2_R - MOUNT_SPINE_W / 2.0
+    a0, a1 = _web_span(r0)
+    half_bar = math.degrees(math.asin((MOUNT_SPOKE_W / 2.0) / r0))
+    layout = []
+    for site in _SITES:
+        lo = (max(a0, _ANCH_BLOCK) if site == 0.0 else a0) + half_bar
+        hi = a1 - half_bar
+        assert hi > lo, "no room for a ring-tie spoke in this quadrant"
+        n = N_MOUNT_SPOKE
+        layout.append((site, tuple(
+            site + lo + (hi - lo) * (0.5 if n == 1 else i / (n - 1.0))
+            for i in range(n))))
+    return tuple(layout)
+
+
+_SPOKE_LAYOUT = _spoke_layout()
+MOUNT_SPOKE_AZ = tuple(a for _site, az in _SPOKE_LAYOUT for a in az)
+
+
 def _hang(w):
     """Library-native arc solid (bulb up, mating plane z=0) → hanging
     from the flush spine: z-mirror (plan angles preserved), mating plane
@@ -117,6 +187,20 @@ def _hang(w):
 # along −x BEFORE the rotation.
 _PAD_CX = MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
 _PAD_Y0 = FRAME_RIB / 2.0                 # the flank the pad seats on
+# the radial band EVERY screw pad covers (the −y pad is inset, so it is
+# the tighter one): a ring inside this band runs through pad material,
+# so its deep span may end there — the step is buried in the pad
+_PAD_R0 = _PAD_CX - MOUNT_PAD_W / 2.0
+_PAD_R1 = _PAD_CX + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY
+# HAIRLINE FILL (user #982): the #971 pad inset left the −y arm's screw
+# pad ~0.7 short of the TPU-lock jib head, bridged only by the tail rib
+# at the flank — a split line right where two bosses should be one
+# block. The head extrudes that much further toward the pad, into space
+# the frame's corbel never occupies (the corbel BEGINS at the head's own
+# near face, so the fill is entirely inboard of it) and which no other
+# part enters. Derived, so it closes exactly however the pad moves.
+_HEAD_FILL = (-(LOCK_SHIFT_Y + LOCK_HEAD_Y1) - _PAD_R1)
+assert _HEAD_FILL >= 0.0, "the −y screw pad already overruns the jib head"
 
 
 def _site_place(w, base_az):
@@ -192,16 +276,40 @@ def _build_mount():
             ring = ring.union(
                 ten.rotate((0, 0, 0), (0, 0, 1), site), clean=False)
         m = ring if m is None else m.union(ring, clean=False)
-    # mid-quadrant SPOKES tying the rings — the same 2.4 × 2.4 square as
-    # the rings, riding the rings' own z-band (user: consistent section)
+    # SPOKES tying the rings — 2.4 wide like the rings, FULL DEPTH (user
+    # #973), N_MOUNT_SPOKE per quadrant at the derived azimuths (#975):
+    # each sits inside the band that clears the arms through the whole
+    # install sweep, so no spoke ever passes over frame material
     for az in MOUNT_SPOKE_AZ:
         m = m.union(
-            cq.Workplane("XY").workplane(offset=MOUNT_MATE_Z)
+            cq.Workplane("XY").workplane(offset=MOUNT_WEB_Z0)
             .center((MOUNT_RING_R + MOUNT_RING2_R) / 2.0, 0.0)
             .rect(MOUNT_RING_R - MOUNT_RING2_R + MOUNT_SPINE_W,
                   MOUNT_SPOKE_W)
-            .extrude(MOUNT_SPINE_T)
+            .extrude(FRAME_Z1 - MOUNT_WEB_Z0)
             .rotate((0, 0, 0), (0, 0, 1), az), clean=False)
+    # DEEP RING WEBS (params STIFFENING WEBS): each ring drops to the
+    # pads' plane across the open quadrant — one revolved prototype per
+    # ring, rotated to the four quadrants. The band starts inside the
+    # screw pads' own span, so pad and ring fuse into one deep girder.
+    for R in _RINGS:
+        for site, az in _SPOKE_LAYOUT:
+            # the quadrant's outermost spokes bound the deep span, so its
+            # steps land ON a spoke (#976) — EXCEPT where the ring runs
+            # through a screw pad: there it keeps its own limit and the
+            # step is buried in the pad, the deepest block on the mount
+            # (which is also what keeps the +x quadrant's pad tied into
+            # the girder, its first spoke being held off by the anchor
+            # wall)
+            a0 = (_web_span(R)[0] if _PAD_R0 <= R <= _PAD_R1
+                  else az[0] - site)
+            a1 = az[-1] - site
+            m = m.union(
+                cq.Workplane("XZ")
+                .polyline([(R - hw, MOUNT_WEB_Z0), (R + hw, MOUNT_WEB_Z0),
+                           (R + hw, FRAME_Z1), (R - hw, FRAME_Z1)])
+                .close().revolve(a1 - a0, (0, 0), (0, 1))
+                .rotate((0, 0, 0), (0, 0, 1), site + a0), clean=False)
     # AXIS-ALIGNED screw pads hugging the arms (use the pair on your
     # beam's axis); one prototype rotated to the four arms, so the pads
     # and their (tilted) screw cuts cannot drift apart. DEEP pads (user
@@ -249,8 +357,9 @@ def _build_mount():
         cq.Workplane("XZ")
         .polyline([(LOCK_X0, FRAME_Z1), (LOCK_X1, FRAME_Z1),
                    (LOCK_X1, LOCK_HEAD_ZB), (LOCK_X0, MOUNT_MATE_Z)])
-        .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0)
-        .translate((LOCK_SHIFT_X, LOCK_HEAD_Y1 + LOCK_SHIFT_Y, 0.0)),
+        .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0 + _HEAD_FILL)
+        .translate((LOCK_SHIFT_X,
+                    LOCK_HEAD_Y1 + LOCK_SHIFT_Y + _HEAD_FILL, 0.0)),
         clean=False)
     # the slot is a CLOSED pocket in the head — the −x wall between the
     # flank and the slot is the lock itself (user #948: the mount's

@@ -40,9 +40,8 @@ from cadkit.holes import teardrop_hole
 
 from .helpers import chord_x, cone_solid, cyl, drop_stray_shells, heal
 from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
-                     RSTOP_X0, RSTOP_X1, RSTOP_ZT0, RSTOP_ZT1,
-                     RSTOP_Y_ROOT, RSTOP_Y_TIP, RSTOP_ZBOT,
-                     GUARD_X0, GUARD_PEAK_Z)
+                     RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
+                     PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept)
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
@@ -58,8 +57,9 @@ from .params import (
     BRG_SEAT_CONE_Z0, BRG_SEAT_CONE_Z1,
     WALL_IR, WALL_OR, WALL_SPLIT_Z, WALL_Z1,
     BEAM_IR, BEAM_SIZE, BEAM_Z0, BEAM_Z1,
-    FLOOR_Z0, FLOOR_Z1, FLOOR_SPOKE_N, FLOOR_SPOKE_W,
-    FLOOR_HUB_R, FLOOR_RING_RC,
+    FLOOR_Z0, FLOOR_Z1,
+    FLOOR_HOLE_D, FLOOR_HOLE_WEB, FLOOR_HOLE_R0, FLOOR_HOLE_R1,
+    FLOOR_RIB_W,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
     STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE,
     N_HUB_WEB, HUB_WEB_W, HUB_WEB_Z1,
@@ -68,7 +68,7 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
-    BRAKE_STOP_TOP_T, GUARD_T,
+    BRAKE_STOP_TOP_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_BLOCK_H, STRUCT_WALL,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
     HORNJ_W, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
@@ -329,32 +329,21 @@ def _brake_rest_stop():
 
 
 def _ratchet_stop():
-    """RATCHET OVER-PULL STOP shelf (user's three corrections at #880;
-    numbers pinned in levers.py): the pawl's WING (the lever's chunk
-    past the handle's y-band — nothing static may live INSIDE that
-    band, the full-height handle sweeps it during the ±swing) lands
-    FULL-FACE here at RATCHET_OPEN_DEG, where the pawl clears the
-    teeth by RATCHET_OPEN_CLR. The wing rides the lever's −y INNER
-    side since #886 (the lever prints − to + y, so the nub must TOP
-    the print), and the shelf grows out of the +X BEAM's flank —
-    welded across its whole width — chunky (≥1.6 everywhere), its top
-    matched to the wing's open-pose bottom plane; the usual 45° corbel
-    underside carries its reach."""
-    prism = (cq.Workplane("XZ")
-             .polyline([(RSTOP_X0, RSTOP_ZT0), (RSTOP_X1, RSTOP_ZT1),
-                        (RSTOP_X1, RSTOP_ZBOT), (RSTOP_X0, RSTOP_ZBOT)])
-             .close().extrude(RSTOP_Y_TIP - (RSTOP_Y_ROOT - 1.0)))
-    # whichever way the XZ plane extruded, land the y-span at
-    # [ROOT − 1 (buried into the beam's flank), TIP]
-    prism = prism.translate(
-        (0.0, RSTOP_Y_TIP - prism.val().BoundingBox().ymax, 0.0))
-    corbel = (cq.Workplane("YZ")
-              .polyline([(RSTOP_Y_ROOT, RSTOP_ZBOT),
-                         (RSTOP_Y_ROOT + 12.0, RSTOP_ZBOT + 12.0),
-                         (RSTOP_Y_ROOT + 12.0, RSTOP_ZBOT - 8.0),
-                         (RSTOP_Y_ROOT, RSTOP_ZBOT - 8.0)])
-              .close().extrude(40.0).translate((50.0, 0.0, 0.0)))
-    return prism.cut(corbel)
+    """RATCHET OVER-PULL STOP rib (kinematics in levers.py, #979): a
+    chunk rooted along the +X BEAM's flank, standing in the bay's
+    INNER air strip — the only place static frame material may live,
+    since the plate's own y-band is swept by the handle. Its −x end is
+    the WING's leading face at RATCHET_OPEN_DEG, carved by CUTTING the
+    blank with the wing's swept volume, so the wing BUTTS it in pure
+    compression instead of landing on a slope it skidded off (#880's
+    shelf). The sweep starts at the axle-install lean, so the rib is
+    physically incapable of standing in the install swing. In this
+    part's upright print every face here is a vertical wall or the
+    swept 45-ish arc the wing itself draws."""
+    blank = _box(RWING_X1, BEAM_IR + BEAM_SIZE,
+                 RWING_Y_TIP - RSTOP_WELD, RSTOP_Y_TIP,
+                 PAWL_Z_LO - 6.0, PAWL_Z_HI + 2 * NOZZLE_D)
+    return blank.cut(ratchet_wing_swept())
 
 
 def _cable_horn():
@@ -575,57 +564,42 @@ def _cable_horn():
     return bottom, cap
 
 
-def _cable_guard(s):
-    """^ CABLE-GUARD chevron for one lever bay (s=+1 ratchet, −1 brake;
-    heights pinned in levers.py, user #887): the full-height windows
-    that give fingers access would also let a slack coil escape into
-    the levers. A GUARD_T-square bar fences the window at the wall
-    line — 45° legs off both side walls (the beam-side band strip and
-    the bay web), peak on the bay's centreline, the V underneath left
-    open for the fingers. The peak clears the brake side's swept
-    envelope by GUARD_LEVER_CLR and BOTH bays share the height."""
-    y0 = RSTOP_Y_ROOT                        # 5.2 — window's beam-side edge
-    y1 = _SB_Y0                              # 18.8 — web face
-    mid = (y0 + y1) / 2.0
-    t = GUARD_T * math.sqrt(2.0)             # ⊥ bar = GUARD_T on the 45°
-    pts = [(y0 - 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0),
-           (mid, GUARD_PEAK_Z),
-           (y1 + 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0),
-           (y1 + 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0 - t),
-           (mid, GUARD_PEAK_Z - t),
-           (y0 - 1.0, GUARD_PEAK_Z - (mid - y0) - 1.0 - t)]
-    return (cq.Workplane("YZ")
-            .polyline([(s * y, z) for y, z in pts]).close()
-            .extrude(GUARD_T).translate((GUARD_X0, 0.0, 0.0)))
-
-
 def _floor():
-    """The SPOKED coil-chamber floor (user's design): 1.6 plate — centre
-    hub disc, FLOOR_SPOKE_N radial spokes, two tie rings under the coil
-    span — everything 1.6 wide, spokes overlapping 1.0 into the fused
-    wall band. Sparse on purpose: just enough web that the resting coil
-    can't dip through and tangle."""
-    # plate pieces (hub + tie rings + 16 spokes) accumulate as ONE
-    # compound → one fuse, not 18 whole-disc unions (#932 review); the
-    # two spoke prototypes are rotated per azimuth, not rebuilt
-    plate = [cyl(2.0 * FLOOR_HUB_R, FLOOR_Z1 - FLOOR_Z0, z=FLOOR_Z0).val()]
-    for rc in FLOOR_RING_RC:
-        plate.append(
-            cyl(2.0 * (rc + FLOOR_SPOKE_W / 2.0), FLOOR_Z1 - FLOOR_Z0,
-                z=FLOOR_Z0)
-            .cut(cyl(2.0 * (rc - FLOOR_SPOKE_W / 2.0),
-                     (FLOOR_Z1 - FLOOR_Z0) + 1.0, z=FLOOR_Z0 - 0.5)).val())
-    # the four CARDINAL spokes run beam-wide (user's call): they sit
-    # under the beam azimuths and carry the hub's load out to the
-    # band/beam feet as continuations of the beams
-    protos = {w: _box(0.0, WALL_IR + 1.0, -w / 2.0, w / 2.0,
-                      FLOOR_Z0, FLOOR_Z1)
-              for w in (BEAM_SIZE, FLOOR_SPOKE_W)}
-    for i in range(FLOOR_SPOKE_N):
-        a = i * 360.0 / FLOOR_SPOKE_N
-        w = BEAM_SIZE if a % 90.0 == 0.0 else FLOOR_SPOKE_W
-        plate.append(protos[w].rotate((0, 0, 0), (0, 0, 1), a).val())
-    f = cq.Workplane(obj=cq.Compound.makeCompound(plate))
+    """The coil-chamber floor: a SOLID plate out to the fused wall band
+    (user #977 — the old sparse spoke web let a wrap drop into its
+    openings and JAM), perforated by a HEX GRID of viewing holes (user
+    #980 — round holes tile far tighter than the first cut's arc
+    slits). Every hole is FLOOR_HOLE_D, UNDER the cable Ø, so neither a
+    wrap nor the cable's end can enter one, and they pack on a
+    triangular lattice at the two-bead web — as many as the plate can
+    carry. SOLID where it must be: the hub (it carries the stub axle
+    and the sleeve), the rim at the band (the weld, and the coil's
+    outermost wraps ride it) and four CARDINAL ribs under the beams
+    (the hub's load path out, what the old beam-wide spokes did). One
+    compound, ONE boolean, cut from the bare plate long before it meets
+    the rest of the part."""
+    f = cyl(2.0 * (WALL_IR + 1.0), FLOOR_Z1 - FLOOR_Z0, z=FLOOR_Z0)
+    pitch = FLOOR_HOLE_D + FLOOR_HOLE_WEB
+    row = pitch * math.sqrt(3.0) / 2.0          # triangular lattice
+    r_hole = FLOOR_HOLE_D / 2.0
+    keep_out = FLOOR_RIB_W / 2.0 + r_hole       # clear of the cardinal ribs
+    n_row = int(FLOOR_HOLE_R1 / row) + 2
+    n_col = int(FLOOR_HOLE_R1 / pitch) + 2
+    holes = []
+    for j in range(-n_row, n_row + 1):
+        y = j * row
+        x0 = (pitch / 2.0) if j % 2 else 0.0
+        for i in range(-n_col, n_col + 1):
+            x = x0 + i * pitch
+            r = math.hypot(x, y)
+            if not (FLOOR_HOLE_R0 + r_hole <= r <= FLOOR_HOLE_R1 - r_hole):
+                continue
+            if abs(x) < keep_out or abs(y) < keep_out:
+                continue
+            holes.append(cq.Solid.makeCylinder(
+                r_hole, (FLOOR_Z1 - FLOOR_Z0) + 1.0,
+                cq.Vector(x, y, FLOOR_Z0 - 0.5), cq.Vector(0, 0, 1)))
+    f = f.cut(cq.Workplane(obj=cq.Compound.makeCompound(holes)), clean=False)
     # CENTRE GUIDE SLEEVE (user's call): the tight coil winds against it
     # — it can never be pulled under the cable's bend radius — with a 45°
     # flared root for strength (widens toward the bed: support-free; the
@@ -846,11 +820,6 @@ def _build_frame_bottom():
     fb = fb.union(_lever_mount(), clean=False)
     fb = fb.union(_brake_rest_stop(), clean=False)
     fb = fb.union(_ratchet_stop(), clean=False)
-    # BRAKE bay only (probed): the ratchet's pin-install swing
-    # (+PIN_PRETWIST, its high pivot leaning the full-height handle far
-    # inboard) blankets that bay's wall line from z −38.7 to the floor —
-    # no static fence can exist there; see the #887 report
-    fb = fb.union(_cable_guard(-1.0), clean=False)
     fb = fb.union(_HORN_BOTTOM, clean=False)
     fb = fb.union(_lock_corbel_bot(), clean=False)
     fb = fb.cut(_hand_wedge(), clean=False)
