@@ -39,9 +39,13 @@ from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import chord_x, cone_solid, cyl, drop_stray_shells, heal
-from .levers import (BRAKE_SWEPT_TOP, BRAKE_STOP_ZC,
+from .levers import clip_post
+from .levers import (BRAKE_SWEPT_TOP, BWING_X0, BWING_X1, BWING_Z0, BWING_Z1,
+                     BWING_Y_TIP, BSTOP_Y_TIP, BSTOP_Y_ROOT,
+                     BRAKE_END_DEG, brake_wing_at, brake_wing_swept,
                      RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
-                     PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept)
+                     PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept,
+                     RATCHET_OPEN_DEG)
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
@@ -50,7 +54,7 @@ from .params import (
     LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_HEAD_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_PIN_SQ, LOCK_PIN_CLR, LOCK_PIN_Z0,
-    LOCK_PIN_L, LOCK_SHIFT_X, LOCK_SHIFT_Y, LOCK_NOTCH_Y, LOCK_NOTCH_Z,
+    LOCK_PIN_L, LOCK_SHIFT_X, LOCK_SHIFT_Y, LOCK_ROTS,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
     BRG_BORE, BRG_LIP_ID, BRG_BOSS_OD,
@@ -68,13 +72,13 @@ from .params import (
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
     RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
-    BRAKE_STOP_TOP_T,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_BLOCK_H, STRUCT_WALL,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
     HORNJ_W, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
     HORN_WALL_T, HORN_X1,
-    PIN_SQ_S, PIN_SQ_FRAME_CLR, PIN_KEY_BASE_DEG,
-    POST_OUT_T, PIN_TIP_END_Y, BOSS_BORE_ID,
+    LEVER_PIN_D, LEVER_PIN_FRAME_CLR, LEVER_COL_Y1,
+    POST_OUT_T, PIN_TIP_END_Y, PIN_TIP_CLEAR, BOSS_BORE_ID, BOSS_RING_W,
+    BOSS_RING_CUT,
     MOUNT_RING_R, MOUNT_TEN_W,
 )
 
@@ -196,7 +200,8 @@ def _trim_to_bore(w, z_top):
 # columns stand straight on the foot pad). Verticals + 45° ramps only →
 # −Z→+Z support-free. ────────────────────────────────────────────────────────
 _SB_Y0 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR         # 19.0 — side-column inner face
-_SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.6 — side-column outer face
+_SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.5 — side-column outer face
+assert abs(_SB_Y1 - LEVER_COL_Y1) < 1e-9, "fork column face ≠ params LEVER_COL_Y1"
 # arch-turn start, PER SIDE (user: each fork sets its own roof — reusing
 # the ratchet's on the brake wasted ~19 of fork): the band's turn sits
 # _ARCH_CLR above that side's swept ceiling. RATCHET: the swing-invariant
@@ -282,7 +287,7 @@ def _bay_web(s):
     return _trim_to_bore(w, WALL_SPLIT_Z)
 
 
-def _hand_wedge():
+def _hand_wedge(y_half=None):
     """FOOT WEDGE across the WHOLE lever front — all three uprights (both
     fork columns AND the +X beam, user's call): everything below the 45°
     plane running −z−x → +x+z, hinged at the wall bottom's OD at the
@@ -292,40 +297,68 @@ def _hand_wedge():
     self-supporting in the upright print. The T-channel and the fused
     band's weld tenons live far above the diagonal at these radii.
     (The earlier windowed ports through the fork blocks are RETIRED —
-    user: the wedge alone is the access story.)"""
+    user: the wedge alone is the access story.) `y_half` widens it
+    (the clip posts stand out past the columns and are trimmed by it)."""
+    yh = _SB_Y1 + 1.0 if y_half is None else y_half
     return (cq.Workplane("XZ")
             .polyline([(WALL_OR, FLOOR_Z0 - 1.0), (WALL_OR, FLOOR_Z0),
                        (_R_OUT + 1.0, FLOOR_Z0 + (_R_OUT + 1.0 - WALL_OR)),
                        (_R_OUT + 1.0, FLOOR_Z0 - 1.0)])
-            .close().extrude(2.0 * (_SB_Y1 + 1.0))
-            .translate((0.0, _SB_Y1 + 1.0, 0.0)))
+            .close().extrude(2.0 * yh)
+            .translate((0.0, yh, 0.0)))
 
 
-def _brake_rest_stop():
-    """BRAKE REST STOP (user, params block): a small corbel rooted in the
-    wall-band strip at the brake bay window's edge, reaching
-    BRAKE_STOP_TIP_OVER past the pad's inner end. Its 45° underside —
-    rising toward −y, the printable corbel face in this part's upright
-    print — IS the catch face: the pretwisted axle swings the assembled
-    lever back until the PAD's top inner corner lands on it (~1.3° past
-    plumb, asserted in levers.py). The bare lever clears it at every
-    angle from full pull to the axle-insertion pose, the braking stroke
-    dives away from it, and it stays >2 mm off the separator's rim
-    (all probed)."""
-    zc = BRAKE_STOP_ZC
-    y_c = BRAKE_LEV_Y1                        # −7 — the contact plane
-    # the 45° underside now meets a vertical ONE-BEAD end face instead
-    # of running to a knife point (user #886) — which also shortens the
-    # −y reach to TOP_T − 0.8 past the contact plane
-    y_tip = y_c - (BRAKE_STOP_TOP_T - NOZZLE_D)
-    y_root = -4.5                             # buried into the band strip
-    z_top = zc + BRAKE_STOP_TOP_T
-    return (cq.Workplane("YZ")
-            .polyline([(y_root, zc + (y_c - y_root)),
-                       (y_tip, z_top - NOZZLE_D),
-                       (y_tip, z_top), (y_root, z_top)])
-            .close().extrude(WALL_OR - WALL_IR)
-            .translate((WALL_IR, 0.0, 0.0)))
+def _swung(x, z, pivot_z, d):
+    """(x, z) of a wing point at rest, swung `d` about the lever pivot
+    (the same −d rotation about +y the levers.py sweeps use)."""
+    v = (cq.Vertex.makeVertex(x, 0.0, z)
+         .rotate(cq.Vector(LEVER_PIVOT_X, 0, pivot_z),
+                 cq.Vector(LEVER_PIVOT_X, 1, pivot_z), -d))
+    return v.X, v.Z
+
+
+def _stop_rib(x0, x1, z0, z1, y_r, y_f, y_t):
+    """A stop-rib BLANK in a bay's air strip (signed y): rooted from y_r
+    (buried in the wall) through the wall face y_f, standing out to its
+    free face y_t. Its underside is a 45° GUSSET down into that face
+    (user #993: the flat bottom cantilevered 1.6 off the flank — an
+    overhang in the upright print)."""
+    out = abs(y_t - y_f)                             # 1.6 — the cantilever
+    return _yz_prism([(y_r, z0 - out), (y_f, z0 - out), (y_t, z0),
+                      (y_t, z1), (y_r, z1)], x0, x1)
+
+
+def _brake_stops():
+    """BRAKE REST + END STOPS (kinematics in levers.py, #988): two
+    blanks in the brake bay's OUTER air strip (#1002 — the wing moved to
+    the lever's −y face to top its print) — rooted along the band strip
+    at the window's edge and the fork column beyond it, trimmed out
+    of the drum's bore — cut by the brake WING's swept volume. The +x
+    one is the REST rib (the spring holds the wing on it), the −x one
+    the END rib (full pull); each face is the wing's own face at that
+    pose, so the wing BUTTS both in pure compression. Each blank spans
+    only the wing's height AT ITS OWN pose — one blank over the whole
+    swept band left thin ledges wrapped around the resting wing.
+    (#993, printability) Both undersides are 45° gussets, and the END
+    blank stops at the wing's leading corners at full pull — its top at
+    the top corner's z, its +x end at the bottom corner's x — so the
+    sweep can't carve a notch whose ceiling hangs over the wing's path."""
+    sw = brake_wing_swept()
+    bb = sw.val().BoundingBox()
+    x_end = chord_x(WALL_IR, abs(BSTOP_Y_TIP))     # the bore, at the rib face
+    assert bb.xmin - x_end >= 3 * NOZZLE_D - 1e-9, \
+        "brake END rib under 3 beads long between the bore and the wing"
+    assert (BEAM_IR + BEAM_SIZE) - BWING_X1 >= 3 * NOZZLE_D - 1e-9, \
+        "brake REST rib under 3 beads long between the wing and the face"
+    end_bb = brake_wing_at(BRAKE_END_DEG).val().BoundingBox()
+    _, z_top = _swung(BWING_X0, BWING_Z1, BRAKE_PIVOT_Z, BRAKE_END_DEG)
+    x_bot, _ = _swung(BWING_X0, BWING_Z0, BRAKE_PIVOT_Z, BRAKE_END_DEG)
+    ys = (BSTOP_Y_ROOT, BWING_Y_TIP, BSTOP_Y_TIP)
+    rest = _stop_rib(BWING_X1 - 1.0, BEAM_IR + BEAM_SIZE,
+                     BWING_Z0, BWING_Z1, *ys)
+    end = _stop_rib(x_end - 1.0, x_bot, end_bb.zmin, z_top, *ys)
+    return _trim_to_bore(rest.union(end).cut(sw),
+                         max(BWING_Z1, end_bb.zmax))
 
 
 def _ratchet_stop():
@@ -336,14 +369,18 @@ def _ratchet_stop():
     the WING's leading face at RATCHET_OPEN_DEG, carved by CUTTING the
     blank with the wing's swept volume, so the wing BUTTS it in pure
     compression instead of landing on a slope it skidded off (#880's
-    shelf). The sweep starts at the axle-install lean, so the rib is
-    physically incapable of standing in the install swing. In this
-    part's upright print every face here is a vertical wall or the
-    swept 45-ish arc the wing itself draws."""
-    blank = _box(RWING_X1, BEAM_IR + BEAM_SIZE,
-                 RWING_Y_TIP - RSTOP_WELD, RSTOP_Y_TIP,
-                 PAWL_Z_LO - 6.0, PAWL_Z_HI + 2 * NOZZLE_D)
-    return blank.cut(ratchet_wing_swept())
+    shelf). (#993, printability) The blank's top stops at the wing's
+    leading-TOP corner at the stop pose — above it the old blank hung
+    over the wing's swept path, a notch ceiling in the upright print —
+    and its underside is a 45° gusset into the beam flank."""
+    _, z_top = _swung(RWING_X1, PAWL_Z_HI, RATCHET_PIVOT_Z, RATCHET_OPEN_DEG)
+    blank = _stop_rib(RWING_X1, BEAM_IR + BEAM_SIZE,
+                      PAWL_Z_LO - 6.0, z_top, RWING_Y_TIP - RSTOP_WELD,
+                      RWING_Y_TIP, RSTOP_Y_TIP)
+    rib = blank.cut(ratchet_wing_swept())
+    # the discrete sweep leaves ~0-volume step slivers at the capped top
+    return cq.Workplane("XY").add(
+        max(rib.solids().vals(), key=lambda v: v.Volume()))
 
 
 def _cable_horn():
@@ -477,7 +514,8 @@ def _cable_horn():
         # the foot just inboard of the strut's base
         x_m1 = x_d0 + (HORN_Z1 - (z_c1 - sink))
         x_m2 = x_m1 + HORN_BLOCK_L
-        assert x_m2 <= HORN_X1 - d_bed + 1e-9,             "extended-exit brace lands past the foot's end"
+        assert x_m2 <= HORN_X1 - d_bed + 1e-9, \
+            "extended-exit brace lands past the foot's end"
         brace = _xz_prism([(x_d0, HORN_Z1),                 # D
                            (x_d0 + HORN_BLOCK_L, HORN_Z1),
                            (x_m2, z_c1 - sink),
@@ -569,8 +607,9 @@ def _floor():
     (user #977 — the old sparse spoke web let a wrap drop into its
     openings and JAM), perforated by a HEX GRID of viewing holes (user
     #980 — round holes tile far tighter than the first cut's arc
-    slits). Every hole is FLOOR_HOLE_D, UNDER the cable Ø, so neither a
-    wrap nor the cable's end can enter one, and they pack on a
+    slits). Every hole is FLOOR_HOLE_D — under the cable Ø until #994,
+    now twice that for a better view (a wrap can sag into one but not
+    kink; params.py asserts the bound), and they pack on a
     triangular lattice at the two-bead web — as many as the plate can
     carry. SOLID where it must be: the hub (it carries the stub axle
     and the sleeve), the rim at the band (the weld, and the coil's
@@ -660,7 +699,13 @@ def _thrust_boss(y_face, grow, pz, clip_x=None):
                                   (0.0, grow, 0.0)))
     if clip_x is not None:
         boss = boss.cut(cyl(2.0 * clip_x, 24.0, z=pz - 12.0))
-    return boss
+    # the ring's proud face trimmed back (user #1014): at 0.05 of side
+    # play the pair pinched the brake lever too hard for the TPU to
+    # return it
+    face = y_face + grow * (BOSS_RING_W - BOSS_RING_CUT)
+    lo = min(face, face + grow * 20.0)
+    return boss.cut(_box(LEVER_PIVOT_X - 20.0, LEVER_PIVOT_X + 20.0,
+                         lo, lo + 20.0, pz - 20.0, pz + 20.0))
 
 
 def _lever_mount():
@@ -701,30 +746,38 @@ def _lever_mount():
     return m
 
 
+def _clip_posts():
+    """Each lever's TPU return-clip POST (#1004 — replaces the Lee
+    spring's pocket and leg groove): levers.clip_post. Both stand well
+    clear of the hand-access cutaway since #1008 (the brake's leaf points
+    up; asserted in levers.py) — the #1007 trim by the cut left a 35°
+    edge where its 45° met the gusset's (user)."""
+    out = None
+    for s, pz in ((+1, RATCHET_PIVOT_Z), (-1, BRAKE_PIVOT_Z)):
+        p = clip_post(pz, s)
+        out = p if out is None else out.union(p, clean=False)
+    return out
+
+
 def _pin_bores_side(pz, s):
-    """SQUARE-axle bores for one lever (s=+1 ratchet, −1 brake) — v2:
-    DIAMOND (square at 45°), tip-up in this part's sideways print, so no
-    teardrop needed. Column: THROUGH keyway; beam flank: BLIND bore whose
-    floor at PIN_TIP_END_Y is the axle's depth stop. Both run through
-    their thrust rings + 0.5 (a cutter step inside a ring strands a
-    crown sliver — v2 lesson)."""
+    """ROUND running bores for one lever's pivot pin (#988; s=+1 ratchet,
+    −1 brake): the fork column THROUGH, and the beam flank BLIND — its
+    floor at PIN_TIP_END_Y is the pin's depth stop. Horizontal in this
+    part's upright print, so cadkit's teardrop cutter peaks their crowns
+    at 45°; the pin rides the round part. Both run through their thrust
+    rings + 0.5 (a cutter step inside a ring strands a crown sliver)."""
     y1o = s * RATCHET_LEV_Y1
     F = y1o + s * (LEVER_SIDE_CLR + POST_OUT_T)
-    side = PIN_SQ_S + 2.0 * PIN_SQ_FRAME_CLR
+    d = LEVER_PIN_D + 2.0 * LEVER_PIN_FRAME_CLR
 
-    def sq(ya, yb):
+    def bore(ya, yb):
         lo, hi = min(ya, yb), max(ya, yb)
-        return (cq.Workplane("XY").rect(side, side)
-                .extrude(hi - lo)
-                .rotate((0, 0, 0), (1, 0, 0), -90)
-                .translate((LEVER_PIVOT_X, lo, pz))
-                .rotate((LEVER_PIVOT_X, 0, pz), (LEVER_PIVOT_X, 1, pz),
-                        PIN_KEY_BASE_DEG))
+        h = teardrop_hole(d, hi - lo, (LEVER_PIVOT_X, lo, pz), (0.0, 1.0, 0.0))
+        return h if isinstance(h, cq.Workplane) else cq.Workplane(obj=h)
 
-    out = sq(F + s * 0.5, y1o - s * 0.5)
-    out = out.union(sq(s * PIN_TIP_END_Y,
-                       s * (BEAM_SIZE / 2.0 + LEVER_SIDE_CLR + 0.5)))
-    return out
+    out = bore(F + s * 0.5, y1o - s * 0.5)                # column, through
+    return out.union(bore(s * (PIN_TIP_END_Y - PIN_TIP_CLEAR),  # beam, blind
+                          s * (BEAM_SIZE / 2.0 + LEVER_SIDE_CLR + 0.5)))
 
 
 def _lever_pin_bores():
@@ -738,6 +791,13 @@ def _lock_place(w):
     return w.translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0))
 
 
+def _lock_copies(w):
+    """A placed lock solid at EVERY lock site (#983: the −y beam's, and
+    its copy turned about z by each further LOCK_ROTS — a rotation,
+    so the copy keeps the lock's handedness)."""
+    return [w.rotate((0, 0, 0), (0, 0, 1), r) for r in LOCK_ROTS]
+
+
 def _lock_corbel_top():
     """TPU-LOCK middle storey (user #939/#941, params LOCK block): a
     corbel off the −y beam's +x FLANK, growing +x far enough to wall
@@ -745,21 +805,15 @@ def _lock_corbel_top():
     model-TOP surface is the overhang, so it is the 45: peaked at the
     flank (the LOCK_WELD stub buried in the arm rises 45 too — a flat
     weld ledge would print as an overhang), falling toward +x. Its
-    outboard-top corner wears the PAD NOTCH: full height ends at
-    LOCK_NOTCH_Y and a 45 falls away under this arm's screw pad
-    (LOCK_SWEEP_CLR of air; the pad only moves AWAY during the mount
-    install sweep)."""
+    roof is the lock's interface with the mount head (#983: in the
+    couch build it sits LOCK_HEAD_DROP lower, handing the pad's extra
+    height to the head; the corbel itself keeps its desk shape)."""
     # COUCH version (#955): the LOCK_* z's are MOUNT-local (the head is
     # an unchanged part seating COUCH_TOP_PAD higher), so this storey is
     # drawn with its foot dropped by the pad and then lifted — its roof
     # rides under the raised head at the same LOCK_SWEEP_CLR, and the
     # extra height is solid corbel down to the frame underside
     zb = -COUCH_TOP_PAD
-    # the notch's far edge must sit PAST the 45's foot — a foot beyond the
-    # edge folds the outline into a bow-tie, an INVALID solid whose cut
-    # came back as the overlap and left a 1 mm³ corbel (#955, latent
-    # since the notch landed: the corbel was never actually there)
-    y_far = max(LOCK_HEAD_Y1 + 2.0, LOCK_NOTCH_Y + (LOCK_NOTCH_Z - zb) + 2.0)
     w = _xz_prism(
         [(LOCK_X0 - LOCK_WELD, zb),
          (LOCK_X0 - LOCK_WELD, LOCK_TOPB_Z1 - LOCK_WELD),
@@ -767,14 +821,7 @@ def _lock_corbel_top():
          (LOCK_X1, LOCK_TOPB_Z1 - LOCK_BLK_D),
          (LOCK_X1, zb)],
         FRAME_RIB / 2.0, LOCK_HEAD_Y1)
-    notch = _yz_prism(
-        [(LOCK_NOTCH_Y, LOCK_TOPB_Z1 + 1.0),
-         (LOCK_NOTCH_Y, LOCK_NOTCH_Z),
-         (LOCK_NOTCH_Y + (LOCK_NOTCH_Z - zb) + 1.0, zb - 1.0),
-         (y_far, zb - 1.0),
-         (y_far, LOCK_TOPB_Z1 + 1.0)],
-        LOCK_X0 - LOCK_WELD - 1.0, LOCK_X1 + 1.0)
-    return _lock_place(w.cut(notch)).translate((0.0, 0.0, COUCH_TOP_PAD))
+    return _lock_place(w).translate((0.0, 0.0, COUCH_TOP_PAD))
 
 
 def _lock_corbel_bot():
@@ -818,13 +865,16 @@ def _build_frame_bottom():
     fb = fb.union(cq.Workplane(obj=cq.Compound.makeCompound(site_solids)),
                   clean=False)
     fb = fb.union(_lever_mount(), clean=False)
-    fb = fb.union(_brake_rest_stop(), clean=False)
+    fb = fb.union(_brake_stops(), clean=False)
     fb = fb.union(_ratchet_stop(), clean=False)
     fb = fb.union(_HORN_BOTTOM, clean=False)
-    fb = fb.union(_lock_corbel_bot(), clean=False)
+    for c in _lock_copies(_lock_corbel_bot()):
+        fb = fb.union(c, clean=False)
     fb = fb.cut(_hand_wedge(), clean=False)
     fb = fb.cut(_lever_pin_bores(), clean=False)
-    fb = fb.cut(_lock_slot_cut(-LOCK_BOTB_H - 1.0, 1.0), clean=False)
+    fb = fb.union(_clip_posts(), clean=False)
+    for c in _lock_copies(_lock_slot_cut(-LOCK_BOTB_H - 1.0, 1.0)):
+        fb = fb.cut(c, clean=False)
     return heal(fb)
 
 
@@ -868,7 +918,8 @@ def _build_frame_top():
     ft = _plus(FRAME_Z0, FRAME_TOP_Z1)
     ft = ft.union(cyl(BRG_BOSS_OD, FRAME_TOP_Z1 - FRAME_Z0, z=FRAME_Z0))
     ft = ft.union(_anchor_wall())   # tension-trap strip anchor + arm rib
-    ft = ft.union(_lock_corbel_top(), clean=False)
+    for c in _lock_copies(_lock_corbel_top()):
+        ft = ft.union(c, clean=False)
     # clean=False through the cut loops: cq's default runs OCC's
     # unify-same-domain over the WHOLE part after EVERY cut — profiled
     # (#910, py-spy) as the frame build's runaway cost. heal(ft) at the
@@ -882,7 +933,8 @@ def _build_frame_top():
     # unify case (#910, 15+ min builds).
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
         ft = ft.cut(c.translate((0.0, 0.0, COUCH_TOP_PAD)), clean=False)
-    ft = ft.cut(_lock_slot_cut(-1.0, FRAME_TOP_Z1), clean=False)
+    for c in _lock_copies(_lock_slot_cut(-1.0, FRAME_TOP_Z1)):
+        ft = ft.cut(c, clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the
     # outer race's chamfer lands face-on-face on it, params block), then
     # the pocket from the funnel rim to the frame top
@@ -918,3 +970,6 @@ lock_pin_tpu = _lock_place(_box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
                                 LOCK_SLOT_Y0 + LOCK_PIN_CLR,
                                 LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
                                 LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L))
+# one printed PART, installed at every lock site (#983): the assembly
+# and the overlap gate place these; the STEP export stays the one part
+lock_pins_in_place = _lock_copies(lock_pin_tpu)

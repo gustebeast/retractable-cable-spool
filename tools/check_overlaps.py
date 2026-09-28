@@ -11,13 +11,13 @@ import sys
 
 from cadkit.overlap_check import run
 
-from src.frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
+from src.frame import frame_top, frame_bottom, horn_cap, lock_pins_in_place
 from src.mount import mount_ring
 from src.params import COUCH_TOP_PAD
 from src.axle import axle_top, axle_separator
 from src.lid import lid
 from src.levers import (ratchet_lever, brake_lever, brake_pad_tpu,
-                        lever_pin_in_place)
+                        lever_pin_in_place, return_clip_in_place)
 from src.params import RATCHET_PIVOT_Z, BRAKE_PIVOT_Z
 from src.dummies import bearing_608, bearing_608_bottom, spring
 
@@ -34,9 +34,12 @@ def collect_components():
         ("ratchet_lever", ratchet_lever),
         ("brake_lever",   brake_lever),
         ("brake_pad_tpu", brake_pad_tpu),
-        ("lock_pin_tpu",  lock_pin_tpu),
+        *[("lock_pin_tpu" + ("" if k == 0 else f"_{k + 1}"), pin)
+          for k, pin in enumerate(lock_pins_in_place)],
         ("ratchet_pin", lever_pin_in_place(RATCHET_PIVOT_Z, +1)),
         ("brake_pin",   lever_pin_in_place(BRAKE_PIVOT_Z, -1)),
+        ("ratchet_return_clip", return_clip_in_place(RATCHET_PIVOT_Z, +1)),
+        ("brake_return_clip",   return_clip_in_place(BRAKE_PIVOT_Z, -1)),
         ("bearing_608", bearing_608),
         ("bearing_608_bottom", bearing_608_bottom),
         ("spring",      spring),
@@ -68,6 +71,9 @@ _INTENDED = {
         ("brake_pin",   "frame_bottom"),
         ("ratchet_pin", "ratchet_lever"),     # keyed lever pockets
         ("brake_pin",   "brake_lever"),
+        ("ratchet_pin", "ratchet_return_clip"),  # the TPU clip's rib is
+        ("brake_pin",   "brake_return_clip"),    # squeezed into the pin's
+                                                 # key slot (#1011)
     ]
 }
 # each lock strip: in its beam channel, resting on wall_top, capped by
@@ -78,10 +84,6 @@ for _a in (0, 90, 180, 270):
 # the mount ring: seated in the four arms' arc channels (tenons at the
 # stops, spine in the slots/V-grooves — face contacts)
 _INTENDED.add(frozenset(("mount_ring", "frame_top")))
-# the brake pad at plumb PRESSES the rest-stop corbel by design (user:
-# the gap version never made contact on the print — BRAKE_STOP_GAP is a
-# negative, TPU-squish interference now)
-_INTENDED.add(frozenset(("brake_pad_tpu", "frame_bottom")))
 
 
 def intended(a: str, b: str) -> bool:

@@ -38,6 +38,7 @@ from .params import (
     NOZZLE_D, JOINT_CLR,
     TOPJ_STEM, TOPJ_FLARE, TOPJ_NECK, TOPJ_TIP,
     LIDJ_TEN_SWEEP_DEG, LIDJ_SEAT_CLR, LIDJ_ENTRY_OVER, LIDJ_Z_CLR,
+    LIDJ_CAM_W, LIDJ_CAM_DEG, LIDJ_CAM_RUN,
     DRUM_IR, DRUM_T, DRUM_Z1, LID_Z0, LID_Z1, LID_T,
 )
 
@@ -105,6 +106,31 @@ def flat_arc_solid(tenon, sweep, z_base, r0, top=None):
             .revolve(sweep, (0, 0), (0, 1)))
 
 
+def _cav_arc(sweep, z_base, r0, top):
+    """The lid's CAVITY arc, with the seating WEDGE at its stop end
+    (#1017). The bulk is the plain revolve; over the last
+    LIDJ_CAM_DEG + LIDJ_CAM_RUN the profile NARROWS a side at a time —
+    the inner face walks back OUT of the lid's bore wall and the
+    outboard faces come IN — so the tenon is pinched between the two as
+    the lid twists the last few degrees. Built as a ruled loft through
+    one-degree stations: every face in it stays vertical or 45°, and
+    nothing about it varies in z, so the printer holds the ramp to its
+    XY precision rather than the layer height."""
+    ramp = LIDJ_CAM_DEG + LIDJ_CAM_RUN
+    body = flat_arc_solid(False, sweep - ramp, z_base, r0, top)
+    r_in = r0 - JOINT_CLR                     # the one face that opens OUT
+    wires = []
+    n = max(2, int(round(ramp)))
+    for i in range(n + 1):
+        a = (sweep - ramp) + ramp * i / n
+        wd = LIDJ_CAM_W / 2.0 * (a - (sweep - ramp)) / LIDJ_CAM_DEG
+        pts = [((r + wd) if abs(r - r_in) < 1e-9 else (r - wd), z)
+               for r, z in _flat_pts(False, z_base, r0, top)]
+        w = cq.Workplane("XZ").polyline(pts).close().wires().val()
+        wires.append(w.rotate((0, 0, 0), (0, 0, 1), a))
+    return body.union(cq.Workplane(obj=cq.Solid.makeLoft(wires, True)))
+
+
 def _pocket(sweep, top):
     """The entry-pocket cutter: the cavity's full radial extent as a
     vertical-walled slot — the tenon (flare included) passes straight
@@ -132,8 +158,8 @@ def lid_channel_cut(site_deg):
     once seated: it swept CW away from the tenon during seating)."""
     half = LIDJ_TEN_SWEEP_DEG / 2.0
     through = LID_T + 2.0
-    cav = (flat_arc_solid(False, LIDJ_TEN_SWEEP_DEG + _SEAT_A, -2.0, _R0,
-                          top=through)
+    cav = (_cav_arc(LIDJ_TEN_SWEEP_DEG + _SEAT_A + LIDJ_CAM_RUN, -2.0, _R0,
+                    top=through)
            .rotate((0, 0, 0), (0, 0, 1), site_deg - half))
     pkt = (_pocket(LIDJ_TEN_SWEEP_DEG + 2.0 * _OVER_A, through)
            .rotate((0, 0, 0), (0, 0, 1),

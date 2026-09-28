@@ -45,9 +45,9 @@ from cadkit.joinery import PrintSpec, joint
 
 from .params import (
     NOZZLE_D, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
-    MOUNT_TEN_W, MOUNT_TEN_ARC, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
+    MOUNT_TEN_W, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
     MOUNT_PLATE_T, MOUNT_MATE_Z,
-    MOUNT_RING_R, MOUNT_RING2_R, MOUNT_SPINE_W,
+    MOUNT_RING_R, MOUNT_RING2_R, MOUNT_RING3_R, MOUNT_SPINE_W,
     MOUNT_WEB_Z0, MOUNT_WEB_CLR_DEG,
     MOUNT_SPOKE_W, N_MOUNT_SPOKE, MOUNT_PAD_W, MOUNT_PAD_LY,
     ANCH_IR, ANCH_A_POS,
@@ -55,9 +55,9 @@ from .params import (
     MOUNT_SCREW_SEAT,
     MOUNT_PAD_AZ_OFF, MOUNT_TAIL_TIP_X,
     MOUNT_GRV_W, MOUNT_GRV_VERT, MOUNT_GRV_FLAT, MOUNT_GRV_DEPTH,
-    TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
+    TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
-    MOUNT_PAD_H, MOUNT_PAD_INSET_MY,
+    MOUNT_PAD_H, MOUNT_PAD_INSET_MY, LOCK_HEAD_ZF, LOCK_ROTS,
     LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_HEAD_ZB,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
@@ -87,13 +87,23 @@ assert abs(MOUNT_GRV_W - (MOUNT_J.stem + 2.0 * MOUNT_J.clearance)) < 1e-9, \
     "spine groove no longer matches the cavities' neck slot"
 
 _SITES = (0.0, 90.0, 180.0, 270.0)
-_RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
+# rings that LOCK to the frame (arc tenons in all four arms) vs rings
+# that only RIDE a plain V-groove through the arms (user #985: the inner
+# ring's joinery carried next to nothing, and dropping it frees room for
+# a middle ring). All of them are mount structure and carry deep webs.
+_RINGS_JOINED = (MOUNT_RING_R,)
+_RINGS_FREE = (MOUNT_RING2_R, MOUNT_RING3_R)
+_RINGS = _RINGS_JOINED + _RINGS_FREE
 
 # ONE crossing per ring — cadkit's ring↔arm arrangement, shared verbatim
-# with the frame arc joints (same seat/overshoot constants, same seating
-# chirality): tenon anchored at the arm's ENTRY face spanning
-# MOUNT_TEN_ARC (half the crossing — the stop-side half stays solid arm).
-# hand="cw" — the #938 chirality FLIP (user, field failure): the #915
+# with the frame arc joints once — until #987 (user): the tenon anchored
+# at the arm's entry face and spanned HALF the crossing, the other half
+# left solid as the angular STOP. The screw pads land on the arm flanks
+# and ARE the stop, so the joint now runs THROUGH the whole arm — twice
+# the engagement. cadkit's ArcCrossing refuses a crossing with no stop
+# wall (its 50% rule), so _ThroughCrossing composes the SAME profile
+# from the library's public tenon_arc / mortise_arc instead.
+# The seating chirality stands — the #938 chirality FLIP (user, field failure): the #915
 # audit seated against PULL-OUT torque (assembly CW, viewed +z), but a
 # fast retract SLAMS the cable into the exit horn and that impulse
 # torques the assembly the OTHER way — exactly the uninstall twist —
@@ -102,13 +112,46 @@ _RINGS = (MOUNT_RING_R, MOUNT_RING2_R)
 # the hanging assembly seats rotating CCW relative to the fixed mount
 # ≡ the mount TENONS seat CW relative to frame_top. Retract-slam
 # torque PRESSES the stops; uninstall = a deliberate CW twist.
-_CROSS = {R: MOUNT_J.crossing(R, FRAME_RIB, MOUNT_TEN_ARC,
-                              seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER,
-                              hand="cw")
-          for R in _RINGS}
+class _ThroughCrossing:
+    """A ring↔arm crossing whose joint runs THROUGH the arm (user #987):
+    the seated tenon spans the arm face to face, the cavity is open at
+    BOTH faces (plus `over` of entry overshoot on each), and nothing in
+    the joint is a stop — the screw pads landing on the arm flanks are.
+    Arm centred on plan angle 0, like cadkit's ArcCrossing; the profile
+    is the library's (tenon_arc / mortise_arc), only the placement is
+    ours. The geometry is symmetric about the arm, so the seating hand
+    only decides which side the tenon enters from (the pads' side)."""
 
-# the shared install rotation: the DEEPER offset of the two rings' entries
-MOUNT_MATE_DEG = max(c.free for c in _CROSS.values()) + 1.0     # ≈ 11.1°
+    def __init__(self, jnt, radius, arm_w, over):
+        self.joint, self.radius = jnt, radius
+        self.arm = math.degrees(math.asin((arm_w / 2.0) / radius))
+        self.over = math.degrees(over / radius)
+        self.ten = 2.0 * self.arm                 # face to face
+
+    @property
+    def free(self):
+        """The whole tenon plus the overshoot: the install offset at which
+        the tenon is fully out of the arm and clear to z-mate."""
+        return self.ten + self.over
+
+    def tenon(self, root=1.0):
+        return (self.joint.tenon_arc(self.radius, self.ten, root=root)
+                .rotate((0, 0, 0), (0, 0, 1), -self.arm))
+
+    def mortise(self, drop=2.0):
+        return (self.joint.mortise_arc(self.radius,
+                                       self.ten + 2.0 * self.over, drop=drop)
+                .rotate((0, 0, 0), (0, 0, 1), -self.arm - self.over))
+
+
+_CROSS = {R: _ThroughCrossing(MOUNT_J, R, FRAME_RIB, TOP_ENTRY_OVER)
+          for R in _RINGS_JOINED}
+
+# the install rotation: the deepest entry offset of the JOINED rings'
+# crossings, plus a degree. It was the inner ring's — an arm subtends
+# twice the angle at half the radius — at ≈10.9°; with only the outer
+# ring joined (#985) it roughly halves.
+MOUNT_MATE_DEG = max(c.free for c in _CROSS.values()) + 1.0
 
 
 def _web_span(R):
@@ -203,8 +246,13 @@ _HEAD_FILL = (-(LOCK_SHIFT_Y + LOCK_HEAD_Y1) - _PAD_R1)
 assert _HEAD_FILL >= 0.0, "the −y screw pad already overruns the jib head"
 
 
+# the arms that carry a TPU lock (the −y one, turned by each LOCK_ROTS):
+# their screw pads take the inset that clears the lock stack
+_LOCK_ARMS = tuple((270.0 + r) % 360.0 for r in LOCK_ROTS)
+
+
 def _site_place(w, base_az):
-    inset = MOUNT_PAD_INSET_MY if base_az == 270.0 else 0.0
+    inset = MOUNT_PAD_INSET_MY if base_az in _LOCK_ARMS else 0.0
     return (w.translate((-inset, 0.0, 0.0))
             .rotate((0, 0, 0), (0, 0, 1), base_az))
 
@@ -268,13 +316,15 @@ def _build_mount():
     m = None
     for R in _RINGS:
         ring = _annulus(R - hw, R + hw, MOUNT_MATE_Z, FRAME_Z1)
-        # hanging octagon arc tenons, SEATED (the crossing pre-places
-        # them: anchored at the arm's ENTRY face, spanning half the
-        # crossing inboard — the stop-side half stays solid arm)
-        ten = _hang(_CROSS[R].tenon(root=2.0))
-        for site in _SITES:
-            ring = ring.union(
-                ten.rotate((0, 0, 0), (0, 0, 1), site), clean=False)
+        if R in _CROSS:
+            # JOINED rings only (#985): hanging octagon arc tenons,
+            # SEATED (the crossing pre-places them: anchored at the
+            # arm's ENTRY face, spanning half the crossing inboard —
+            # the stop-side half stays solid arm)
+            ten = _hang(_CROSS[R].tenon(root=2.0))
+            for site in _SITES:
+                ring = ring.union(
+                    ten.rotate((0, 0, 0), (0, 0, 1), site), clean=False)
         m = ring if m is None else m.union(ring, clean=False)
     # SPOKES tying the rings — 2.4 wide like the rings, FULL DEPTH (user
     # #973), N_MOUNT_SPOKE per quadrant at the derived azimuths (#975):
@@ -294,15 +344,13 @@ def _build_mount():
     # screw pads' own span, so pad and ring fuse into one deep girder.
     for R in _RINGS:
         for site, az in _SPOKE_LAYOUT:
-            # the quadrant's outermost spokes bound the deep span, so its
-            # steps land ON a spoke (#976) — EXCEPT where the ring runs
-            # through a screw pad: there it keeps its own limit and the
-            # step is buried in the pad, the deepest block on the mount
-            # (which is also what keeps the +x quadrant's pad tied into
-            # the girder, its first spoke being held off by the anchor
-            # wall)
-            a0 = (_web_span(R)[0] if _PAD_R0 <= R <= _PAD_R1
-                  else az[0] - site)
+            # the CW end stops at the quadrant's LAST spoke, so that
+            # tall-to-short step lands ON a spoke (#976). The CCW end runs
+            # deep right up to the arm (user #987): material on an arm's
+            # CCW side only swings AWAY from it during the install, so it
+            # never needs the shallow section — only the CW side, which
+            # passes over the next arm on the way in, does
+            a0 = _web_span(R)[0]
             a1 = az[-1] - site
             m = m.union(
                 cq.Workplane("XZ")
@@ -353,27 +401,31 @@ def _build_mount():
     # NO −x weld stub: past the flank plane is frame-arm material —
     # the head welds through its real overlap with the tail rib (and
     # this arm's screw pad), all mount material.
-    m = m.union(
-        cq.Workplane("XZ")
-        .polyline([(LOCK_X0, FRAME_Z1), (LOCK_X1, FRAME_Z1),
-                   (LOCK_X1, LOCK_HEAD_ZB), (LOCK_X0, MOUNT_MATE_Z)])
-        .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0 + _HEAD_FILL)
-        .translate((LOCK_SHIFT_X,
-                    LOCK_HEAD_Y1 + LOCK_SHIFT_Y + _HEAD_FILL, 0.0)),
-        clean=False)
+    # (#983) the underside meets the flank at LOCK_HEAD_ZF — the mating
+    # plane on the desk, the dropped interface in the couch build, where
+    # the head grows by the whole frame_top pad. One head per LOCK_ROTS.
+    head = (cq.Workplane("XZ")
+            .polyline([(LOCK_X0, FRAME_Z1), (LOCK_X1, FRAME_Z1),
+                       (LOCK_X1, LOCK_HEAD_ZB), (LOCK_X0, LOCK_HEAD_ZF)])
+            .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0 + _HEAD_FILL)
+            .translate((LOCK_SHIFT_X,
+                        LOCK_HEAD_Y1 + LOCK_SHIFT_Y + _HEAD_FILL, 0.0)))
+    for r in LOCK_ROTS:
+        m = m.union(head.rotate((0, 0, 0), (0, 0, 1), r), clean=False)
     # the slot is a CLOSED pocket in the head — the −x wall between the
     # flank and the slot is the lock itself (user #948: the mount's
     # uninstall motion here is +x, and that wall is what drives the
     # pin against the frame corbels' +x walls; the #942 open-slot
     # variant slid straight off the pin)
-    m = m.cut(
-        cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 1.0)
-        .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0),
-                   (LOCK_SLOT_X1, LOCK_SLOT_Y0),
-                   (LOCK_SLOT_X1, LOCK_SLOT_Y1),
-                   (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
-        .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
-        .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)), clean=False)
+    slot = (cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 1.0)
+            .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0),
+                       (LOCK_SLOT_X1, LOCK_SLOT_Y0),
+                       (LOCK_SLOT_X1, LOCK_SLOT_Y1),
+                       (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
+            .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
+            .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)))
+    for r in LOCK_ROTS:
+        m = m.cut(slot.rotate((0, 0, 0), (0, 0, 1), r), clean=False)
     screw = _screw_cut_proto()
     for base_az in (0.0, 90.0, 180.0, 270.0):
         m = m.cut(_site_place(screw, base_az), clean=False)
@@ -417,16 +469,19 @@ def mount_channel_cuts():
     outer shell OPEN) to the next cavity's air-side end (its `over`
     overshoot is already past the arm's entry face — open air)."""
     cuts = []
-    for R in _RINGS:
-        c = _CROSS[R]
-        # one mortise + one groove-arc PROTOTYPE per ring, rotated to
-        # the four sites (#932: the revolves are the cost)
-        mor = _hang(c.mortise(drop=MOUNT_SPINE_T + 0.5))
-        a_lo, a_hi = c.cavity_span     # what mortise() cuts, hand applied
-        grv = _v_groove_arc(R, 0.0, (90.0 + a_lo) - a_hi)
+    for R in _RINGS_JOINED:
+        # (#987) a THROUGH cavity per arm, open at both faces: the ring's
+        # spine rides its neck slot (the same 2.7 as a groove, asserted)
+        # across the whole arm, and between the arms there is only air —
+        # so the joined ring needs no groove arcs at all
+        mor = _hang(_CROSS[R].mortise(drop=MOUNT_SPINE_T + 0.5))
         for site in _SITES:            # fixed 90° pitch
             cuts.append(mor.rotate((0, 0, 0), (0, 0, 1), site))
-            cuts.append(grv.rotate((0, 0, 0), (0, 0, 1), site + a_hi))
+    # FREE rings (#985): a plain full-circle V-groove each — no cavity,
+    # so no slot wall for it to run coincident with; it only bites where
+    # frame_top has material, i.e. across the arms
+    for R in _RINGS_FREE:
+        cuts.append(_v_groove_arc(R, 0.0, 360.0))
     return cuts
 
 

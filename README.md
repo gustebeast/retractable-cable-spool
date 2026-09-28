@@ -65,12 +65,9 @@ py -3.12 tools/check_geometry.py --update-baseline   # bless current as new base
   (or equivalent). The cassette wraps around the axle's spring-engagement
   bosses; the spring's bent outer tab seats in a slot in the hub wall.
   Drives spool retraction.
-- **2× torsion springs** — one right-wound, one left-wound, for the lever
-  return torque. Both are music-wire 0.51 mm, coil OD 4.5 mm, rod 3 mm,
-  body length 4.5 mm (= LEVER_RIM_H), 4.25 turns, leg length 19.99 mm,
-  17.96 N·mm at 86° deflection.
-  - Ratchet pivot, **right-wound**: [Lee LTMR050E 01 M](https://www.leespring.com/product/torsion-spring-ltmr050e01m-music-wire)
-  - Brake pivot, **left-wound**: [Lee LTML050E 01 M](https://www.leespring.com/product/torsion-spring-ltml050e01m-music-wire)
+- *(The v1/v3 Lee torsion springs are retired as of v3 build #1004: the
+  lever return is a printed 95A TPU leaf clip on each pivot pin —
+  `return_clip_tpu.step` — so no springs need buying.)*
 
 ### McMaster-Carr (mcmaster.com)
 

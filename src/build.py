@@ -16,13 +16,17 @@ from cadkit.step_export import export_step, print_pose
 from cadkit.cq_colors import color
 from cadkit.freecad import show
 
-from .frame import frame_top, frame_bottom, horn_cap, lock_pin_tpu
+from .frame import (frame_top, frame_bottom, horn_cap, lock_pin_tpu,
+                    lock_pins_in_place)
 from .mount import mount_ring, MOUNT_MATE_DEG
 from .axle import axle_top, axle_separator
 from .lid import lid
+from .lever_rig import lever_rig
 from .levers import (
     ratchet_lever, brake_lever, brake_pad_tpu, lever_pin,
+    ratchet_clip_tpu, brake_clip_tpu,
     lever_pin_in_place, brake_pad_tall_demo, BRAKE_CONTACT_DEG,
+    return_clip_in_place,
     RATCHET_OPEN_DEG, KIN,
 )
 from .params import (RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, LEVER_PIVOT_X,
@@ -83,11 +87,14 @@ COLOR = {
     "lid":         "#7FA37F",  # green — spool-chamber ceiling (v2 ceiling colour)
     "ratchet_lever": "#C9825F",  # copper — ratchet lever (+y side)
     "brake_lever":   "#B45A5A",  # brick — brake lever (−y side)
-    "tpu":           "#141414",  # black — 95A TPU (pad + torsion pins;
+    "tpu":           "#141414",  # black — 95A TPU (pad + lock pins;
                                  # colour reserved for TPU)
+    "lever_pin":   "#8C7B6B",  # taupe — printed PETG pivot pins (#988;
+                               # they were black TPU torsion axles)
     "bearing_608": "#9FA8B2",  # steel — dummy 608 (assembly-only)
     "spring":      "#6E7B8B",  # gunmetal — dummy spring, flanges on (assembly-only)
     "build_num":   "#F0A878",  # salmon — floating build number
+    "coupon":      "#7FA37A",  # sage — test coupons (off to the side)
 }
 
 # ── PRINT POSE for the per-part STEP exports (user #935, cadkit's
@@ -104,9 +111,14 @@ PRINT_ROT = {
     "axle_top":      "flip",             # bed = the shaft top (flipped print)
     "lid":           "flip",             # prints +z→−z (through slots)
     "ratchet_lever": ((1, 0, 0), -90),   # bed = its +y OUTER face (#886)
-    "brake_lever":   ((1, 0, 0), 90),    # bed = its −y OUTER face
+    "brake_lever":   ((1, 0, 0), -90),   # bed = its +y INNER face (user
+                                         # #1002: prints + to − y; the
+                                         # stop wing tops it on −y)
     "brake_pad_tpu": ((1, 0, 0), 90),    # stands on its −y outer end (v2)
-    # frame_bottom / axle_separator / lever_pin_tpu / screw_spacer
+    "lever_pin":     ((0, 1, 0), 90),    # STANDS on its head (#995)
+    "ratchet_clip_tpu": ((1, 0, 0), 90), # flat, on a face (#1004)
+    "brake_clip_tpu":   ((1, 0, 0), 90),
+    # frame_bottom / axle_separator / screw_spacer
     # model as printed (drop-and-centre only)
 }
 
@@ -121,10 +133,20 @@ PARTS = [
     ("lid",         lid,         "lid.step"),
     ("ratchet_lever", ratchet_lever, "ratchet_lever.step"),
     ("brake_lever",   brake_lever,   "brake_lever.step"),
-    ("lever_pin_tpu", lever_pin,     "lever_pin_tpu.step"),
+    ("lever_pin",     lever_pin,     "lever_pin.step"),
+    ("ratchet_clip_tpu", ratchet_clip_tpu, "ratchet_clip_tpu.step"),
+    ("brake_clip_tpu",   brake_clip_tpu,   "brake_clip_tpu.step"),
     ("lock_pin_tpu",  lock_pin_tpu,  "lock_pin_tpu.step"),
     ("brake_pad_tpu", brake_pad_tpu, "brake_pad_tpu.step"),
 ]
+
+
+# Test coupons: exported to the project root and shown in the assembly
+# off to the side (+y), so they rebuild with every run.
+COUPONS = [
+    (lever_rig, "test_lever_rig.step"),       # the lever bays + a rim sector
+]
+COUPON_SHIFT = (0.0, 140.0, 0.0)
 
 
 def _bump_build_counter():
@@ -153,6 +175,10 @@ def _build_number_model(n):
 def main():
     for _name, part, fname in PARTS:
         export_step(print_pose(part, PRINT_ROT.get(_name)), str(OUT / fname))
+    # TEST COUPONS (cadkit rule: test_*.step at the PROJECT ROOT, printed
+    # in the real part's orientation — the lever rig is frame_bottom's)
+    for part, fname in COUPONS:
+        export_step(print_pose(part), str(VIEWER.parent / fname))
 
     build_n = _bump_build_counter()
 
@@ -167,7 +193,10 @@ def main():
     asm.add(mount_ring.translate((0.0, 0.0, COUCH_TOP_PAD)),
             name="mount_ring", color=color(COLOR["mount_ring"]))
     # the TPU frame-lock pin, fully inserted through the lock stack
-    asm.add(T(lock_pin_tpu), name="lock_pin_tpu", color=color(COLOR["tpu"]))
+    # the TPU frame-lock pins, fully inserted — one per lock site (#983)
+    for k, pin in enumerate(lock_pins_in_place):
+        asm.add(T(pin), name="lock_pin_tpu" + ("" if k == 0 else f"_{k + 1}"),
+                color=color(COLOR["tpu"]))
     # horn cap SEATED on the trough half (its as-modeled place)
     asm.add(T(horn_cap), name="horn_cap", color=color(COLOR["horn_cap"]))
     asm = (asm
@@ -184,10 +213,15 @@ def main():
                 name="brake_lever",   color=color(COLOR["brake_lever"]))
            .add(T(lever_pin_in_place(RATCHET_PIVOT_Z, +1,
                                      pull_deg=RATCHET_POSE_DEG)),
-                name="ratchet_pin_tpu", color=color(COLOR["tpu"]))
+                name="ratchet_pin", color=color(COLOR["lever_pin"]))
            .add(T(lever_pin_in_place(BRAKE_PIVOT_Z, -1,
                                      pull_deg=BRAKE_POSE_DEG)),
-                name="brake_pin_tpu",   color=color(COLOR["tpu"]))
+                name="brake_pin",   color=color(COLOR["lever_pin"]))
+           # the TPU return clips (#1004), at REST (leaf on its post)
+           .add(T(return_clip_in_place(RATCHET_PIVOT_Z, +1)),
+                name="ratchet_return_clip", color=color(COLOR["tpu"]))
+           .add(T(return_clip_in_place(BRAKE_PIVOT_Z, -1)),
+                name="brake_return_clip", color=color(COLOR["tpu"]))
            .add(T(_brake_pose(brake_pad_tall_demo(BRAKE_PAD_DEMO_H)
                               if BRAKE_PAD_DEMO_H else brake_pad_tpu)),
                 name="brake_pad_tpu", color=color(COLOR["tpu"]))
@@ -195,6 +229,9 @@ def main():
            .add(T(bearing_608_bottom), name="bearing_608_bottom",
                 color=color(COLOR["bearing_608"]))
            .add(T(spring),      name="spring",      color=color(COLOR["spring"])))
+
+    asm.add(lever_rig.translate(COUPON_SHIFT), name="lever_rig_coupon",
+            color=color(COLOR["coupon"]))
 
     num = _build_number_model(build_n)
     if num is not None:
