@@ -2,9 +2,13 @@
 
 A 3D-printable retractable cable spool driven by a power spring (harvested
 from a Stanley 30-455 tape-measure cassette), with a ratchet to hold the
-cable out and a brake to control retraction speed. Routes a USB-A-to-C
-source cable to the powered end through an integrated pancake spool on the
-top bearing cap.
+cable out. Routes a USB-A-to-C source cable to the powered end.
+
+> **Note:** everything below this line still describes the v1 design and is
+> stale — the module table names files that no longer exist (`caps.py`,
+> `housing.py`, `guide_axle.py`, `housing_pins.py`), and the assembly steps
+> are v1's. The current design is v3, in `src/`; build with
+> `py -3.12 -m src.build`. The brake was deleted entirely at build #1019.
 
 ![Assembly preview](demo.png)
 

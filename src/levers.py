@@ -1,28 +1,23 @@
-"""Ratchet + brake levers — v2's radial-engagement design, hardware-free,
-ported to v3's FLIPPED band stack.
+"""The RATCHET lever — v2's radial-engagement design, hardware-free.
 
-v2's architecture kept whole: XZ plate levers (LEVER_T=10, HANDLE_W=6) at
-+X flanking the beam (ratchet +y, brake −y), Y-axis square-TPU torsion
-pivots spanning the fork posts, pull = +X; the pawl edge is the exact
-tooth-profile negative + catch bump; the brake pad is the CONTACT-frame
-design (arm + pad built as one straight prism at the contact pose,
-back-rotated to rest) with the L-flange + cadkit hook slide joint and the
-knurl-negative face.
+The BRAKE went at #1019 (user): lever, TPU pad, its return clip, its
+fork, its stops, its bay and its knurled band on the separator. What it
+bought — holding a paid-out length against the spring — the ratchet
+already does, and it cost a second lever, four printed parts, the −y
+half of the frame's fork and 4.8 of disk. The one place its removal did
+NOT pay was height: see RIM_H in params, where the bottom 608's pocket,
+not the bands, sets how thick the disk has to be.
 
-v3 differences (the bands swapped — brake band is the disk's BOTTOM band):
-  * RATCHET pivot stays 10 above its (now upper) tooth band — unchanged
-    behaviour: rest = pawl seated, pull swings it out;
-  * BRAKE pivot goes 5.5 BELOW its (now lower) band: the pad must sit
-    ABOVE its pivot for pull to press it INTO the band (an above-band
-    pivot swings the pad away — caught in the port);
-  * the pawl's one-bead running clearance moves to its BOTTOM (the brake
-    band is below the teeth now) — A_PAWL_BAND_CLR sweeps mirrored;
-  * the levers reach the bands through the FULL-HEIGHT bays; the ratchet's
-    over-pull stop tab is STILL TO COME (the old wall sill left with the
-    bays — RATCHET_STOP_DEG remains the asserted design limit).
+v2's architecture kept whole: an XZ plate lever (LEVER_T, HANDLE_W) at
++X on the beam's +y flank, pull = +X; the pawl edge is the exact
+tooth-profile negative + catch bump. The pivot sits 10 above the tooth
+band: rest = pawl seated in the teeth, pull swings it out, and the
+pawl's one-bead running clearance is at its BOTTOM (A_PAWL_BAND_CLR).
+The lever reaches the band through its bay; its over-pull stop is a
+butting rib the frame carves with the wing's own swept volume (#979).
 
 The kinematic assertion suite (lever_kinematics.py) fires at import.
-TPU parts (brake pad + 2 torsion pins) print in 95A — black in the viewer.
+TPU parts (the return clip) print in 95A — black in the viewer.
 """
 
 import math
@@ -31,31 +26,31 @@ import cadquery as cq
 
 from cadkit.joinery import joint
 
-from .axle import ratchet_star_world, knurl_band_world
+from .axle import ratchet_star_world
 from .lever_kinematics import assert_kinematics, R_ROOT, PAWL_CLEAR_MM
 from .params import (
     NOZZLE_D,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
-    SEP_Z0, SEP_Z1, BRAKE_H, R_OUT_COIL, CABLE_D,
+    SEP_Z0, SEP_Z1, R_OUT_COIL, CABLE_D,
     LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
-    RATCHET_LEV_Y0, RATCHET_LEV_Y1, BRAKE_LEV_Y0, BRAKE_LEV_Y1,
-    RATCHET_PIVOT_Z, BRAKE_PIVOT_Z, HANDLE_Z_BOT, LEVER_BEND_Z, HANDLE_X_BOT,
+    RATCHET_LEV_Y0, RATCHET_LEV_Y1,
+    RATCHET_PIVOT_Z, HANDLE_Z_BOT, LEVER_BEND_Z, HANDLE_X_BOT,
     LEVER_PIN_D, LEVER_PIN_LEVER_CLR, LEVER_BOSS_OD,
     PIN_KEY_W, PIN_KEY_H, PIN_KEY_L, PIN_KEY_WIDEN, PIN_KEY_SLOT_H,
     PIN_KEY_RATE, PIN_KEY_FLOAT, PIN_CLIP_SLOT_W, PIN_CLIP_RIB_W,
     PIN_SHANK_UNDER, PIN_CLIP_SLOT_FREE, PIN_CLIP_SQUEEZE_RUN,
     PIN_KEY_SEAT_UNDER, PIN_HUB_OVER, PIN_JOURNAL_UNDER,
     LEVER_T,
-    BRAKE_RUBBER_T,
-    PAD_JOINT_CLR, PAD_SPEC, BRAKE_PAD_TOP_MARGIN, BRAKE_PAD_BOT_MARGIN,
-    PAD_FLANGE_H, PAD_FLANGE_T,
-    LEVER_PIN_L, PIN_TIP_END_Y, PIN_TIP_CLEAR, PIN_TIP_NOSE,
+    LEVER_PIN_L, PIN_COL_Y0, PIN_TIP_Y,
+    CLIP_FACE_Y, CLIP_SIDE,
+    RATCHET_BAND_Z0,
     LEVER_Y_IN, BEAM_SIZE, POST_OUT_T,
     LEVER_COL_Y1, LEVER_PIN_BODY_L, BEAM_IR,
     TPU_E, CLIP_GAP, CLIP_T, CLIP_HUB_R, CLIP_BORE_CLR, CLIP_LEAF_T,
     CLIP_LEAF_X, CLIP_CONTACT_R, CLIP_TIP_PAST, CLIP_PRELOAD, CLIP_AX_CLR,
-    POST_R, PIN_HEAD_R, PIN_HEAD_T, RETURN_TORQUE_MIN, RETURN_TORQUE_MAX,
-    RATCHET_CLIP_ROT_DEG, BRAKE_CLIP_ROT_DEG, FLOOR_Z0,
+    CLIP_MODEL_OFFSET,
+    POST_R, PIN_HEAD_R, PIN_HEAD_T, RETURN_TORQUE_MAX,
+    RATCHET_CLIP_ROT_DEG, FLOOR_Z0,
     WALL_IR, WALL_OR, RATCHET_OPEN_CLR, LEVER_SIDE_CLR, STOP_LEVER_CLR,
     BEAM_IR, GUARD_LEVER_CLR, FLOOR_Z1,
 )
@@ -63,16 +58,21 @@ from .params import (
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
 _HW   = LEVER_HANDLE_W / 2.0
 
-# Band z-geometry (world) — v3 stack: BRAKE band below, RATCHET band above.
-BRAKE_BAND_Z0   = SEP_Z0                          # −44.0
-BRAKE_BAND_Z1   = SEP_Z0 + BRAKE_H                # −39.2
-RATCHET_BAND_Z0 = BRAKE_BAND_Z1                   # teeth sit DIRECTLY on the
-RATCHET_BAND_Z1 = SEP_Z1                          # knurl ring (−34.4)
+# Band z-geometry (world) — ONE band since #1019: the teeth, with a
+# plain ring under them (the knurled brake band is gone).
+RATCHET_BAND_Z1 = SEP_Z1                          # −34.4
 
 # Pawl block spans the tooth band; kinematics sample at its mid point.
-# The one-bead running clearance is at the block's BOTTOM now — the brake
-# band's full ring sits DIRECTLY UNDER the teeth (v2 had it above).
-PAWL_BOT_CLR = 0.8
+PAWL_BOT_CLR = 0.0                 # the pawl spans the WHOLE tooth band
+                                   # (#1025). It used to stand a bead off
+                                   # the band's bottom because the brake's
+                                   # knurled ring sat directly under the
+                                   # teeth at the same radius; with that
+                                   # ring gone there is nothing below the
+                                   # disk out here at all — the bearing is
+                                   # at r ≤ 11, 2.4 further down — so the
+                                   # clearance was buying nothing and
+                                   # costing a fifth of the catch height
 PAWL_Z_LO, PAWL_Z_HI = RATCHET_BAND_Z0 + PAWL_BOT_CLR, RATCHET_BAND_Z1
 PAWL_Y_MID = (RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0        # 12
 PAWL_Z_MID = (PAWL_Z_LO + PAWL_Z_HI) / 2.0                  # −36.4
@@ -86,23 +86,16 @@ def _pivot_boss(pivot_x, pivot_z, y0, y1):
             .extrude(-(y1 - y0)).translate((0, y0, 0)))
 
 
-# The pin's DOME bottoms on the blind bore's floor, which leaves it
-# sitting PIN_STOP_D further in than the drawn nominal (#1016). That is
-# the assembled position now — a hard stop, not a feel — so every FIT on
-# the body is cut PIN_FIT_SHIFT nearer the tip to compensate: at the
-# stop each one lands exactly where it landed when the bare tip was
-# pushed to the bore floor, which is the fit the user has printed and
-# likes. Only the head, and the clip resting against it, end up further
-# out than before — which is the whole point (the clip gets its gap).
-PIN_STOP_D = PIN_TIP_CLEAR - PIN_TIP_NOSE            # 2.4 past nominal
-PIN_FIT_SHIFT = PIN_TIP_NOSE                         # 1.6 nearer the tip
-CLIP_GAP_ACT = CLIP_GAP - max(0.0, PIN_STOP_D - PIN_KEY_FLOAT - CLIP_AX_CLR)
-assert CLIP_GAP_ACT >= 4 * NOZZLE_D / 5.0, \
-    "the pin's dome lets the clip come too near the frame — lengthen it"
+# The pin spans the beam (#1029, params): its x = 0 is the fork column's
+# OUTER face — the bore runs THROUGH it since #1035 — and it grows the
+# other way, across the beam and out the −y side to the clip. Depth is
+# set by the WEDGE in the lever, and with no blind floor anywhere there
+# is nothing else it could bottom on.
 
-# where the lever's outboard face sits along the pin (tip at x = 0):
-# the wedge seats with the lever's rib ending here
-PIN_KEY_SEAT_X = (LEVER_Y_IN + LEVER_T) - PIN_TIP_END_Y - PIN_FIT_SHIFT
+# where the lever's KEY face sits along the pin (tip at x = 0): the pin
+# enters the lever at its −y face, so that is where the rib starts and
+# where the wedge seats
+PIN_KEY_SEAT_X = PIN_TIP_Y - LEVER_Y_IN
 
 
 def _key_slot(x_end):
@@ -115,16 +108,14 @@ def _key_slot(x_end):
     to PIN_CLIP_SLOT_FREE, where the TPU clip's rib merely slides, and
     closes to PIN_CLIP_SLOT_W only where that clip's hub comes to rest —
     so the clip goes on easy and grips at the end."""
-    # the clip rests against the pin's HEAD, so its hub's inboard face
-    # is one CLIP_T short of it — the squeeze closes right there (#1016:
-    # before, this was reckoned off the column's face and the drawn gap,
-    # which the dome has now changed)
-    x_hub0 = LEVER_PIN_BODY_L - CLIP_T
+    # the clip's hub comes to rest CLIP_GAP off the beam's −y flank —
+    # the squeeze closes right there
+    x_hub0 = PIN_TIP_Y + CLIP_FACE_Y + CLIP_GAP
     x_sq = x_hub0 - PIN_CLIP_SQUEEZE_RUN                # squeeze starts
     w_seat = PIN_KEY_W - PIN_KEY_SEAT_UNDER        # bites ≈2 mm early
-    x_nose = -(PIN_TIP_NOSE + 0.5)                 # the slot grooves the
-                                   # DOME too, or the lever's and the clip's
-                                   # ribs could not pass it on the way on
+    x_nose = -0.5                                  # the slot runs out of
+                                   # the pin's flat tip (#1035), so the
+                                   # lever's and the clip's ribs can enter
     w = [(x_nose, w_seat + PIN_KEY_RATE * (PIN_KEY_SEAT_X - x_nose)),
          (PIN_KEY_SEAT_X, w_seat),
          (PIN_KEY_SEAT_X + 0.4, PIN_CLIP_SLOT_FREE),
@@ -186,10 +177,8 @@ def _handle(y0, y1, z_top):
     to the shared knee LEVER_BEND_Z, a round knee, then a bar of the
     same width running to the grip disc at (HANDLE_X_BOT, HANDLE_Z_BOT)
     — 45° toward +x −z in the couch version, straight down on the desk
-    build (params). For the brake z_top is above its
-    pivot and the knee IS the pivot (the boss covers it); the ratchet's
-    vertical stretch ends level with the brake's axle. In the plate's
-    along-y print every face here is a vertical wall."""
+    build (params). In the plate's along-y print every face here is a
+    vertical wall."""
     y_len = y1 - y0
 
     def _xz(wp):
@@ -254,23 +243,11 @@ def _build_ratchet_lever():
             .extrude(PAWL_Z_HI - PAWL_Z_LO))
     horiz = horiz.union(bump)
 
-    # 45° UNDERSIDE BEVEL (v3, flipped-band consequence — assert-caught):
-    # the brake band's full ring sits DIRECTLY BELOW the teeth at the SAME
-    # radius, and the pawl's bottom-inner corner arcs ~2 down as it swings
-    # out — unbeveled, it clips the band mid-release. Beveled, the
-    # underside's low corner sits at the TIP radius and exits the band's
-    # radius before crossing its top plane (the swept assert below samples
-    # the beveled corners). The catch face keeps full height at the tips,
-    # tapering toward the root; in the lever's along-Y print the bevel is
-    # a vertical wall.
-    _bev = (RATCHET_BAND_Z1 + 0.5) - PAWL_Z_LO
-    horiz = horiz.cut(
-        cq.Workplane("XZ")
-        .polyline([(0.0, PAWL_Z_LO - 2.0), (R_RIM, PAWL_Z_LO - 2.0),
-                   (R_RIM, PAWL_Z_LO),
-                   (R_RIM - _bev, RATCHET_BAND_Z1 + 0.5),
-                   (0.0, RATCHET_BAND_Z1 + 0.5)])
-        .close().revolve(360.0, (0, 0), (0, 1)))
+    # (the 45° UNDERSIDE BEVEL is RETIRED at #1025 with the brake band
+    # it dodged: the pawl's bottom-inner corner arcs ~2 down as it swings
+    # out, and unbeveled it used to clip that ring. Nothing is under the
+    # teeth now, so the catch face runs full height at every radius —
+    # the bevel was pure lost contact area, user-caught.)
 
     # OVER-PULL WING (user stop rework #880, flipped to −y at #886: the
     # lever prints − to + y, so the nub TOPS the print on the inner
@@ -286,15 +263,13 @@ def _build_ratchet_lever():
 
     part = horiz.union(_handle(y0, y1, RATCHET_PIVOT_Z + _HW))
     part = part.union(_pivot_boss(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y0, y1))
-    # pin inserts from the +y (outer) side → pocket opens at y1
-    part = part.cut(_pivot_hole(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y1, y0))
+    # the pin crosses the beam and enters from the −y side now (#1029),
+    # so the wedge's rib starts at the plate's INNER face and runs outward
+    part = part.cut(_pivot_hole(LEVER_PIVOT_X, RATCHET_PIVOT_Z, y0, y1))
     return part
 
 
-# ── Brake lever + TPU pad — v2's CONTACT-frame design ────────────────────────
-PAD_Y_MID = (BRAKE_LEV_Y0 + BRAKE_LEV_Y1) / 2.0   # −12
-
-
+# ── Ratchet pawl kinematics ─────────────────────────────────────────────────
 def _ratchet_pawl_clear_angle(target_r=R_RIM):
     """Pull angle at which the pawl just clears radius `target_r` (v2
     math; default = the tooth tips)."""
@@ -311,12 +286,6 @@ def _ratchet_pawl_clear_angle(target_r=R_RIM):
 
 
 RATCHET_PAWL_CLEAR_DEG  = _ratchet_pawl_clear_angle()
-BRAKE_CONTACT_DELAY_DEG = 1.5                     # dead zone after pawl-clear
-                                    # (3.0 until #1005: the one-bead-deeper
-                                    # teeth need 13.8° to clear, and the
-                                    # later contact tilted the pad's joint
-                                    # into A_PAD_HANDLE_CLR)
-BRAKE_CONTACT_DEG = RATCHET_PAWL_CLEAR_DEG + BRAKE_CONTACT_DELAY_DEG
 
 # ── RATCHET OVER-PULL STOP (user: nothing stopped a hard pull — the
 # lever could swing on and creep the TPU axle). REDESIGNED at #979
@@ -407,288 +376,6 @@ assert RWING_X1 <= BEAM_IR + BEAM_SIZE - 0.5 + 1e-9, \
 assert math.hypot(RWING_X0, RWING_Y_TIP) >= R_RIM + 0.8 - 1e-9, \
     "A_RSTOP_RIM: the wing reaches within 0.8 of the separator's rim"
 
-# ── Contact-frame geometry (v2's closed form) ────────────────────────────────
-_AC_RAD     = math.radians(BRAKE_CONTACT_DEG)
-_X_BAND_MID = math.sqrt(R_RIM ** 2 - PAD_Y_MID ** 2)      # band x at y −12
-_PLAN_TAN   = abs(PAD_Y_MID) / _X_BAND_MID                # tangent-plane slope
-_FACE_OFF   = BRAKE_RUBBER_T * math.sqrt(1.0 + _PLAN_TAN ** 2)
-Z_TOP_C     = BRAKE_BAND_Z1 - BRAKE_PAD_TOP_MARGIN        # pad slab AT CONTACT
-Z_BOT_C     = BRAKE_BAND_Z0 + BRAKE_PAD_BOT_MARGIN
-BRAKE_PAD_H = Z_TOP_C - Z_BOT_C                           # 4.8 — full band
-PAD_FLANGE_TOP = Z_TOP_C                                  # flange TOP-ALIGNED
-PAD_FLANGE_BOT = Z_TOP_C - PAD_FLANGE_H                   # (v2's call)
-_FL_OFF = PAD_FLANGE_T * math.sqrt(1.0 + _PLAN_TAN ** 2)
-
-
-def _x_band_plane(y):
-    """CONTACT pose: the band's tangent plane at the pad's mid azimuth."""
-    return _X_BAND_MID + (y - PAD_Y_MID) * _PLAN_TAN
-
-
-def _x_face(y):
-    """CONTACT pose: the pad SLAB's back plane (= the flange's front)."""
-    return _x_band_plane(y) + _FACE_OFF
-
-
-def _x_face2(y):
-    """CONTACT pose: the joint plane's anchor at the flange-bottom line."""
-    return _x_face(y) + _FL_OFF
-
-
-# joint-plane TILT (v2's rest-plumb interface — the whole pad↔arm
-# interface leans forward by the contact angle about the flange-bottom
-# line, so at REST it stands exactly plumb beside the handle)
-_TILT_TAN = math.tan(_AC_RAD)
-
-
-def _x_joint(y, z):
-    return _x_face2(y) - (z - PAD_FLANGE_BOT) * _TILT_TAN
-
-
-_JOINT_AX0 = (_x_face2(BRAKE_LEV_Y0), BRAKE_LEV_Y0, PAD_FLANGE_BOT)
-_JOINT_AX1 = (_x_face2(BRAKE_LEV_Y1), BRAKE_LEV_Y1, PAD_FLANGE_BOT)
-
-
-def _tilt_joint(wp):
-    return wp.rotate(_JOINT_AX0, _JOINT_AX1, -BRAKE_CONTACT_DEG)
-
-
-def _rest_xz(x, z):
-    """Map a CONTACT-pose point to the REST pose (+contact about the pivot)."""
-    dx, dz = x - LEVER_PIVOT_X, z - BRAKE_PIVOT_Z
-    ca, sa = math.cos(_AC_RAD), math.sin(_AC_RAD)
-    return (LEVER_PIVOT_X + dx * ca + dz * sa,
-            BRAKE_PIVOT_Z - dx * sa + dz * ca)
-
-
-def _to_rest(wp):
-    return wp.rotate((LEVER_PIVOT_X, 0, BRAKE_PIVOT_Z),
-                     (LEVER_PIVOT_X, 1, BRAKE_PIVOT_Z), BRAKE_CONTACT_DEG)
-
-
-PAD_Z_HI = max(_rest_xz(_x_joint(y, Z_TOP_C), Z_TOP_C)[1]
-               for y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1))
-# the brake side's swept CEILING (its fork-roof driver — frame.py): the
-# highest any brake-side material reaches over the rest↔contact swing.
-# Rest is the high extreme (the corners' radius never crosses the
-# pivot's vertical inside the swing), so the candidates are the pad
-# slab's and joint plane's top corners at REST, plus Z_TOP_C at contact.
-BRAKE_SWEPT_TOP = max(
-    Z_TOP_C, PAD_Z_HI,
-    max(_rest_xz(_x_band_plane(_y), Z_TOP_C)[1]
-        for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1)),
-)
-# (A_PAD_RING is RETIRED — user's call: the band's gable crown over the
-# bays is gone, the windows run open through the top rim, so nothing of
-# the band sits over the pad's swing anymore. BRAKE_SWEPT_TOP stays
-# exported — frame.py's arch roof is set from it.)
-
-# ── BRAKE REST + END STOPS (user #988 — the brake had no hard stop at
-# either end: at rest the TPU pad's corner squished into a corbel under
-# the axle's pretwist, and at the far end only the pad's compression
-# resisted). A WING on the lever's OUTER (−y) face, in the bay's outer
-# air strip between the plate and the fork column (user #1002: the brake
-# prints + to − y — its +y face on the bed — so the wing must TOP the
-# print; on the inner face it hung under the bed plane. The ratchet's
-# wing is the mirror case: it prints on its +y face, wing on −y), and it
-# sweeps between two ribs that frame.py
-# carves out of ONE blank with this sweep: the +x rib is where the wing
-# lands at REST (the return spring holds it there), the −x rib where it
-# lands at FULL PULL. The wing sits BWING_Z0 over the pivot to clear the
-# frame's thrust ring and its teardrop crown (the ring shares this air
-# strip, reaching ~7.0 over the pivot), and far enough out that both
-# ribs keep ≥ 3 beads of length on the band strip + fork column they
-# root on (asserted in frame.py). Pull moves this wing −x: it rides ABOVE the
-# brake pivot, where pulling swings the pad into the band.
-BRAKE_END_DEG = LEVER_TRAVEL_DEG             # the brake's full pull
-BWING_Y_IN = BRAKE_LEV_Y0 + 1.0              # −16.25 — 1.0 into the plate
-BWING_Y_TIP = BRAKE_LEV_Y0 - LEVER_SIDE_CLR  # −18.9 — tip FLUSH on the fork
-                                             # column's inner face
-BSTOP_Y_TIP = BRAKE_LEV_Y0 - STOP_LEVER_CLR  # −17.4 — the ribs' free face:
-                                             # STOP_LEVER_CLR off the plate's
-                                             # outer face, 1.5 over the wing
-BSTOP_Y_ROOT = BWING_Y_TIP - RSTOP_WELD      # −19.7 — ribs buried a bead
-                                             # into the column
-BWING_X0 = LEVER_PIVOT_X - 2 * NOZZLE_D
-BWING_X1 = BWING_X0 + 3 * NOZZLE_D
-BWING_Z0 = BRAKE_PIVOT_Z + 10 * NOZZLE_D     # 8.0 over the pivot
-BWING_Z1 = BWING_Z0 + 3 * NOZZLE_D
-
-
-def _bwing_box(y_far):
-    """The brake wing as a box at REST, from BWING_Y_IN (inside the
-    plate) out to the signed `y_far`."""
-    return (cq.Workplane("XY").workplane(offset=BWING_Z0)
-            .polyline([(BWING_X0, BWING_Y_IN), (BWING_X1, BWING_Y_IN),
-                       (BWING_X1, y_far), (BWING_X0, y_far)])
-            .close().extrude(BWING_Z1 - BWING_Z0))
-
-
-def brake_wing_at(d):
-    """The brake wing's CUTTER box (reaching past the flank into the rib
-    weld) at pull angle `d`."""
-    return (_bwing_box(BSTOP_Y_ROOT - 0.5)
-            .rotate((LEVER_PIVOT_X, 0, BRAKE_PIVOT_Z),
-                    (LEVER_PIVOT_X, 1, BRAKE_PIVOT_Z), -d))
-
-
-def brake_wing_swept(n=32):
-    """The brake WING's swept volume, rest → full pull. frame.py cuts
-    its stop blanks with this: the survivors are the rest and end ribs,
-    each face the wing's own face at that pose."""
-    swept = None
-    for i in range(n + 1):
-        w = brake_wing_at(BRAKE_END_DEG * i / n)
-        swept = w if swept is None else swept.union(w, clean=False)
-    return swept
-
-
-# (v2's A_PAD_WINDOW is RETIRED — user #834: the bays run through the
-# whole wall stack, so there is no cap over the swinging pad anymore; the
-# nearest ceiling is frame_top at z 0, tens of mm clear. PAD_Z_HI stays
-# as the reference number.)
-
-# A_PAD_HANDLE_CLR / A_PAD_BOSS_CLR (v2): the plumb-at-rest joint plane
-# must clear the handle face and the pivot boss — static gaps are the
-# whole story (the plane contains the û slide direction).
-_GUARD = 0.45
-for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
-    for _z in (PAD_FLANGE_BOT, PAD_FLANGE_TOP):
-        _xr, _zr = _rest_xz(_x_joint(_y, _z), _z)
-        assert _xr <= LEVER_PIVOT_X - _HW - _GUARD + 1e-9, (
-            f"A_PAD_HANDLE_CLR: joint-plane corner (y={_y}, z={_z:.1f}) "
-            f"rests at x {_xr:.2f}, within {_GUARD} of the handle face at "
-            f"{LEVER_PIVOT_X - _HW:.2f} — grow the pivot-out offset")
-for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
-    _xr, _zr = _rest_xz(_x_face2(_y), PAD_FLANGE_BOT)
-    _d = math.hypot(_xr - LEVER_PIVOT_X, _zr - BRAKE_PIVOT_Z)
-    assert _d >= LEVER_BOSS_OD / 2.0 + 0.1 - 1e-9, (
-        f"A_PAD_BOSS_CLR: flange bottom-back edge rests {_d:.2f} from the "
-        f"pivot axis, within 0.1 of the boss {LEVER_BOSS_OD / 2.0:.2f}")
-
-
-# ── Pad ↔ arm SLIDE JOINT (cadkit hook, v2's edge-bounded site) ──────────────
-# Stop wall at the INNER end, mouth through the arm's OUTER face: braking
-# drag (retraction sense carried from v2 — RE-CONFIRM when the v3 drum
-# wind chirality is final) presses the tenon into the stop.
-_B_DEG   = math.degrees(math.atan(_PLAN_TAN))     # face plan-bevel
-_U_LEN   = (BRAKE_LEV_Y1 - BRAKE_LEV_Y0) * math.sqrt(1.0 + _PLAN_TAN ** 2)
-_JT_STOP = 2 * NOZZLE_D
-_PAD_J   = joint(PAD_FLANGE_H, None, tenon=PAD_SPEC, mortise=PAD_SPEC,
-                 install="-z", bounded=True, clearance=PAD_JOINT_CLR)
-
-
-def _pad_joint(tenon):
-    """CONTACT-frame solid of the pad↔arm slide joint (v2 verbatim —
-    library frame mapped onto û, then tilted onto the joint plane)."""
-    L = _U_LEN - _JT_STOP + 1.0
-    if tenon:
-        j = _PAD_J.tenon(root=0.5, length=L)
-    else:
-        j = _PAD_J.mortise(drop=1.0, length=L)
-    return _tilt_joint(
-        j.rotate((0, 0, 0), (1, 0, 0), 90.0)
-        .translate((0.0, _U_LEN - _JT_STOP, 0.0))
-        .rotate((0, 0, 0), (0, 0, 1), -_B_DEG)
-        .translate((_x_face2(BRAKE_LEV_Y0), BRAKE_LEV_Y0,
-                    (PAD_FLANGE_BOT + PAD_FLANGE_TOP) / 2.0)))
-
-
-def _joint_backspace():
-    """Halfspace whose front face is the tilted joint plane — arm gets its
-    end face by intersect, the pad flange its back by cut: identical
-    plane, flush mate."""
-    return _tilt_joint(
-        cq.Workplane("XY").workplane(offset=-20.0)
-        .polyline([(0.0, -30.0), (60.0, -30.0), (60.0, 30.0), (0.0, 30.0)])
-        .close().extrude(60.0)
-        .rotate((0, 0, 0), (0, 0, 1), -_B_DEG)
-        .translate((_x_face2(BRAKE_LEV_Y0), BRAKE_LEV_Y0, PAD_FLANGE_BOT)))
-
-
-def brake_pad_rect_corners(h=None):
-    """(lever_face_corners, band_face_corners) of the TPU pad, REST pose."""
-    z_bot = Z_TOP_C - h if h is not None else Z_BOT_C
-    zf_bot = z_bot if h is not None else PAD_FLANGE_BOT
-    lever, band = [], []
-    for y, zs, zl in ((BRAKE_LEV_Y0, z_bot, zf_bot),
-                      (BRAKE_LEV_Y1, z_bot, zf_bot),
-                      (BRAKE_LEV_Y1, Z_TOP_C, Z_TOP_C),
-                      (BRAKE_LEV_Y0, Z_TOP_C, Z_TOP_C)):
-        xf, zf = _rest_xz(_x_joint(y, zl), zl)
-        xb, zb = _rest_xz(math.sqrt(R_RIM ** 2 - y * y), zs)
-        lever.append((xf, y, zf))
-        band.append((xb, y, zb))
-    return lever, band
-
-
-def _build_brake_lever():
-    """(1) the straight pad arm — contact-frame box trimmed to the tilted
-    joint plane, back-rotated to rest; (2) the handle — vertical above the
-    pivot, 45° out from the pivot to the grip disc (_handle)."""
-    y0, y1 = BRAKE_LEV_Y0, BRAKE_LEV_Y1
-    y_len = y1 - y0
-    h_x_hi = LEVER_PIVOT_X + _HW
-    horiz = (cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT)
-             .polyline([(_x_joint(y0, PAD_FLANGE_TOP) - 0.5, y0),
-                        (h_x_hi + 2.0, y0),
-                        (h_x_hi + 2.0, y1),
-                        (_x_joint(y1, PAD_FLANGE_TOP) - 0.5, y1)])
-             .close().extrude(PAD_FLANGE_TOP - PAD_FLANGE_BOT))
-    horiz = _to_rest(horiz.intersect(_joint_backspace()))
-    horiz = horiz.cut(
-        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT - 3.0)
-        .polyline([(h_x_hi, y0 - 1), (h_x_hi + 9.0, y0 - 1),
-                   (h_x_hi + 9.0, y1 + 1), (h_x_hi, y1 + 1)])
-        .close().extrude(PAD_FLANGE_H + 8.0))
-
-    vert_top = _rest_xz(LEVER_PIVOT_X - _HW, Z_TOP_C)[1]
-    part = horiz.union(_handle(y0, y1, vert_top))
-    # the stop WING (#988; on the OUTER face since #1002), flush on the
-    # fork column's plane
-    part = part.union(_bwing_box(BWING_Y_TIP))
-    part = part.union(_pivot_boss(LEVER_PIVOT_X, BRAKE_PIVOT_Z, y0, y1))
-    # mortise channel cut AFTER every union (v2's refill lesson)
-    part = part.cut(_to_rest(_pad_joint(tenon=False)))
-    # pin inserts from the −y (outer) side → pocket opens at y0
-    part = part.cut(_pivot_hole(LEVER_PIVOT_X, BRAKE_PIVOT_Z, y0, y1))
-    return part
-
-
-def _build_brake_pad(h=None):
-    """The 95A TPU pad (contact frame): straight slab, band side cut
-    CONCAVE by the KNURLED band itself (the texture's exact negative),
-    L-flange carrying the hook rail, back-rotated to rest. Prints
-    STANDING on its OUTER end face (v2's recipe)."""
-    y0, y1 = BRAKE_LEV_Y0, BRAKE_LEV_Y1
-    z_bot = Z_TOP_C - h if h is not None else Z_BOT_C
-    slab = (cq.Workplane("XY").workplane(offset=z_bot)
-            .polyline([(_x_band_plane(y0) - 0.5, y0), (_x_face(y0), y0),
-                       (_x_face(y1), y1), (_x_band_plane(y1) - 0.5, y1)])
-            .close().extrude(Z_TOP_C - z_bot))
-    slab = slab.cut(knurl_band_world(z_bot - 1.0, Z_TOP_C + 1.0))
-    if h is not None:
-        return _to_rest(slab)
-    slab = slab.union(
-        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT)
-        .polyline([(_x_face(y0), y0), (_x_face2(y0), y0),
-                   (_x_face2(y1), y1), (_x_face(y1), y1)])
-        .close().extrude(PAD_FLANGE_H))
-    slab = slab.cut(_joint_backspace())
-    pad = _to_rest(slab)
-    rail = _pad_joint(tenon=True)
-    rail = rail.cut(
-        cq.Workplane("XY").workplane(offset=PAD_FLANGE_BOT - 1.0)
-        .center(_x_face2(y0) + 1.0, y0 - 5.0).rect(20.0, 10.0)
-        .extrude(PAD_FLANGE_H + 2.0))
-    return pad.union(_to_rest(rail))
-
-
-def brake_pad_tall_demo(h):
-    """DEMO ONLY (viewer poses): the pad at a forced height, top edge kept."""
-    return _build_brake_pad(h)
-
-
 # ── BAY WALL sill (user #977 — give the cable tray its wall back) ───────────
 # The bay windows ran FULL HEIGHT because a hand had to reach in and
 # grip a handle hanging straight down. The handles bend 45° outward
@@ -744,15 +431,6 @@ def _bay_sill(pts, pivot_z):
     return lo - GUARD_LEVER_CLR
 
 
-# the BRAKE's pad + joint corners (the lowest brake material there)
-_g_pts = []
-for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):
-    for _zc in (Z_BOT_C, PAD_FLANGE_BOT, Z_TOP_C):
-        _g_pts.append(_rest_xz(_x_band_plane(_y) - 0.5, _zc))
-        _g_pts.append(_rest_xz(_x_face2(_y), _zc))
-_g_pts.append(_rest_xz(LEVER_PIVOT_X + _HW + 2.0, PAD_FLANGE_BOT))
-_g_pts.append(_rest_xz(LEVER_PIVOT_X - _HW, PAD_FLANGE_BOT))
-
 def _edge(p0, p1, n=80):
     """Dense samples along a straight edge, (x, z) → (x, z)."""
     return [(p0[0] + (p1[0] - p0[0]) * i / n, p0[1] + (p1[1] - p0[1]) * i / n)
@@ -762,65 +440,32 @@ def _edge(p0, p1, n=80):
 _R_PTS = _handle_outline(RATCHET_PIVOT_Z + _HW)
 for _z in (PAWL_Z_LO, PAWL_Z_HI):                  # the pawl block's long
     _R_PTS += _edge((56.0, _z), (LEVER_PIVOT_X + _HW, _z))   # edges
-_B_PTS = _handle_outline(_rest_xz(LEVER_PIVOT_X - _HW, Z_TOP_C)[1]) + _g_pts
-for _y in (BRAKE_LEV_Y0, BRAKE_LEV_Y1):            # the pad arm and pad
-    for _z in (PAD_FLANGE_BOT, PAD_FLANGE_TOP):    # slab, contact frame →
-        _B_PTS += [_rest_xz(x, z) for x, z in _edge(   # rest
-            (_x_joint(_y, _z) - 0.5, _z), (LEVER_PIVOT_X + _HW + 2.0, _z))]
-    for _z in (Z_BOT_C, Z_TOP_C):
-        _B_PTS += [_rest_xz(x, z) for x, z in _edge(
-            (_x_band_plane(_y) - 0.5, _z), (_x_face2(_y), _z), 20)]
-
 BAY_WALL_Z1_RATCHET = _bay_sill(_R_PTS, RATCHET_PIVOT_Z)
-BAY_WALL_Z1_BRAKE = _bay_sill(_B_PTS, BRAKE_PIVOT_Z)
+# (the BRAKE bay's sill went with the brake — #1019. Its pad and joint
+# corners were the lowest lever material anywhere, so that bay's wall
+# was the low one; the −y side is a plain wall now.)
 # the restored wall is worth having at all only if it covers a real
 # slice of the tray (the coil's own z band)
-assert min(BAY_WALL_Z1_RATCHET, BAY_WALL_Z1_BRAKE) > FLOOR_Z1 + 5.0, \
-    "A_BAY_WALL: a bay sill lands within 5 of the tray floor — no wall left"
+assert BAY_WALL_Z1_RATCHET > FLOOR_Z1 + 5.0, \
+    "A_BAY_WALL: the bay sill lands within 5 of the tray floor — no wall left"
 
 
 # ── Kinematic assertions — fire at import ────────────────────────────────────
-_PAD_BAND_CORNERS = brake_pad_rect_corners()[1]
-
 KIN = assert_kinematics(
     ratchet_pivot_x=LEVER_PIVOT_X, ratchet_pivot_z=RATCHET_PIVOT_Z,
     ratchet_stop_deg=RATCHET_OPEN_DEG,     # the SHELF is the stop now
     pawl_y_mid=PAWL_Y_MID, pawl_z_mid=PAWL_Z_MID,
-    brake_pivot_x=LEVER_PIVOT_X, brake_pivot_z=BRAKE_PIVOT_Z,
-    brake_travel_deg=LEVER_TRAVEL_DEG,
-    brake_contact_deg=BRAKE_CONTACT_DEG,
-    brake_band_z0=BRAKE_BAND_Z0, brake_band_z1=BRAKE_BAND_Z1,
     # spool-chamber keep-out: the outermost design-capacity wrap's true
     # surface, above the disk top (v2's contact-only doctrine)
     chamber_r_min=R_OUT_COIL + CABLE_D / 2.0, chamber_z0=SEP_Z1,
-    pad_band_corners=_PAD_BAND_CORNERS,
 )
 
-# A_PAWL_BAND_CLR — MIRRORED from v2 (the brake band's full ring now sits
-# DIRECTLY UNDER the teeth): the pawl's BOTTOM corners must clear its TOP
-# face over the in-service swing (rest → stop, + 1° of back-swing). The
-# corners sampled are the BEVELED underside's: tip-radius corner at
-# PAWL_Z_LO, root corner raised by the 45° bevel.
-_pawl_band_clr = 1e9
-for _y in (RATCHET_LEV_Y0, RATCHET_LEV_Y1):
-    for _r, _zc in ((R_RIM, PAWL_Z_LO),
-                    (R_ROOT, PAWL_Z_LO + (R_RIM - R_ROOT))):
-        _x = math.sqrt(max(_r ** 2 - _y ** 2, 0.0))
-        _dx, _dz = _x - LEVER_PIVOT_X, _zc - RATCHET_PIVOT_Z
-        for _i in range(-int(math.ceil(RATCHET_OPEN_DEG)), 2):
-            _t = math.radians(_i)
-            _nx = LEVER_PIVOT_X + _dx * math.cos(_t) + _dz * math.sin(_t)
-            _nz = RATCHET_PIVOT_Z - _dx * math.sin(_t) + _dz * math.cos(_t)
-            if math.hypot(_nx, _y) <= R_RIM + 0.3:
-                _pawl_band_clr = min(_pawl_band_clr, _nz - BRAKE_BAND_Z1)
-assert _pawl_band_clr >= 0.3 - 1e-9, (
-    f"A_PAWL_BAND_CLR: a swept pawl bottom corner comes within "
-    f"{_pawl_band_clr:.2f} mm of the brake band's top — grow PAWL_BOT_CLR")
-
+# (A_PAWL_BAND_CLR is RETIRED at #1025. It asserted that the pawl's
+# swept bottom corners cleared the brake band's top face; that band is
+# gone, the pawl now spans the tooth band exactly, and below the disk at
+# this radius there is open air for the corner to arc into.)
 
 ratchet_lever = _build_ratchet_lever()
-brake_lever = _build_brake_lever()
-brake_pad_tpu = _build_brake_pad()
 
 
 # ── RETURN CLIPS (user #1004, params RETURN CLIPS) ─────────────────────────
@@ -828,11 +473,11 @@ brake_pad_tpu = _build_brake_pad()
 # is drawn for a leaf hanging straight DOWN (the ratchet's): pulling turns
 # the pin by −d about +y, points below the pivot move +x, so the leaf sits
 # on the post's −x side and pull bends it harder. Each lever's layout is
-# that drawing rotated by CLIP_ROT[side] about the pivot — the brake's by
-# 180° (user #1008: its leaf points UP, where the column has room for the
-# long leaf; hanging down, its post ran into the frame's hand-access
-# cutaway). A rotation, so preload, force and pull sense are unchanged.
-CLIP_ROT = {+1: RATCHET_CLIP_ROT_DEG, -1: BRAKE_CLIP_ROT_DEG}
+# that drawing rotated by CLIP_ROT[side] about the pivot. (The rotation
+# existed for the brake's clip, which pointed its leaf UP; #1019 left
+# only this one, at 0°. Kept as a rotation because it costs nothing and
+# it is how the layout is anchored.)
+CLIP_ROT = {CLIP_SIDE: RATCHET_CLIP_ROT_DEG}
 _LEAF_ROOT_Z = -math.sqrt(CLIP_HUB_R ** 2 - CLIP_LEAF_X ** 2)  # hub edge
 
 
@@ -858,10 +503,17 @@ _LEAF_K = 3.0 * TPU_E * _LEAF_I / _LEAF_L ** 3      # N/mm at the contact
 CLIP_TRAVEL_DEG = LEVER_TRAVEL_DEG
 
 
+# What the leaf ACTUALLY deflects, measured (params CLIP_MODEL_OFFSET):
+# the drawn preload less however far the real part sits behind the model.
+# Everything below is force, and force follows the real deflection — the
+# GEOMETRY still uses the full CLIP_PRELOAD, because that is what prints.
+CLIP_PRELOAD_REAL = max(0.0, CLIP_PRELOAD - CLIP_MODEL_OFFSET)
+
+
 def _clip_torque(d):
-    """Return torque (N·mm) at pull `d`: the leaf's contact deflection is
-    its preload plus the arc the pin swings that point through."""
-    delta = CLIP_PRELOAD + math.radians(d) * CLIP_CONTACT_R
+    """Return torque (N·mm) at pull `d`: the leaf's REAL contact
+    deflection plus the arc the pin swings that point through."""
+    delta = CLIP_PRELOAD_REAL + math.radians(d) * CLIP_CONTACT_R
     return _LEAF_K * delta * CLIP_CONTACT_R, delta
 
 
@@ -872,8 +524,11 @@ def _leaf_strain(delta):
 CLIP_TORQUE = (_clip_torque(0.0)[0], _clip_torque(CLIP_TRAVEL_DEG)[0])
 CLIP_STRAIN = (_leaf_strain(_clip_torque(0.0)[1]),
                _leaf_strain(_clip_torque(CLIP_TRAVEL_DEG)[1]))
-assert CLIP_TORQUE[0] >= RETURN_TORQUE_MIN - 1e-9, \
-    f"clip holds only {CLIP_TORQUE[0]:.1f} N·mm at rest"
+# (there is no MINIMUM resting torque any more — user #1039. The clip is
+# set to land exactly ON its post: contact, no gap, so no slack in the
+# lever. That leaves nothing pressing the pawl into the teeth at rest,
+# which is now a deliberate choice rather than a failure — each 0.8 of
+# CLIP_PRELOAD above 3.2 would buy 26.4 N·mm of it back.)
 assert CLIP_TORQUE[1] <= RETURN_TORQUE_MAX + 1e-9, \
     f"clip needs {CLIP_TORQUE[1]:.1f} N·mm at full pull — too stiff"
 assert CLIP_STRAIN[0] <= 0.07 + 1e-9, \
@@ -899,7 +554,7 @@ def _leaf_face_x(d, s):
     return x_free - w + CLIP_LEAF_T / 2.0
 
 
-# the UP-leaf (brake) post's BAR lies on the hub side of its nose, where
+# the UP-leaf post's BAR lay on the hub side of its nose, where
 # the leaf's free span swings as it bends. In the down drawing the bar's
 # near edge is the nose's 45° tangent at 10:30 — the leaf must keep 0.2
 # off it the whole way up (on the 3:00→4:30 arc the leaf just ROLLS: its
@@ -933,14 +588,10 @@ for _i in range(11):
 # hand-access cutaway (frame._hand_wedge) that rises from (WALL_OR, the
 # bed) — the cut only reaches x ≥ WALL_OR, well outboard of the band
 _R_MID = (WALL_IR + WALL_OR) / 2.0
-for _s, _pz in ((+1, RATCHET_PIVOT_Z), (-1, BRAKE_PIVOT_Z)):
+for _s, _pz in ((CLIP_SIDE, RATCHET_PIVOT_Z),):
     _cx, _cz = clip_post_xz(_s)
     _cx, _cz = LEVER_PIVOT_X + _cx, _pz + _cz
-    _c_bot = ((_cz - _BRACE_DROP - _cx if CLIP_ROT[_s] == 0 else _cz - _cx)
-              - (2.0 if CLIP_ROT[_s] == 0 else 1.0) * POST_R * math.sqrt(2.0))
-    _xb = math.sqrt(_R_MID ** 2 - LEVER_COL_Y1 ** 2)   # the band, inboard y
-    _zb = _xb + _c_bot                                 # the bar's underside
-    assert _zb >= FLOOR_Z0 + max(0.0, _xb - WALL_OR) + 0.8 - 1e-9,         "a clip post's bar meets the band below the bed / in the cutaway"
+    _c_bot = (_cz - _BRACE_DROP - _cx) - 2.0 * POST_R * math.sqrt(2.0)
     assert _cx - LEVER_PIVOT_X + POST_R <= (BEAM_IR + BEAM_SIZE)         - LEVER_PIVOT_X - 0.5,         "a clip post runs past the column's +x face"
 
 
@@ -952,71 +603,57 @@ def _build_lever_pin():
     Symmetric, so the same part serves both levers. Prints standing on
     its head."""
     L = LEVER_PIN_BODY_L
-    # the SHANK runs PIN_SHANK_UNDER under nominal and rises to full Ø
-    # only over its last stretch — the bit the column's bore and the TPU
-    # hub land on at the seat (user #1013). So the round fits are slack
-    # everywhere the pin merely passes through, and the wedge key is the
-    # only thing that grips at the end.
-    x0 = PIN_KEY_SEAT_X
-    x_full = LEVER_COL_Y1 - PIN_TIP_END_Y - PIN_FIT_SHIFT
-    x_hub = x_full + PIN_KEY_FLOAT          # the fat bit stays out of the bore
+    # ONE journal diameter down the whole body (#1024 halved the shank's
+    # undersize onto the journal's own number, so the old taper between
+    # them evaluated flat anyway), then the HUB section — a touch over
+    # nominal — where the TPU clip grips, outboard of every frame bore.
+    x_hub = PIN_TIP_Y + CLIP_FACE_Y + CLIP_GAP      # the clip's inner face
     r_shank = LEVER_PIN_D / 2.0 - PIN_SHANK_UNDER / 2.0
-    r_jrnl = LEVER_PIN_D / 2.0 - PIN_JOURNAL_UNDER / 2.0
-    body = (cq.Workplane("YZ").circle(r_shank).extrude(x0)
-            .union(cq.Workplane("YZ").workplane(offset=x0).circle(r_shank)
-                   .workplane(offset=x_full - x0).circle(r_jrnl).loft())
-            .union(cq.Workplane("YZ").workplane(offset=x_full).circle(r_jrnl)
-                   .extrude(x_hub - x_full))
+    body = (cq.Workplane("YZ").circle(r_shank).extrude(x_hub)
             .union(cq.Workplane("YZ").workplane(offset=x_hub)
                    .circle(LEVER_PIN_D / 2.0 + PIN_HUB_OVER / 2.0)
                    .extrude(L - x_hub)))
     head = (cq.Workplane("YZ").workplane(offset=L).circle(PIN_HEAD_R)
             .extrude(PIN_HEAD_T))
-    # the DOME on the tip (#1016) — an ellipsoidal nose PIN_TIP_NOSE long
-    # on the shank's own radius, so it meets the blind bore's floor at a
-    # single point on the axis and that is the pin's depth stop
-    n = PIN_TIP_NOSE
-    r_nose = (r_shank ** 2 + n ** 2) / (2.0 * n)   # the cap's own radius:
-    c_nose = r_nose - n                            # n tall on a r_shank base
-    nose = (cq.Workplane("YZ").workplane(offset=c_nose).sphere(r_nose)
-            .intersect(cq.Workplane("YZ").workplane(offset=-n)
-                       .rect(4 * r_shank, 4 * r_shank).extrude(n)))
-    return body.union(head).union(nose).cut(_key_slot(L + 0.5))
+    return body.union(head).cut(_key_slot(L + 0.5))
 
 
 lever_pin = _build_lever_pin()                                # the print
 
 
 def lever_pin_in_place(pivot_z, y_sign, pull_deg=0.0):
-    """The pin as INSTALLED: tip on the beam's blind-bore floor, running
-    out through the lever, the column and the clip to its head, D-flat UP
-    at rest (under the bores' teardrop crowns) — and, keyed to its lever,
-    turned with it by `pull_deg`."""
-    pin = (lever_pin.rotate((0, 0, 0), (1, 0, 0), 180.0)   # flat to +z
+    """The pin as INSTALLED (#1029): its tip in the +y fork column's
+    blind bore, running −y through the lever and the beam and out to the
+    clip on the far side, slot UP at rest (under the bores' teardrop
+    crowns) — and, keyed to its lever, turned with it by `pull_deg`."""
+    pin = (lever_pin.rotate((0, 0, 0), (1, 0, 0), 180.0)   # slot to +z
            .rotate((0, 0, 0), (0, 0, 1), y_sign * 90.0)
-           .translate((LEVER_PIVOT_X,
-                       y_sign * (PIN_TIP_END_Y - PIN_STOP_D), pivot_z)))
+           .translate((LEVER_PIVOT_X, PIN_TIP_Y, pivot_z)))
     if pull_deg:
         pin = pin.rotate((LEVER_PIVOT_X, 0, pivot_z),
                          (LEVER_PIVOT_X, 1, pivot_z), -pull_deg)
     return pin
 
 
-def _clip_profile(bent, y_sign):
-    """One lever's clip in (x, z) about the pivot, extruded y 0..CLIP_T:
-    the hub with the pin's D bore (flat UP, as the pin sits at rest — so
-    the ratchet's and the brake's clips are different parts) and the
-    leaf. `bent` = as installed (leaf straight, on the post); otherwise
-    as PRINTED — the leaf leaned CLIP_PRELOAD further into the post about
-    its root."""
+def _clip_profile(y_sign):
+    """The clip in (x, z) about the pivot, extruded y 0..CLIP_T: the hub
+    with the pin's bore (flat UP, as the pin sits at rest) and the leaf,
+    leaned CLIP_PRELOAD into the post about its root.
+
+    ONE shape (user #1037). There used to be a second, "bent" variant —
+    the leaf straight, as the post holds it once installed — and the
+    assembly showed that one. But then the viewer was rendering a part
+    that is not the part: the assembly may ORIENT geometry, never change
+    it. The real clip goes in the assembly, so the preload shows there as
+    what it physically is — the leaf passing through where the post's
+    surface is, by exactly the interference the TPU takes up."""
     hub = cq.Workplane("XZ").circle(CLIP_HUB_R).extrude(-CLIP_T)
     z_tip = -(CLIP_CONTACT_R + CLIP_TIP_PAST)
     leaf = (cq.Workplane("XZ").center(CLIP_LEAF_X, z_tip / 2.0)
             .rect(CLIP_LEAF_T, -z_tip).extrude(-CLIP_T))
-    if not bent:
-        a = math.degrees(math.atan2(CLIP_PRELOAD, _LEAF_L))
-        leaf = leaf.rotate((CLIP_LEAF_X, 0, _LEAF_ROOT_Z),
-                           (CLIP_LEAF_X, 1, _LEAF_ROOT_Z), -a)
+    a = math.degrees(math.atan2(CLIP_PRELOAD, _LEAF_L))
+    leaf = leaf.rotate((CLIP_LEAF_X, 0, _LEAF_ROOT_Z),
+                       (CLIP_LEAF_X, 1, _LEAF_ROOT_Z), -a)
     clip = hub.union(leaf).rotate((0, 0, 0), (0, 1, 0), CLIP_ROT[y_sign])
     # the bore, keyed by the clip's OWN rib into the pin's slot — a touch
     # wider than the slot there, so the TPU is squeezed (#1011)
@@ -1029,17 +666,16 @@ def _clip_profile(bent, y_sign):
     return clip if y_sign > 0 else clip.mirror("XZ")
 
 
-ratchet_clip_tpu = _clip_profile(bent=False, y_sign=+1)      # the prints
-brake_clip_tpu = _clip_profile(bent=False, y_sign=-1)
+ratchet_clip_tpu = _clip_profile(CLIP_SIDE)                  # the print
 
 
 def return_clip_in_place(pivot_z, y_sign):
-    """The clip as installed, AT REST (leaf bent onto its post): on the
+    """The clip as installed, AT REST: the PRINTED part, oriented — on the
     pin, resting against its HEAD — so what is left over the column's
-    outer face is CLIP_GAP_ACT, the drawn gap less however far the dome
-    lets the pin push the clip in (#1016)."""
-    return _clip_profile(bent=True, y_sign=y_sign).translate(
-        (LEVER_PIVOT_X, y_sign * (LEVER_COL_Y1 + CLIP_GAP_ACT), pivot_z))
+    outer face is CLIP_GAP — exact now, because the wedge seats the pin
+    and the head carries the clip with it (#1029)."""
+    return _clip_profile(y_sign).translate(
+        (LEVER_PIVOT_X, y_sign * (CLIP_FACE_Y + CLIP_GAP), pivot_z))
 
 
 def clip_post(pivot_z, y_sign):
@@ -1051,14 +687,13 @@ def clip_post(pivot_z, y_sign):
     #1009). The bar's two edges are the nose's own 45° tangents, so nose
     and bar read as one capsule; it dies mid-band, never into the spool
     chamber, and the column buries its inboard bead.
-      · UP leaf (brake): the tangents at 10:30 and 4:30 — the leaf rests
-        on the nose's 3:00 and the bar leans away from it;
-      · DOWN leaf (ratchet): the leaf comes down the nose's 9:00 side,
-        so the bar hangs under a square BLOCK instead, _BRACE_DROP below
-        it — clear of the leaf's tip as it leans (asserted above)."""
+    The leaf comes DOWN the nose's 9:00 side, so the bar hangs under a
+    square BLOCK, _BRACE_DROP below it — clear of the leaf's tip as it
+    leans (asserted above). (#1019 retired the UP-leaf variant with the
+    brake's clip, which rested on the nose's 3:00 instead.)"""
     cx0, cz0 = clip_post_xz(y_sign)
     cx, cz = LEVER_PIVOT_X + cx0, pivot_z + cz0
-    y_face = y_sign * LEVER_COL_Y1
+    y_face = y_sign * CLIP_FACE_Y
     y0, y1 = y_face - y_sign * NOZZLE_D, y_face + y_sign * _POST_OUT
     lo, hi = min(y0, y1), max(y0, y1)
     B = 60.0                       # far enough −x to reach the band at any y
@@ -1086,16 +721,47 @@ def clip_post(pivot_z, y_sign):
 
     nose = cq.Workplane(obj=cq.Solid.makeCylinder(
         POST_R, hi - lo, cq.Vector(cx, lo, cz), cq.Vector(0, 1, 0)))
-    if CLIP_ROT[y_sign] == 0:                      # DOWN leaf: nose + block
-        block = xz_prism([(cx - POST_R, cz - POST_R), (cx + POST_R, cz - POST_R),
-                          (cx + POST_R, cz), (cx - POST_R, cz)])
-        bar = strip(cz - _BRACE_DROP - cx).cut(keep_below(cz - POST_R))
-        bar = bar.cut(xz_prism([(cx + POST_R, cz - B), (cx + B, cz - B),
-                                (cx + B, cz + B), (cx + POST_R, cz + B)]))
-        return nose.union(block).union(to_band(bar))
-    # UP leaf: the capsule — the nose sits BETWEEN its two tangents, so
-    # the bar ends on the diameter square to it and the nose rounds it off
-    bar = strip(cz - cx + POST_R * math.sqrt(2.0))
-    bar = bar.cut(xz_prism([(cx - 3 * B, cz + 3 * B), (cx + 3 * B, cz - 3 * B),
-                            (cx + 3 * B, cz + 3 * B)]))  # past the diameter
-    return nose.union(to_band(bar))
+    # the block runs DOWN to where the bar's top edge crosses its inboard
+    # face, so the two merge and there is no ceiling between them (user
+    # #1028). It used to stop at cz − POST_R, one _BRACE_DROP above the
+    # bar, which left an 11 mm² flat facing straight down in the print —
+    # the bar only reached the block's OUTBOARD half. _BRACE_DROP is the
+    # leaf-tip clearance to the BAR and is unchanged; the block sits
+    # inboard of where the tip swings.
+    block = xz_prism([(cx - POST_R, cz - POST_R - _BRACE_DROP),
+                      (cx + POST_R, cz - POST_R - _BRACE_DROP),
+                      (cx + POST_R, cz), (cx - POST_R, cz)])
+    bar = strip(cz - _BRACE_DROP - cx).cut(keep_below(cz - POST_R))
+    # never below the BED, nor into the hand-access cutaway (#1027).
+    # frame.py unions the posts AFTER its own _hand_wedge cut, so the post
+    # has to respect that 45° itself: same shape, revolved — flat at the
+    # bed inside WALL_OR, rising at 45° outside it.
+    _F = 200.0
+    bar = bar.cut(
+        cq.Workplane("XZ")
+        .polyline([(0.0, FLOOR_Z0), (WALL_OR, FLOOR_Z0),
+                   (_F, FLOOR_Z0 + (_F - WALL_OR)), (_F, FLOOR_Z0 - _F),
+                   (0.0, FLOOR_Z0 - _F)])
+        .close().revolve(360.0, (0, 0), (0, 1)))
+    bar = bar.cut(xz_prism([(cx + POST_R, cz - B), (cx + B, cz - B),
+                            (cx + B, cz + B), (cx + POST_R, cz + B)]))
+    return nose.union(block).union(to_band(bar))
+
+
+# A_POST_BED — on the BUILT solid, because the analytic version got this
+# wrong once (#1027): it sampled the band chord at the post's INBOARD y,
+# but the band is a cylinder and the post is _POST_OUT wide, so the
+# outboard edge meets the band 6 further in and the 45° bar ran 1.94
+# BELOW the bed there. Nothing may hang under the bed plane (it would
+# print in mid-air), nor dip into the hand-access cutaway, which rises
+# at 45° from (WALL_OR, the bed). Checked on every vertex of the solid,
+# so no sampling choice can miss it again.
+_post_worst = None
+for _v in clip_post(RATCHET_PIVOT_Z, CLIP_SIDE).val().Vertices():
+    _need = FLOOR_Z0 + max(0.0, math.hypot(_v.X, _v.Y) - WALL_OR)
+    if _post_worst is None or _v.Z - _need < _post_worst[0]:
+        _post_worst = (_v.Z - _need, _v.X, _v.Y, _v.Z)
+assert _post_worst[0] >= -1e-6, (
+    f"A_POST_BED: a clip-post corner sits {-_post_worst[0]:.2f} under the bed "
+    f"or in the hand cutaway, at ({_post_worst[1]:.2f}, {_post_worst[2]:.2f}, "
+    f"{_post_worst[3]:.2f})")

@@ -26,7 +26,7 @@ import math
 import cadquery as cq
 
 from .helpers import chord_x, cyl
-from .levers import BAY_WALL_Z1_BRAKE, BAY_WALL_Z1_RATCHET
+from .levers import BAY_WALL_Z1_RATCHET
 from .params import (
     WALL_IR, WALL_OR, WALL_Z1, WALL_ZB,
     LEVER_WIN_Y0, LEVER_WIN_Y1,
@@ -104,8 +104,8 @@ def _build_wall_full():
     # gable ring between the levers and the lid was an overhang)
     w = w.cut(_lever_window(LEVER_WIN_Y0, LEVER_WIN_Y1,
                             BAY_WALL_Z1_RATCHET))      # +y bay
-    w = w.cut(_lever_window(-LEVER_WIN_Y1, -LEVER_WIN_Y0,
-                            BAY_WALL_Z1_BRAKE))        # −y bay
+    # (no −y bay since #1019 — the brake lever that needed one is gone,
+    # so that side is plain band: more tray wall, and one less window)
     w = w.cut(_cable_exit())
     w = w.cut(_entry_port())
     # NO heal here: the band's only consumer is frame_bottom, which runs

@@ -196,13 +196,13 @@ assert SLIT_ZHI <= SPRING_Z1 - 1e-9, \
     "top-axle slit would poke out of the spring (shaft must stay solid " \
     "through the bearing above)"
 
-# ── Separator (brake + ratchet rims), FUSED to the bottom axle ───────────────
+# ── Separator (the ratchet rim), FUSED to the bottom axle ───────────────────
 # v2's standalone sliding rim, ported: now a SOLID disk (no bore, no key
-# slots — it turns with the axle it's fused to), same two rims. Band ORDER
-# flipped vs v2 (brake bottom / ratchet top): the fused part prints UPRIGHT
-# (disk on the bed, column rising), so the bed-side band must be the full
-# ring — exactly v2's proven print stack (v2 printed inverted, brake band
-# on the bed, teeth growing on the knurl ring).
+# slots — it turns with the axle it's fused to), carrying ONE rim since
+# #1019. The fused part prints UPRIGHT (disk on the bed, column rising)
+# and the teeth are vertical flutes off the bed, so the band needs
+# nothing under it. (v2 stacked two rims here and grew the teeth on the
+# lower one's full ring; that lower ring was the brake's.)
 # (RIM_OD — the separator/lid OD — is DERIVED in the capacity block after
 # the drum wall below: it must cap 6 ft of flat-wound cable.)
 RATCHET_DEPTH = 4 * NOZZLE_D         # 3.2 — tooth tip→valley (user #1005:
@@ -211,13 +211,19 @@ RATCHET_DEPTH = 4 * NOZZLE_D         # 3.2 — tooth tip→valley (user #1005:
 RATCHET_TEETH = 60
 # (RATCHET_PHASE_DEG — the tooth/knurl phase — is DERIVED in the lever
 # block below: one catch face lands at the pawl's y-midline, v2's rule.)
-BRAKE_H       = 6 * NOZZLE_D         # 4.8 — knurled brake band height (was
-                                   # v2's 5.0 even; user: onto the bead grid)
-RATCHET_H     = 6 * NOZZLE_D         # 4.8 — tooth band height (ditto)
-RIM_H         = BRAKE_H + RATCHET_H            # 10.0
-KNURL_N       = 5 * RATCHET_TEETH  # 300 — knurl lobes, phase-locked 5 per
-                                   # tooth so a peak supports every tip
-KNURL_DEPTH   = 0.4                # half a nozzle (v2 print-proven ridge field)
+# (BRAKE_H, the knurled brake band, is RETIRED — user #1019 deleted the
+# whole brake: lever, pad, clip and band.)
+RATCHET_H     = 6 * NOZZLE_D         # 4.8 — tooth band height
+RIM_H         = RATCHET_H                      # 4.8 — the teeth ARE the
+                                   # rim now. Until #1020 the disk had to be
+                                   # 8.8 whatever the bands wanted, because
+                                   # the bottom 608's pocket was sunk in its
+                                   # underside; that bearing moved into the
+                                   # frame (see BOT_BRG below), so the disk
+                                   # is as thin as the one band it carries
+                                   # and the whole 4.8 comes off the unit.
+# (KNURL_N and KNURL_DEPTH went with the brake band they textured, #1026 —
+# the knurl was what the TPU pad gripped.)
 
 # 45° cable PASS-THROUGH tunnel (v2's, kept by user's call): lets the
 # working cable (connector included) cross from above the separator to
@@ -235,7 +241,12 @@ SEP_SPRING_CLR = 3 * NOZZLE_D        # 2.4 — separator↔spring gap (was v2's 
 # (AXLE_ROOT_CONE_H is set right below — it needs SEP_Z1)
 SEP_Z1 = SPRING_Z0 - SEP_SPRING_CLR    # −34.4 — disk top, right under the
                                        # (frame-fixed, static) spring
-SEP_Z0 = SEP_Z1 - RIM_H                # −44.4 — disk bottom = the bed face
+SEP_Z0 = SEP_Z1 - RIM_H                # −43.2 — disk bottom = the bed face
+RATCHET_BAND_Z0 = SEP_Z1 - RATCHET_H   # −39.2 — teeth hang off the disk TOP
+                                   # now (#1019). They used to be stacked on
+                                   # the brake band's top face, which is why
+                                   # deleting it would otherwise have dragged
+                                   # the teeth down with it.
 AXLE_ROOT_CONE_H = SHOULDER_Z - SEP_Z1 # 1.9 — 45° column→disk root cone: its
                                        # top IS the column→tenon shoulder now
                                        # (the fat column can't approach the
@@ -643,38 +654,86 @@ assert ENTRY_PORT_SILL + 1.5 * ENTRY_PORT_W <= CH_TOP_Z - 2 * NOZZLE_D + 1e-9, \
 # behind wall.py's build-speed flag through the whole v3 iteration and
 # never got used. The band ships solid.)
 
-# ── BOTTOM BEARING (user's redesign — REPLACES the 45° rest lip): a second
-# 608 seated in the separator disk's UNDERSIDE (outer race co-rotates with
-# the disk) over a static STUB AXLE printed on the frame_bottom floor
-# (inner race seats on its shoulder) — a real spindle: axial rest AND a
-# second radial constraint, no rubbing plastic. Printability in the
-# axle_separator's upright print: the pocket closes with a flat SEAT RING
-# (the outer-race thrust seat — an accepted bridge ring), then a 45° CONE
-# to a small apex bridge (user's cone) — no flat overhang.
-BOT_BRG_Z0 = SEP_Z0                            # −44 — bearing FLUSH with the
-                                               # disk's face (user's call —
-                                               # the proud variant reverted)
-BOT_BRG_Z1 = BOT_BRG_Z0 + BEARING_W            # −37 — bearing top face
-# The CONE IS THE SEAT (user's call): v2's chamfer-mates-cone trick,
-# outer-ring edition — the 45° cone rises straight off the pocket bore,
-# and the race's factory OD-edge chamfer (BEARING_INNER_CH — same r_s
-# spec both rings) face-mates it, landing the race top at BOT_BRG_Z1.
-# The cone is then CAPPED FLAT wherever walls demand (user's call): the
-# 1.6 web to the disk's TOP face caps it at Ø19.4 — a deliberate,
-# accepted ceiling bridge: only empty space sits above the bearing, so
-# print sag there breaks nothing.
-BOT_SEAT_CONE_Z0 = (BOT_BRG_Z1 - BEARING_INNER_CH
-                    - (BRG_BORE - BEARING_OD) / 2.0)   # −37.4 — cone base
-                                                       # (Ø = the pocket bore)
-BOT_CONE_CAP_Z = SEP_Z1 - 2 * NOZZLE_D           # −36.0 — flat cap: exactly the
-                                               # quality web under the disk top
-BOT_CONE_CAP_D = BRG_BORE - 2.0 * (BOT_CONE_CAP_Z - BOT_SEAT_CONE_Z0)  # 19.4
-STUB_D       = AXLE_PRINT_D        # 8.0 — at the 608's nominal bore (user)
-STUB_BOSS_D  = STUB_D + 4 * NOZZLE_D # 11.2 — inner-race seat shoulder (lands
-                                   # on the face annulus, same as the top)
-STUB_BOSS_Z1 = BOT_BRG_Z0          # boss shoulder top = inner race bottom
-STUB_Z1      = BOT_BRG_Z1          # stub tip flush with the bearing top
-STUB_FLARE   = 3 * NOZZLE_D          # 2.4 — 45° base flare (strength)
+# ── BOTTOM BEARING — FLIPPED into the frame (user #1020) ────────────────────
+# It used to sit in the separator disk's underside, outer race co-rotating
+# over a static stub on the floor. That put BEARING_W of pocket inside the
+# disk and so set the disk's thickness — 4.0 of dead rim under the teeth
+# purely to house it.
+# Now it is the other way round: the OUTER race is gripped by a pocket in
+# frame_bottom, at the top of the GUIDE SLEEVE (which already stands there
+# at Ø SLEEVE_OD, so the pocket costs no coil room), and a small separate
+# NUB part tenons into the separator and turns in the bore. The nub is its
+# own print because the separator prints disk-on-the-bed: anything poking
+# DOWN out of that face cannot be printed with it.
+BOT_BRG_Z1 = SLEEVE_Z1                         # bearing top = the sleeve's
+                                               # top rim, SEP_BRG_GAP under
+                                               # the rotating disk
+BOT_BRG_Z0 = BOT_BRG_Z1 - BEARING_W            # and its bottom face, on the
+                                               # pocket's retention lip
+SEP_BRG_GAP = SEP_Z0 - BOT_BRG_Z1              # 2.4 — the running gap the
+                                               # nub crosses (= the chamber's
+                                               # own ceiling clearance)
+assert SEP_BRG_GAP >= 2 * NOZZLE_D - 1e-9,     "no running gap between the rotating disk and the static bearing"
+BOT_LIP_ID = BRG_BORE - 2 * STRUCT_WALL        # 19.0 — lip bore, lapping the
+                                               # outer race only (BEARING_ORACE_ID
+                                               # 19.4; the 0.2 graze onto the seal
+                                               # is v2-accepted — no relative
+                                               # motion at that contact)
+BOT_LIP_H  = 2 * NOZZLE_D                      # 1.6 — lip height under the race
+# under the lip the bore opens back out at 45° into the sleeve's own bore:
+# a funnel, so nothing in the pocket is a flat ceiling in the upright print
+BOT_LIP_FUNNEL = (SLEEVE_OD / 2.0 - SLEEVE_T) - BOT_LIP_ID / 2.0
+BOT_PLUG_Z0 = BOT_BRG_Z0 - BOT_LIP_H - BOT_LIP_FUNNEL   # where the solid
+                                   # plug at the sleeve's top begins
+
+# ── The NUB (user #1020's part): separator ↔ bottom bearing ─────────────────
+# Top to bottom: a 45° ROOF that mates the blind mortise's own coned
+# ceiling in the separator (the load face — cone on cone seats and
+# CENTRES, and neither side is a flat ceiling in its print), the tenon
+# body, a 45° CONE onto the inner race's bore chamfer (the project's
+# chamfer-mates-cone trick, third use), then the shaft through the bore.
+# Prints STANDING ON THE SHAFT: every step widens going up, so there is
+# no overhang anywhere on it.
+NUB_SHAFT_D  = AXLE_PRINT_D          # 8.0 — the 608's nominal bore
+NUB_BODY_D   = NUB_SHAFT_D + 4 * NOZZLE_D      # 11.2 — grown at #1022 to
+                                   # the largest the inner race's face
+                                   # annulus takes: it is the SHOULDER's
+                                   # outer edge, so this is 65% more
+                                   # seat area for nothing, and a stiffer
+                                   # nub across the running gap. The
+                                   # cone to it lands inside the inner race's
+                                   # face annulus (asserted)
+NUB_TIP_FLAT = NOZZLE_D              # 0.8 — the roof is DULLED to one bead
+                                   # (no knife point, the #840 rule)
+NUB_JOINT_CLR = FIT_CLR              # 0.15 — tenon ↔ mortise, per side
+NUB_SEAT_CONE_H = (NUB_BODY_D - NUB_SHAFT_D) / 2.0     # 0.8 — the 45° onto
+                                   # the inner race's bore chamfer
+# The TENON steps DOWN off the body (user #1021), so the nub has 1.6 of
+# STRAIGHT engagement in the separator before its roof starts to taper.
+# Stepping down rather than running the body straight up is what makes it
+# fit: 1.6 of Ø NUB_BODY_D plus a 45° roof off that diameter would need
+# 6.15 of disk and there is 4.8. It also buys a better load path — the
+# step is a flat ANNULAR SHOULDER bearing on the disk's underside, which
+# seats more directly than a cone and cannot wedge.
+NUB_TENON_D  = 8 * NOZZLE_D          # 6.4 — the tenon proper
+NUB_TENON_STRAIGHT = 2 * NOZZLE_D    # 1.6 — straight before the taper (user)
+NUB_MORT_D   = NUB_TENON_D + 2 * NUB_JOINT_CLR         # 6.7 — the mortise bore
+NUB_ROOF_H   = (NUB_MORT_D - NUB_TIP_FLAT) / 2.0       # 2.95 — the mortise's
+                                   # 45° ceiling, to a ONE-BEAD flat: the only
+                                   # unsupported face in the separator's print,
+                                   # and exactly the bridge limit
+NUB_TIP_H    = (NUB_TENON_D - NUB_TIP_FLAT) / 2.0      # 2.8 — the nub's own
+                                   # roof: NUB_JOINT_CLR shallower than the
+                                   # mortise's, so the SHOULDER seats and the
+                                   # tip never bottoms
+NUB_MORT_H   = NUB_TENON_STRAIGHT + NUB_ROOF_H         # 4.55 — mortise depth
+NUB_Z1       = SEP_Z0 + NUB_TENON_STRAIGHT + NUB_TIP_H # the nub's dulled tip
+NUB_L        = NUB_Z1 - BOT_BRG_Z0                     # overall
+assert NUB_TENON_D < NUB_BODY_D, "the nub's tenon has no shoulder to seat on"
+assert SEP_Z0 + NUB_MORT_H <= SEP_Z1 + 1e-9,     "the nub's mortise pokes out of the separator disk's top face"
+assert NUB_BODY_D <= BEARING_IRACE_OD,     "the nub's seat cone runs off the inner race's face annulus"
+assert NUB_BODY_D > BEARING_ID, "the nub has no shoulder to seat the race"
+assert SEP_Z0 + NUB_ROOF_H <= SEP_Z1 + 1e-9,     "the nub's mortise pokes out of the separator disk's top face"
 # HUB WEBS (user #970 — stiffen frame_bottom's centre): N_HUB_WEB radial
 # ribs inside the guide sleeve's bore, tying the stub boss to the sleeve
 # wall and the floor plate, at the BEAM azimuths so they continue the
@@ -683,19 +742,16 @@ STUB_FLARE   = 3 * NOZZLE_D          # 2.4 — 45° base flare (strength)
 # well under the bottom 608 (which sits above the sleeve top).
 N_HUB_WEB  = 4
 HUB_WEB_W  = FLOOR_SPOKE_W           # 2.4 — spoke section
-HUB_WEB_Z1 = SLEEVE_Z1               # flush with the sleeve top
-# (STUB_TIP_CH is RETIRED — user #945: the 0.8 entry chamfer stole
-# grip from the inner race; the stub runs full-Ø to a flat top at
-# STUB_Z1, the same −37 tip height)
+HUB_WEB_Z1 = BOT_PLUG_Z0             # up to the bearing plug's base —
+                                   # NOT the sleeve top (#1020: above this
+                                   # the bore is the bearing's, and the
+                                   # nub's shaft turns in it)
+# (the STUB axle on the floor is RETIRED with the flip — #1020: the
+# sleeve's top holds the bearing itself now, and what turns in it is
+# the separator's own nub.)
 
-assert BOT_CONE_CAP_Z > BOT_SEAT_CONE_Z0 + 0.5, \
-    "seat cone has no height before its cap — check the bearing z-chain"
-assert SEP_Z1 - BOT_CONE_CAP_Z >= 2 * NOZZLE_D - 1e-9, \
-    "under 1.6 of web between the seat cavity's cap and the disk's top face"
-assert STUB_BOSS_D <= BEARING_IRACE_OD, \
-    "stub shoulder must land fully on the inner race's face annulus"
-assert STUB_BOSS_D / 2.0 + STUB_FLARE < (SLEEVE_OD - 2 * SLEEVE_T) / 2.0, \
-    "stub base flare reaches the guide sleeve's bore"
+assert BOT_LIP_FUNNEL > 0.0,     "the bearing pocket's lip is wider than the sleeve bore it opens into"
+assert BOT_BRG_Z0 > FLOOR_Z1 + 2 * NOZZLE_D,     "the bottom bearing's pocket reaches the tray floor"
 
 # ── Separator DISC POCKET (user #880: save material) — the disc inside
 # the lid-joinery ring is hollowed to a SEP_POCKET_FLOOR_T plate; a
@@ -705,7 +761,12 @@ assert STUB_BOSS_D / 2.0 + STUB_FLARE < (SLEEVE_OD - 2 * SLEEVE_T) / 2.0, \
 # below the spring's Ø8.7 hole, so it completes at the shoulder plane) ───────
 SEP_POCKET_R       = DRUM_IR       # 43.35 — pocket out to the drum bore
 SEP_POCKET_FLOOR_T = 3 * NOZZLE_D    # 2.4 — plate left at the disc bottom (user)
-SEP_BOSS_D = BOT_CONE_CAP_D + 2 * 3 * NOZZLE_D   # 24.2 — bearing-cavity walls
+SEP_BOSS_D = NUB_MORT_D + 2 * 6 * NOZZLE_D       # 16.3 — walls around the
+                                   # nub's mortise, 12 beads of them
+                                   # (#1022: the disc pocket has room to
+                                   # spare out to r 43.35 — the old
+                                   # BEARING boss was Ø24.2 here)
+                                   # nub's mortise (was the bearing cavity's)
 SEP_BOSS_FLARE = 3 * NOZZLE_D        # 2.4 — 45° skirt tying the boss into the
                                    # pocket floor (user; narrows upward in
                                    # the upright print — self-supporting)
@@ -1274,41 +1335,11 @@ LEVER_PIN_LEVER_CLR = 0.1            # per-side ROUND fit in the lever at
                                      # (user #1003: 0.05 was too tight to
                                      # assemble — the D-flat keys it, and the
                                      # spring's undercuts hold the pin in)
-PIN_TIP_END_Y  = 2 * NOZZLE_D        # 1.6 — the pin's TIP plane |y|: 3.6
-                                     # into the beam, for real support (user
-                                     # #1014: at 4.4 it reached only 0.8 in)
-PIN_TIP_CLEAR  = 5 * NOZZLE_D        # 4.0 — and the blind bore runs this far
-                                     # PAST the tip, so the wedge key is
-                                     # always what stops the pin. At 0.8 of
-                                     # bore the tip bottomed out first and
-                                     # the wedge never bit — the pin went in
-                                     # far too easily (user #1014)
-PIN_TIP_NOSE   = 2 * NOZZLE_D        # 1.6 — and the pin's tip carries a DOME
-                                     # this long, so it bottoms on that bore's
-                                     # floor PIN_TIP_NOSE short of the full
-                                     # PIN_TIP_CLEAR run (user #1016). The
-                                     # taper alone never said when to STOP —
-                                     # it only got gradually stiffer, so the
-                                     # push ran on until the clip crushed
-                                     # against the frame. Now the stop is a
-                                     # hard one you can feel, and what is left
-                                     # of the run (PIN_TIP_CLEAR - this, less
-                                     # the head float) is the clip's gap.
-                                     # A DOME, not a flat: it touches the bore
-                                     # floor at one point on the axis, so the
-                                     # stop does not care whether that floor
-                                     # printed square. The pin stands on its
-                                     # head to print, so the dome is the
-                                     # topmost thing on it — free to make.
-assert PIN_TIP_NOSE < PIN_TIP_CLEAR, "the dome would not fit in the blind bore"
-                                   # (the pin's depth stop): ONE BEAD deep
-                                   # into the beam's flank
-# (PIN_PRETWIST_DEG, the diamond keyways and the TPU-squish brake rest
-# corbel are RETIRED with the torsion axle — #988: there is no install
-# lean any more (the round pin just slides in with the lever at rest),
-# and both levers now rest and end on HARD printed stops: the ratchet on
-# its teeth and its butting rib, the brake on the two ribs its wing
-# sweeps between, levers.py.)
+# (PIN_PRETWIST_DEG, the diamond keyways and the TPU-squish rest corbel
+# are RETIRED with the torsion axle — #988: there is no install lean any
+# more (the round pin just slides in with the lever at rest), and the
+# lever rests and ends on HARD printed stops — its teeth and its butting
+# rib, levers.py.)
 # (the #887 CABLE-GUARD chevrons are RETIRED — user #977: with the
 # handles bent out of the way the bay WALL comes back instead, and a
 # wall closes the bay better than a fence across it. GUARD_LEVER_CLR
@@ -1404,7 +1435,7 @@ POST_OUT_T = snap(BEAM_SIZE / 2.0,
 BOSS_RING_W    = contact_rib_size(NOZZLE_D)      # 1.6 — thrust ring width & proud
 BOSS_RING_CUT  = 0.2               # trimmed off each ring's proud face
                                    # (user #1014: at 0.05 of side play the
-                                   # rings pinched the brake lever hard
+                                   # rings pinched the lever hard
                                    # enough that the TPU could not return
                                    # it; 0.25 lets it swing)
 BOSS_BORE_ID   = LEVER_PIN_D + 2 * LEVER_PIN_FRAME_CLR   # 6.7 — the pin's
@@ -1420,38 +1451,29 @@ STOP_LEVER_CLR = 0.15              # the stop ribs' free faces, off the
 LEVER_Y_IN     = BEAM_SIZE / 2.0 + LEVER_SIDE_CLR  # 6.9 — inner plate face
 RATCHET_LEV_Y0 = LEVER_Y_IN                        # ratchet plate on +Y side
 RATCHET_LEV_Y1 = LEVER_Y_IN + LEVER_T              # 17.3
-BRAKE_LEV_Y1   = -LEVER_Y_IN                       # brake plate on −Y side
-BRAKE_LEV_Y0   = -LEVER_Y_IN - LEVER_T             # −17.3
+# (the BRAKE plate's y pair is retired with the brake — #1019)
 LEVER_PIVOT_X  = (BEAM_IR + BOSS_BORE_ID / 2.0 + BOSS_RING_W
                   + (BEAM_SIZE - BOSS_BORE_ID - 2 * BOSS_RING_W))   # 82.93 —
                                    # v2's derivation, pushed to the beam's
                                    # limit at #1005 (outer ring flush with
                                    # the +x face; was + half a bead):
                                    # (rings flush at the beam's inner edge)
-                                   # + an OUTBOARD offset: v3's larger
-                                   # brake contact angle leans the pad's
-                                   # rest-plumb joint plane closer to the
-                                   # handle, and the offset restores the
-                                   # 0.45 guard (A_PAD_HANDLE_CLR); the
+                                   # + an OUTBOARD offset, which the
+                                   # retired brake pad's joint-plane guard
+                                   # (A_PAD_HANDLE_CLR) drove; the
                                    # ring/diamond packaging asserts below
                                    # still pass
 LEVER_BOSS_OD  = (LEVER_PIN_D + 2 * LEVER_PIN_LEVER_CLR
                   + 2 * STRUCT_WALL)               # 9.9 — lever pivot boss
-# Pivots re-anchored to the v3 band stack (FLIPPED vs v2 — brake band on
-# the BOTTOM now, print-driven): ratchet pivot 10 above its band's top
-# (v2's rule, rest = pawl seated in the teeth, pull swings it out). The
-# BRAKE pivot goes 5.5 BELOW its band (v2's relative spot): the pad must
-# sit ABOVE its pivot or pulling would swing it AWAY from the band (an
-# above-band pivot shipped first — kinematically backwards). The pivot
-# hardware lives OUTSIDE the wall and the lever bays are full-height, so
-# the low pivot breaches nothing.
+# Pivot anchored to the band stack: 10 above the tooth band's top
+# (v2's rule, rest = pawl seated in the teeth, pull swings it out).
 RATCHET_PIVOT_Z = SEP_Z1 + 10.0                    # −24.4
-BRAKE_PIVOT_Z   = SEP_Z0 - 5.5                     # −49.5 — below the band
-LEVER_TRAVEL_DEG = 20.0            # equal pull travel, both levers (v2)
+# (BRAKE_PIVOT_Z is retired with the brake — #1019. It had been doing a
+# second job as the shared handle knee; see LEVER_BEND_Z below.)
+LEVER_TRAVEL_DEG = 20.0            # pull travel (v2)
 RATCHET_OPEN_CLR = 1.0               # the OVER-PULL STOP pose (user;
                                      # cut from 1.6 at #1018: the lever swung
-                                     # 6° past the point the pawl is clear,
-                                     # opening the gap to the brake's handle
+                                     # 6° past the point the pawl is clear
                                      # for nothing. It can go no tighter —
                                      # this IS lever_kinematics' pawl-to-tooth
                                      # target PAWL_CLEAR_MM, which params
@@ -1473,14 +1495,17 @@ HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −75.1 — grip-disc
                                    # ends land FLUSH with the assembly's
                                    # −z extent (user's call); pulling only
                                    # raises them
-# BENT HANDLES (user #966 — easier to reach; COUCH-gated, #967): below
-# the pivots the handles no longer drop straight to the grip. Each runs vertically
-# from its pivot down to LEVER_BEND_Z — the BRAKE pivot's own height,
-# so the brake's bend is AT its axle and the ratchet's vertical stretch
-# ends level with it — then 45° toward +x −z to the unchanged
-# HANDLE_Z_BOT. Both 45° runs start from the same (x, z), so both grip
-# discs land at the same spot, HANDLE_X_BOT.
-LEVER_BEND_Z = BRAKE_PIVOT_Z                     # −49.5 — the shared knee
+# BENT HANDLE (user #966 — easier to reach; COUCH-gated, #967): below the
+# pivot the handle no longer drops straight to the grip. It runs
+# vertically from the pivot down to LEVER_BEND_Z, then 45° toward +x −z
+# to HANDLE_Z_BOT.
+# The knee used to BE the brake's axle height, which is no anchor at all
+# now the brake is gone (#1019). It is its own datum instead: HALFWAY
+# between the lever's axle and the spool floor (user's call — that is
+# within 1.9 of where the brake-derived knee sat, so the handle keeps
+# the shape that was working, and it now scales with the stack instead
+# of trailing a deleted part).
+LEVER_BEND_Z = (RATCHET_PIVOT_Z + FLOOR_Z1) / 2.0        # the handle's knee
 HANDLE_X_BOT = (LEVER_PIVOT_X + (LEVER_BEND_Z - HANDLE_Z_BOT)
                 if COUCH_VERSION else LEVER_PIVOT_X)   # ≈108.4 couch —
                                    # grip-disc centre x (45°: the run's
@@ -1491,17 +1516,9 @@ RATCHET_PHASE_DEG = math.degrees(math.asin(
                                    # one catch face lands at the pawl's
                                    # y-midline (v2's rule; the knurl is
                                    # phase-locked to the same value)
-# Brake pad (95A TPU) + its cadkit hook slide joint (v2's print-proven set)
-BRAKE_RUBBER_T       = 3.3         # pad slab thickness (v1/v2)
-PAD_JOINT_CLR        = 0.1         # TPU in PETG — snug (v2)
-BRAKE_PAD_TOP_MARGIN = 0.0         # ZERO margins (v2's full-band pad —
-BRAKE_PAD_BOT_MARGIN = 0.0         # contact-only doctrine)
-PAD_SPEC      = PrintSpec(nozzle=NOZZLE_D, facing="up")
-PAD_FLANGE_H  = joint_box_min(PAD_SPEC, PAD_SPEC, install="-z", bounded=True,
-                              quality=True, clearance=PAD_JOINT_CLR)[0]
-                                   # 6.6 — the edge-bounded site's quality
-                                   # width = the pad flange / arm end face
-PAD_FLANGE_T  = 2 * NOZZLE_D         # flange depth (the arm face recesses by it)
+# (the brake PAD — the 95A TPU slab and its cadkit hook slide joint —
+# is retired with the brake: BRAKE_RUBBER_T, PAD_JOINT_CLR, the two
+# PAD margins, PAD_SPEC and the PAD_FLANGE pair all went with it, #1019)
 LEVER_COL_Y1 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR + POST_OUT_T   # 24.5 — the
                                    # fork column's OUTER face, |y|
 # RETURN CLIPS (user #1004 — TPU again, as a LEAF). The Lee springs
@@ -1511,7 +1528,7 @@ LEVER_COL_Y1 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR + POST_OUT_T   # 24.5 — the
 # RETURN CLIP — a hub keyed onto the pin's D, and a LEAF hanging down the
 # column's outer face to a round POST on the frame. The leaf is printed
 # CLIP_PRELOAD past the post, so at rest it presses the lever home (the
-# pawl into the teeth, the brake wing onto its rest rib); pulling turns
+# pawl into the teeth); pulling turns
 # the pin and bends the leaf harder against the post. BENDING, not the
 # old TPU torsion axle's twist (too little force, and it crept) — force
 # goes as the leaf's thickness cubed, so CLIP_LEAF_T is the tuning knob,
@@ -1547,18 +1564,52 @@ PIN_KEY_SLOT_H  = PIN_KEY_H + 0.2  # 1.8 — slot depth (the rib never bottoms)
 # scraped the slot over the whole push; tapered, the rib's clearance is
 # proportional to how far the pin still has to go)
 PIN_KEY_RATE    = PIN_KEY_WIDEN / PIN_KEY_L   # 0.077 — width per mm
-PIN_SHANK_UNDER = 0.2              # the pin's SHANK — everything inboard of
+PIN_SHANK_UNDER = 0.1              # the pin's SHANK — everything inboard of
                                    # the column's bore — runs this far under
                                    # nominal, rising to full Ø only over its
                                    # last stretch (user #1013: the round fit
                                    # must never be the tight part; the wedge
-                                   # key is what grips at the end). It leaves
-                                   # the lever 0.2/side on the round, the
-                                   # blind bore 0.25, the column's 0.15 and
-                                   # the TPU's hub 0.1 — all at the seat
+                                   # key is what grips at the end).
+                                   # HALVED at #1024 (user: 0.05 tighter in
+                                   # the lever when home) — note this number
+                                   # is DIAMETRAL and it STACKS on the lever
+                                   # bore's own LEVER_PIN_LEVER_CLR, so the
+                                   # lever's real per-side fit was 0.2, not
+                                   # the 0.1 that constant suggests. Now it
+                                   # leaves the lever 0.15/side on the round,
+                                   # the blind bore 0.20, the column's 0.15
+                                   # and the TPU's hub 0.1 — all at the seat.
+                                   # The shank lands on the journal's own
+                                   # diameter, so nothing that SPINS got
+                                   # tighter (#1015's friction fix stands);
+                                   # what tightens at the end is still the
+                                   # wedge's job, not this
 PIN_KEY_FLOAT   = 2 * NOZZLE_D     # 1.6 — how far the seat may shift with
                                    # print error, each way (±0.1 of width
                                    # error over the wedge's ≈2.2°/side)
+# ── The pin SPANS the beam now (user #1029) ────────────────────────────────
+# The TPU clip moved to the −y side, where the brake lever used to be:
+# there is nothing there but the beam's flank, so the clip's inboard face
+# can sit at 5.2 instead of being pushed out to the fork column's 24.5 by
+# the lever and its column. That is worth 2.2x the clip width, and the
+# leaf's force goes as its width.
+# So the pin inserts from −y, crosses the beam, passes the lever on +y and
+# ends in a BLIND bore in the +y fork column — journalled at BOTH ends
+# instead of cantilevered, and stopped by its WEDGE in the lever (user
+# #1029: a tight fit on the lever, not a hard bottom), so its tip must
+# never reach that bore's floor.
+PIN_COL_Y0     = RATCHET_LEV_Y1 + LEVER_SIDE_CLR   # 18.9 — the column's
+                                   # INNER face, where the pin enters it
+PIN_TIP_Y      = LEVER_COL_Y1      # 24.5 — and its OUTER face, where the
+                                   # pin now ENDS. The column's bore runs
+                                   # THROUGH (user #1035), so the pin is
+                                   # carried by its full 5.6 of wall
+                                   # instead of dipping 1.6 into a blind
+                                   # hole — and the tip is FLAT: the dome
+                                   # was there to find a blind bore's
+                                   # floor, and there is no floor now.
+                                   # Nothing can bottom at all, so the
+                                   # wedge is the only stop by construction
 PIN_CLIP_SLOT_W = PIN_KEY_W - 0.5  # 1.1 — the slot outboard of the seat: the
                                    # TPU clip's rib is 0.25/side wider, so it
                                    # is squeezed home (user #1014: at 0.1 it
@@ -1571,10 +1622,24 @@ PIN_CLIP_SLOT_FREE = PIN_CLIP_RIB_W + 0.1     # 1.7 — the slot where the TPU
                                    # the stretch its hub lands on (user #1013:
                                    # the squeeze ran the pin's whole length)
 PIN_CLIP_SQUEEZE_RUN = 3 * NOZZLE_D    # 2.4 — how far the squeeze closes over
-PIN_KEY_SEAT_UNDER = 0.15          # the slot is this much NARROWER than the
+PIN_KEY_SEAT_UNDER = 0.40          # the slot is this much NARROWER than the
                                    # rib at the nominal seat, so the wedge
-                                   # bites ≈2 mm early — guaranteed, whatever
-                                   # the print does (user #1014)
+                                   # bites early — guaranteed, whatever the
+                                   # print does (user #1014).
+                                   # 0.15 -> 0.40 at #1036: on the gauge the
+                                   # pin pressed a full CLIP_GAP (3.2) past
+                                   # nominal before the lip bottomed, so the
+                                   # wedge was still not gripping there. The
+                                   # taper closes PIN_KEY_RATE (0.077) of
+                                   # width per mm, so 3.2 of overshoot is
+                                   # 0.25 of missing interference — that plus
+                                   # the old 0.15 is this number. ANY future
+                                   # overshoot converts the same way:
+                                   # add 0.077 x (mm past the marker).
+                                   # NOTE this is now a press that DEFORMS
+                                   # the rib rather than an elastic wedge
+                                   # (0.40 on a 1.6 rib), so it is a
+                                   # once-assembled fit, not a re-usable one
 PIN_HUB_OVER    = 0.1              # the pin's Ø under the TPU hub, OVER
                                    # nominal: 0.05/side on the printed bore
 PIN_JOURNAL_UNDER = 0.1            # …and its Ø where the frame's bores hold
@@ -1586,13 +1651,22 @@ PIN_JOURNAL_UNDER = 0.1            # …and its Ø where the frame's bores hold
 
 TPU_E           = 26.0             # N/mm² — 95A TPU's nominal modulus
                                    # (datasheet class; not a length)
-CLIP_GAP        = 2 * NOZZLE_D     # 1.6 — clip's inner face off the column
+CLIP_FACE_Y     = BEAM_SIZE / 2.0  # 5.2 — the frame face the clip stands
+                                   # off: the BEAM's −y flank (#1029). On the
+                                   # +y side this was the fork column at 24.5
+CLIP_SIDE       = -1               # which side the clip and its post live on
+CLIP_GAP        = 4 * NOZZLE_D     # 3.2 — clip's inner face off that face.
+                                   # DOUBLED at #1029: the wedge sets the
+                                   # pin's depth, so the head — and the clip
+                                   # resting on it — floats PIN_KEY_FLOAT
+                                   # either way with print error. The gap has
+                                   # to swallow that and still leave air
                                    # (user #1016: at 0.1 the clip ended up
                                    # flush on the frame and rubbed it as the
                                    # lever swung. It is the pin's HEAD that
                                    # sets where the clip sits, so a longer
                                    # pin simply holds it off the face)
-CLIP_T          = 14 * NOZZLE_D    # 11.2 — clip thickness (the leaf's width
+CLIP_T          = 31 * NOZZLE_D    # 24.8 — clip thickness (the leaf's width
                                    # in bending). WIDER since #1017 (user
                                    # wanted more return force): width buys
                                    # force in direct proportion and costs
@@ -1602,38 +1676,95 @@ CLIP_T          = 14 * NOZZLE_D    # 11.2 — clip thickness (the leaf's width
 CLIP_HUB_R      = 7 * NOZZLE_D     # 5.6 — clip hub radius round the pin
 CLIP_BORE_CLR   = 0.1              # TPU round on the pin, per side (the
                                    # rib keys it; see PIN_CLIP_RIB_W)
-CLIP_LEAF_T     = 4 * NOZZLE_D     # 3.2 — leaf thickness: THE force knob
+CLIP_LEAF_T     = 5 * NOZZLE_D     # 4.0 — THICKENED at #1030 for CREEP
+                                   # (user: force is not the constraint,
+                                   # creep is). What creeps is the SUSTAINED
+                                   # strain — the leaf sits at rest strain
+                                   # all its life and sees the peak for
+                                   # seconds — and at a fixed holding force
+                                   # rest strain goes as 1/(w*t^2), so
+                                   # thickness attacks it directly: 6.4%
+                                   # at 2.4, 2.3% here. Peak strain rises
+                                   # (15.6%) and the pull goes to ~6.6 N at
+                                   # the grip, both accepted.
+                                   # NOT thicker than this: the preload
+                                   # needed for a given holding force
+                                   # collapses as the leaf stiffens (1.6
+                                   # here, 0.88 at 4.8), and once it is
+                                   # under ~1.5 the force is set by print
+                                   # tolerance rather than by design.
+                                   # (was 2.4 at #1029 when the leaf
+                                   # widened to 24.8: force goes as w*t^3,
+                                   # so at 3.2 the wider leaf wanted 241
+                                   # N*mm to pull — twice the cap. Thin and
+                                   # wide beats narrow and thick here: the
+                                   # spring RATE drops, so the force climbs
+                                   # less over the pull and the preload can
+                                   # hold harder at rest for the same peak     # 3.2 — leaf thickness: THE force knob
 CLIP_LEAF_X     = -2.5             # leaf centreline off the pivot, x: the
                                    # post lands inside the column's face
 CLIP_CONTACT_R  = 31 * NOZZLE_D    # 24.8 — post contact off the pivot
-                                   # (#1008: LONG — the up-pointing brake
-                                   # leaf freed the length; a longer leaf
-                                   # rests at lower strain and its force
-                                   # climbs less over the pull. Was 17.6)
-                                   # (20.0 until #1007 — raised 2.4, user:
-                                   # the brake's post then grows out of the
-                                   # wall above the hand-access cutaway,
-                                   # its gusset trimmed by the cut's 45°)
+                                   # (#1008: LONG — a longer leaf rests at
+                                   # lower strain and its force climbs less
+                                   # over the pull. Was 17.6, and 20.0 until
+                                   # #1007; the length was freed by the
+                                   # brake clip's up-pointing leaf, which
+                                   # had the column's room)
 CLIP_TIP_PAST   = 2 * NOZZLE_D     # 1.6 — leaf runs on past the contact
-RATCHET_CLIP_ROT_DEG = 0.0         # each lever's clip layout, turned about
-BRAKE_CLIP_ROT_DEG = 180.0         # its pivot off "leaf hanging down"
-                                   # (user #1008: the brake's leaf points
-                                   # UP — hanging down, its post ran into
-                                   # the frame's hand-access cutaway; up,
-                                   # the leaf can be as long as it wants)
-CLIP_PRELOAD    = 7 * NOZZLE_D     # 5.6 — leaf printed this far into the
-                                   # post, at the contact
+RATCHET_CLIP_ROT_DEG = 0.0         # the clip's layout, turned about its
+                                   # pivot off "leaf hanging down" (the
+                                   # brake's 180° twin retired at #1019)
+CLIP_PRELOAD    = 4 * NOZZLE_D     # 3.2 — leaf printed this far into the
+                                   # post (user's number). CALIBRATED at
+                                   # #1038: the printed clip at 1.6 measured
+                                   # a 1.6 GAP to the post on the assembly,
+                                   # so the real leaf sits CLIP_MODEL_OFFSET
+                                   # behind this model and the real
+                                   # deflection is (this - that). 3.2 lands
+                                   # the leaf exactly ON the post: contact,
+                                   # no gap, and so no slack — which is what
+                                   # the user asked it for. It also means NO
+                                   # resting force, so nothing holds the pawl
+                                   # into the teeth; every 0.8 added here
+                                   # buys 26.4 N*mm of that back.
+                                   # post, at the contact. RAISED with the
+                                   # thinner leaf (#1029): rest torque 42.8
+                                   # -> 51.4 N*mm and full-pull strain 17.5
+                                   # -> 14.4%, both better at once. 8.0 is
+                                   # available (rest 57.1) but leaves only
+                                   # 1.2 of the 120 cap
+CLIP_MODEL_OFFSET = 4 * NOZZLE_D   # 3.2 — HOW WRONG THE MODEL IS, measured
+                                   # (user #1038). Drawn 1.6 of interference
+                                   # printed as 1.6 of GAP, so every torque
+                                   # and strain this model reports is for
+                                   # CLIP_PRELOAD, while the part behaves as
+                                   # if it had (CLIP_PRELOAD - this). The
+                                   # CAUSE IS NOT FOUND: the solid shows the
+                                   # leaf 255 mm³ inside the post, and the
+                                   # gap came out equal to the printed lean,
+                                   # which is what a REVERSED lean would give
+                                   # on the mirrored −y side. Worth chasing —
+                                   # until then the force figures below are
+                                   # quoted against the real deflection.
 CLIP_AX_CLR     = 0.2              # clip ↔ pin head, axial play
 POST_R          = 3 * NOZZLE_D     # 2.4 — the post's round nose
 PIN_HEAD_R      = CLIP_HUB_R       # 5.6 — pin head: caps the clip's hub
 PIN_HEAD_T      = 3 * NOZZLE_D     # 2.4 — pin head thickness
-LEVER_PIN_BODY_L = (LEVER_COL_Y1 + CLIP_GAP + CLIP_T + PIN_KEY_FLOAT
-                    + CLIP_AX_CLR - PIN_TIP_END_Y)   # blind-bore floor →
-                                   # the head's face (the float keeps the
-                                   # head off the clip at the deepest seat)
+LEVER_PIN_BODY_L = (PIN_TIP_Y + CLIP_FACE_Y + CLIP_GAP + CLIP_T)
+                                   # 52.1 — the body's tip plane (the fork
+                                   # column's inner face) out to the HEAD's
+                                   # face, which is where the clip's outer
+                                   # face lands. The clip rests against the
+                                   # head, so the drawn CLIP_GAP is what it
+                                   # gets at the nominal seat (#1029)
 LEVER_PIN_L = LEVER_PIN_BODY_L + PIN_HEAD_T
-RETURN_TORQUE_MIN = 15.0           # N·mm at rest — at least the Lee spring's
-RETURN_TORQUE_MAX = 120.0          # N·mm at full pull — ~3 N at the handle
+RETURN_TORQUE_MAX = 400.0          # N·mm at full pull — ~7.8 N at the grip
+                                   # (the 51.2 handle arm). RAISED from 120
+                                   # at #1030: that number was a usability
+                                   # guess and the print said otherwise —
+                                   # the lever was still easy to pull, so
+                                   # the cap was costing creep life for
+                                   # nothing
 
 # ── Wall openings (v2's derivations, v3 anchors) ─────────────────────────────
 _WALL_TOP_BAND_RETIRED = 4 * NOZZLE_D   # (kept only for the comment trail —
@@ -1689,7 +1820,7 @@ RATCHET_STOP_DEG = 15.0
 _STOP_S = math.sin(math.radians(RATCHET_STOP_DEG))
 _STOP_C = math.cos(math.radians(RATCHET_STOP_DEG))
 _X_STOP = math.sqrt(WALL_IR ** 2 - RATCHET_LEV_Y1 ** 2)        # 68.96
-_DZ_BOT = SEP_Z0 + BRAKE_H - RATCHET_PIVOT_Z       # −14.8 — tooth-band bottom
+_DZ_BOT = RATCHET_BAND_Z0 - RATCHET_PIVOT_Z        # −14.8 — tooth-band bottom
                                                    # (the pawl block's rest
                                                    # bottom) off the pivot
 _DX_STOP = (_X_STOP - LEVER_PIVOT_X + _DZ_BOT * _STOP_S) / _STOP_C
@@ -1721,8 +1852,8 @@ assert ((BEAM_IR + BEAM_SIZE) - (LEVER_PIVOT_X + BOSS_BORE_ID / 2.0)
 # ── Consistency guards (fire at import) ──────────────────────────────────────
 assert AXLE_PRINT_D <= BEARING_ID, \
     "printed axle must be undersized vs the metal bearing bore"
-assert BEARING_ID + 1.0 < STUB_BOSS_D <= BEARING_IRACE_OD, \
-    "stub boss shoulder must land fully on the inner race's face annulus"
+assert BEARING_ID + 1.0 <= NUB_BODY_D <= BEARING_IRACE_OD, \
+    "the nub's seat cone must land on the inner race's face annulus"
 assert BRG_LIP_ID < BEARING_OD - 1.0, \
     "frame lip must lap the outer race by a real margin"
 assert BRG_LIP_H >= STRUCT_WALL, \

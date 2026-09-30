@@ -31,11 +31,11 @@ the Ø13.4 flange hole is on TOP now and the Ø8.7 on the bottom):
     then the Ø7.95 TENON POST up through the bottom flange hole to the
     top datum plane, open-top strip slit. Fused into v2's SEPARATOR, a
     SOLID disk sitting SEP_SPRING_CLR under the spring.
-    The rims are v2's unchanged — knurled brake band + phased ratchet
-    star — but stacked brake-DOWN: the part prints UPRIGHT (disk on the
-    bed, column rising), and with the full knurl ring bed-side the teeth
-    grow on top of it exactly like v2's proven inverted print (a ring
-    above tooth valleys would overhang 2.4). v2's 45° tangential cable
+    ONE rim since #1019, v2's phased ratchet star, spanning the disk's
+    whole height: the part prints UPRIGHT (disk on the bed, column
+    rising), so the teeth are vertical flutes standing off the bed and
+    nothing overhangs. (v2 stacked a knurled brake band under them and
+    grew the teeth on that ring; the brake is gone.) v2's 45° tangential cable
     pass-through kept (user's call) — 45° walls, support-free.
 """
 
@@ -52,11 +52,13 @@ from .params import (
     SEP_POCKET_R, SEP_POCKET_FLOOR_T, SEP_BOSS_D, SEP_BOSS_FLARE,
     SLIT_W, SLIT_ZLO, SLIT_ZHI,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
-    BRAKE_H, RIM_H, KNURL_N, KNURL_DEPTH,
+    RIM_H, RATCHET_BAND_Z0,
     SEP_PASS_W, SEP_PASS_ANGLE_DEG, SEP_PASS_R,
     SEP_Z0, SEP_Z1, AXLE_ROOT_CONE_H,
     DRUM_IR, DRUM_OR, DRUM_Z1, LIDJ_SITES,
-    BRG_BORE, BOT_SEAT_CONE_Z0, BOT_CONE_CAP_Z, BOT_CONE_CAP_D,
+    NUB_SHAFT_D, NUB_BODY_D, NUB_MORT_D, NUB_ROOF_H, NUB_TIP_FLAT,
+    NUB_TIP_H, NUB_SEAT_CONE_H, NUB_TENON_D, NUB_TENON_STRAIGHT,
+    BOT_BRG_Z0, BOT_BRG_Z1,
 )
 
 _SLIT_Y_OVERSHOOT = JOINT_MORTISE_OD + 10.0
@@ -114,37 +116,11 @@ def _ratchet_star(z_lo, z_hi):
             .polyline(pts).close().extrude(z_hi - z_lo))
 
 
-def _knurl_band(z_lo, z_hi):
-    """v2's knurled brake band, filled to the axis (the disk is solid now):
-    a KNURL_N-lobe triangle wave, peaks AT the nominal RIM_OD/2 (flush-
-    contact math unchanged), PHASE-LOCKED to the ratchet star — 5 lobes
-    per tooth puts a peak under every tooth tip, so the teeth printing on
-    top of this ring are supported at their tips (v2 print finding)."""
-    r_pk = RIM_OD / 2.0
-    r_vl = r_pk - KNURL_DEPTH
-    ph = math.radians(RATCHET_PHASE_DEG)
-    pts = []
-    for i in range(KNURL_N):
-        a0 = ph + 2.0 * math.pi * i / KNURL_N
-        a1 = a0 + math.pi / KNURL_N
-        pts.append((r_pk * math.cos(a0), r_pk * math.sin(a0)))
-        pts.append((r_vl * math.cos(a1), r_vl * math.sin(a1)))
-    return (cq.Workplane("XY").workplane(offset=z_lo)
-            .polyline(pts).close().extrude(z_hi - z_lo))
-
-
 def ratchet_star_world():
     """The tooth band as a WORLD-position solid (filled to the axis): the
     ratchet lever's pawl edge is cut as its exact negative (v2's pattern —
     shared geometry, never re-modelled)."""
-    return _ratchet_star(SEP_Z0 + BRAKE_H - 0.2, SEP_Z1 + 0.2)
-
-
-def knurl_band_world(z_lo, z_hi):
-    """The knurled band solid (filled to the axis) over z_lo..z_hi: the
-    brake pad's concave face is cut by it, so the TPU carries the
-    texture's exact negative (v2's grip design)."""
-    return _knurl_band(z_lo, z_hi)
+    return _ratchet_star(RATCHET_BAND_Z0 - 0.2, SEP_Z1 + 0.2)
 
 
 def _cable_pass():
@@ -183,14 +159,11 @@ def _build_axle_separator():
     open-top strip slit."""
     # TENON POST, tip at JOINT_Z1 = the top half's slit ceiling plane
     b = cyl(AXLE_PRINT_D, JOINT_Z1 - SEP_Z1, z=SEP_Z1)
-    # 45° ROOT CONE — post→boss, continuous to the cylinder (user):
-    # d_top IS the post Ø; widens toward the bed: self-supporting
-    b = b.union(cone_solid(
-        d_bottom=AXLE_PRINT_D + 2.0 * (SHOULDER_Z - SEP_Z1),
-        d_top=AXLE_PRINT_D,
-        h=SHOULDER_Z - SEP_Z1, z_base=SEP_Z1))
-    b = b.union(_knurl_band(SEP_Z0, SEP_Z0 + BRAKE_H))       # brake band on the bed
-    b = b.union(_ratchet_star(SEP_Z0 + BRAKE_H, SEP_Z1))     # teeth grow on the ring
+    b = b.union(_ratchet_star(SEP_Z0, SEP_Z1))    # the teeth ARE the rim
+                                   # now (#1020): the plain ring under them
+                                   # was only ever the bottom 608's pocket
+                                   # depth, and that bearing has moved into
+                                   # the frame
     b = b.union(_drum_wall())
     # slit OPEN through the +z tenon tip (the separator slides UP onto
     # the fixed strip — v2's design); the closed bottom end sits 3.2 in
@@ -202,21 +175,25 @@ def _build_axle_separator():
                                                # sides swapped — the upright
                                                # print grows them native)
     b = b.cut(_cable_pass())
-    # DISC POCKET (user #880): hollow the disc between the bearing BOSS
+    # DISC POCKET (user #880): hollow the disc between the centre boss
     # and the drum bore, leaving the SEP_POCKET_FLOOR_T bottom plate as
     # the boss↔rim tie; walls vertical, floor a plain print plate
+    _pf = SEP_Z0 + SEP_POCKET_FLOOR_T
     b = b.cut(
         cyl(2.0 * SEP_POCKET_R,
-            (SEP_Z1 - (SEP_Z0 + SEP_POCKET_FLOOR_T)) + 1.0,
-            z=SEP_Z0 + SEP_POCKET_FLOOR_T)
+            (SEP_Z1 - _pf) + 1.0, z=_pf)
         .cut(cyl(SEP_BOSS_D,
                  (SEP_Z1 - SEP_Z0) + 2.0, z=SEP_Z0 - 0.5)))
-    # 45° skirt tying the boss into the pocket floor (user), and the
-    # SAME cone where the pocket's outer wall (the drum bore) meets the
-    # floor — an annular fillet, self-supporting in the upright print
-    _pf = SEP_Z0 + SEP_POCKET_FLOOR_T
-    b = b.union(cone_solid(d_bottom=SEP_BOSS_D + 2.0 * SEP_BOSS_FLARE,
-                           d_top=SEP_BOSS_D, h=SEP_BOSS_FLARE, z_base=_pf))
+    # ONE CONTINUOUS 45° CONE, pocket floor → the Ø8 post (user #1023 —
+    # it was TWO: the boss's own skirt into the floor, and the column's
+    # root cone off the disk top, with a flat ledge between them. That
+    # ledge was left over from when the boss had to be Ø24.2 to wall the
+    # bearing cavity; with the bearing gone the boss is Ø16.3 and the two
+    # cones sat 2.25 apart. Same call the user made at #880 for the root
+    # cone's top end: no flat ring, run it continuously.)
+    b = b.union(cone_solid(
+        d_bottom=AXLE_PRINT_D + 2.0 * (SHOULDER_Z - _pf),
+        d_top=AXLE_PRINT_D, h=SHOULDER_Z - _pf, z_base=_pf))
     b = b.union(
         cq.Workplane("XZ")
         .polyline([(SEP_POCKET_R - SEP_BOSS_FLARE, _pf),
@@ -224,22 +201,50 @@ def _build_axle_separator():
                    (SEP_POCKET_R + 1.0, _pf + SEP_BOSS_FLARE),
                    (SEP_POCKET_R, _pf + SEP_BOSS_FLARE)])
         .close().revolve(360.0, (0, 0), (0, 1)))
-    # BOTTOM-BEARING SEAT in the disk's underside (user's design): the
-    # bearing sits FLUSH with the disk face; the 45° cone rising off the
-    # pocket bore IS the seat (the race's factory OD-edge chamfer
-    # face-mates it — v2's flipped-lip trick), and the cone CAPS FLAT at
-    # the quality web under the disk top: a deliberate Ø19.4 ceiling
-    # bridge — only empty space above the bearing, sag there breaks
-    # nothing (user's call).
-    b = b.cut(cyl(BRG_BORE, (BOT_SEAT_CONE_Z0 - SEP_Z0) + 0.5,
-                  z=SEP_Z0 - 0.5))
-    b = b.cut(cone_solid(d_bottom=BRG_BORE, d_top=BOT_CONE_CAP_D,
-                         h=BOT_CONE_CAP_Z - BOT_SEAT_CONE_Z0,
-                         z_base=BOT_SEAT_CONE_Z0))
+    # The NUB's MORTISE (user #1020): the bottom bearing left the disk,
+    # so what is sunk in this face now is a blind socket for the little
+    # nub that turns in it. NUB_TENON_STRAIGHT of straight bore (user
+    # #1021 — real engagement before anything tapers), then a 45° CONE to
+    # a ONE-BEAD flat ceiling — in the upright print that is a hole
+    # opening AT THE BED and narrowing upward, so every wall of it is
+    # self-supporting and the only flat is the 0.8 the bridge rule
+    # allows. The nub's own roof is NUB_JOINT_CLR shallower, so the two
+    # CONES bear on each other (seating and centring at once) and the
+    # flats never meet.
+    b = b.cut(cyl(NUB_MORT_D, NUB_TENON_STRAIGHT, z=SEP_Z0))
+    b = b.cut(cone_solid(d_bottom=NUB_MORT_D, d_top=NUB_TIP_FLAT,
+                         h=NUB_ROOF_H,
+                         z_base=SEP_Z0 + NUB_TENON_STRAIGHT))
     # a lid-bayonet tenon fuse strands an orphan internal face (an OPEN
     # second shell — Bambu flags it); strip it (see helpers)
     return drop_stray_shells(heal(b))
 
 
+def _build_bearing_nub():
+    """The NUB (user #1020) — separator ↔ bottom bearing, its own print.
+    Top to bottom: the 45° ROOF that mates the separator's coned
+    mortise (dulled to NUB_TIP_FLAT), the Ø NUB_BODY_D body crossing
+    the running gap, a 45° cone onto the inner race's bore chamfer (the
+    chamfer-mates-cone trick, third use in this design), then the shaft
+    through the bore to the race's bottom face.
+    It STANDS ON ITS SHAFT to print: every step widens going up and the
+    roof narrows to the dulled tip, so nothing on it overhangs."""
+    z_seat = BOT_BRG_Z1                     # where the cone meets the race
+    n = cyl(NUB_SHAFT_D, z_seat - BOT_BRG_Z0, z=BOT_BRG_Z0)
+    n = n.union(cone_solid(d_bottom=NUB_SHAFT_D, d_top=NUB_BODY_D,
+                           h=NUB_SEAT_CONE_H, z_base=z_seat))
+    z_body = z_seat + NUB_SEAT_CONE_H
+    n = n.union(cyl(NUB_BODY_D, SEP_Z0 - z_body, z=z_body))
+    # the TENON steps down off the body (user #1021): its 1.6 of STRAIGHT
+    # engages the mortise before anything tapers, and the step itself is
+    # the flat shoulder the separator's underside rests on
+    n = n.union(cyl(NUB_TENON_D, NUB_TENON_STRAIGHT, z=SEP_Z0))
+    n = n.union(cone_solid(d_bottom=NUB_TENON_D, d_top=NUB_TIP_FLAT,
+                           h=NUB_TIP_H,
+                           z_base=SEP_Z0 + NUB_TENON_STRAIGHT))
+    return heal(n)
+
+
 axle_top = _build_top()
 axle_separator = _build_axle_separator()
+bearing_nub = _build_bearing_nub()

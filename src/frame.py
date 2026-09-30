@@ -25,8 +25,8 @@ INSTALL: frame_top rotates straight onto frame_bottom — z-mate through
 the open quadrants, rotate CW (viewed +z) to the angular stops. The
 chirality is load-derived (user's audit): the parked spring loop
 (strip anchor CW on frame_top, ratchet pawl CCW on frame_bottom),
-pull-out and retraction brake drag all press frame_top CW = INTO the
-stops; uninstall (CCW) is a torque no sustained load produces.
+and pull-out all press frame_top CW = INTO the stops; uninstall (CCW)
+is a torque no sustained load produces.
 Nothing slides anymore.
 """
 
@@ -40,9 +40,7 @@ from cadkit.holes import teardrop_hole
 
 from .helpers import chord_x, cone_solid, cyl, drop_stray_shells, heal
 from .levers import clip_post
-from .levers import (BRAKE_SWEPT_TOP, BWING_X0, BWING_X1, BWING_Z0, BWING_Z1,
-                     BWING_Y_TIP, BSTOP_Y_TIP, BSTOP_Y_ROOT,
-                     BRAKE_END_DEG, brake_wing_at, brake_wing_swept,
+from .levers import (
                      RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
                      PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept,
                      RATCHET_OPEN_DEG)
@@ -65,19 +63,20 @@ from .params import (
     FLOOR_HOLE_D, FLOOR_HOLE_WEB, FLOOR_HOLE_R0, FLOOR_HOLE_R1,
     FLOOR_RIB_W,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
-    STUB_D, STUB_BOSS_D, STUB_BOSS_Z1, STUB_Z1, STUB_FLARE,
+    BRG_BORE, BOT_BRG_Z0, BOT_BRG_Z1, BOT_LIP_ID, BOT_LIP_H,
+    BOT_LIP_FUNNEL, BOT_PLUG_Z0,
     N_HUB_WEB, HUB_WEB_W, HUB_WEB_Z1,
     JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
-    LEVER_PIVOT_X, RATCHET_PIVOT_Z, BRAKE_PIVOT_Z,
-    RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD, BRAKE_LEV_Y1,
+    LEVER_PIVOT_X, RATCHET_PIVOT_Z,
+    RATCHET_LEV_Y1, LEVER_SIDE_CLR, LEVER_BOSS_OD,
     HORN_W, HORN_Z1, HORN_CH_W, HORN_BLOCK_H, STRUCT_WALL,
     HORN_BLOCK_L, HORN_BELL_R, HORN_YC,
     HORNJ_W, HORNJ_Z_CLR, HORN_STOP_T, HORN_STOP_DROP,
     HORN_WALL_T, HORN_X1,
     LEVER_PIN_D, LEVER_PIN_FRAME_CLR, LEVER_COL_Y1,
-    POST_OUT_T, PIN_TIP_END_Y, PIN_TIP_CLEAR, BOSS_BORE_ID, BOSS_RING_W,
+    POST_OUT_T, CLIP_SIDE, BOSS_BORE_ID, BOSS_RING_W,
     BOSS_RING_CUT,
     MOUNT_RING_R, MOUNT_TEN_W,
 )
@@ -100,8 +99,7 @@ from .params import (
 # torque loop reacts CW on frame_top (strip anchor at +X pulled −Y) and
 # CCW on frame_bottom (pawl holding the separator) — that relative
 # twist crosses THIS joint, so frame_top must seat rotating CW (viewed
-# +z) for the parked spring, pull-out and brake drag to all PRESS the
-# stops. Uninstall = frame_top CCW, a torque no sustained load makes. ────────
+# +z) for the parked spring and pull-out to both PRESS the stops. Uninstall = frame_top CCW, a torque no sustained load makes. ────────
 _DOWN = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="down")
 FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
                 install="-x")
@@ -202,15 +200,13 @@ def _trim_to_bore(w, z_top):
 _SB_Y0 = RATCHET_LEV_Y1 + LEVER_SIDE_CLR         # 19.0 — side-column inner face
 _SB_Y1 = _SB_Y0 + POST_OUT_T                     # 24.5 — side-column outer face
 assert abs(_SB_Y1 - LEVER_COL_Y1) < 1e-9, "fork column face ≠ params LEVER_COL_Y1"
-# arch-turn start, PER SIDE (user: each fork sets its own roof — reusing
-# the ratchet's on the brake wasted ~19 of fork): the band's turn sits
-# _ARCH_CLR above that side's swept ceiling. RATCHET: the swing-invariant
-# pivot boss (the material around the lever's torsion axle) is the
-# lever's top. BRAKE: the pad/flange assembly rides ABOVE its own pivot
-# axle — its swept top (levers.BRAKE_SWEPT_TOP) governs instead.
+# arch-turn start: the band's turn sits _ARCH_CLR above the lever's
+# swept ceiling, which is the swing-invariant pivot boss (the material
+# around the pin). ONE fork since #1019 — the −y side's whole fork went
+# with the brake, and with it the per-side roof rule, which existed
+# because that lever's pad topped out ~19 lower than this one's boss.
 _ARCH_CLR   = 1.0                                    # v2's roof clearance
 _ARCH_Z0_R = RATCHET_PIVOT_Z + LEVER_BOSS_OD / 2.0 + _ARCH_CLR   # ≈ −18.5
-_ARCH_Z0_B = BRAKE_SWEPT_TOP + _ARCH_CLR                          # ≈ −37
 
 
 def _arch(s, z_b0):
@@ -248,14 +244,15 @@ def _side_column(s, col_top):
 
 
 def _lever_pad():
-    """FOOT PAD under the lever area (floor-thick) — THREE STRIPS now
-    (user's call #833): one under the +X beam, one under each fork
-    column, tying them to the wall band and floor at the bed. The bands
-    directly under the LEVERS stay OPEN so a hand reaches up to the
-    handles from below."""
+    """FOOT PAD under the lever area (floor-thick) — TWO STRIPS since
+    #1019: one under the +X beam, one under the ratchet's fork column,
+    tying them to the wall band and floor at the bed. (The third, under
+    the brake's column, went with that column — it was a bare ledge
+    tying nothing.) The band directly under the LEVER stays OPEN so a
+    hand reaches up to the handle from below."""
     p = None
     for y0, y1 in ((-BEAM_SIZE / 2.0, BEAM_SIZE / 2.0),
-                   (_SB_Y0, _SB_Y1), (-_SB_Y1, -_SB_Y0)):
+                   (_SB_Y0, _SB_Y1)):
         b = _box(WALL_IR - 2.0, _R_OUT, y0, y1, FLOOR_Z0, FLOOR_Z1)
         p = b if p is None else p.union(b)
     return p
@@ -326,39 +323,6 @@ def _stop_rib(x0, x1, z0, z1, y_r, y_f, y_t):
     out = abs(y_t - y_f)                             # 1.6 — the cantilever
     return _yz_prism([(y_r, z0 - out), (y_f, z0 - out), (y_t, z0),
                       (y_t, z1), (y_r, z1)], x0, x1)
-
-
-def _brake_stops():
-    """BRAKE REST + END STOPS (kinematics in levers.py, #988): two
-    blanks in the brake bay's OUTER air strip (#1002 — the wing moved to
-    the lever's −y face to top its print) — rooted along the band strip
-    at the window's edge and the fork column beyond it, trimmed out
-    of the drum's bore — cut by the brake WING's swept volume. The +x
-    one is the REST rib (the spring holds the wing on it), the −x one
-    the END rib (full pull); each face is the wing's own face at that
-    pose, so the wing BUTTS both in pure compression. Each blank spans
-    only the wing's height AT ITS OWN pose — one blank over the whole
-    swept band left thin ledges wrapped around the resting wing.
-    (#993, printability) Both undersides are 45° gussets, and the END
-    blank stops at the wing's leading corners at full pull — its top at
-    the top corner's z, its +x end at the bottom corner's x — so the
-    sweep can't carve a notch whose ceiling hangs over the wing's path."""
-    sw = brake_wing_swept()
-    bb = sw.val().BoundingBox()
-    x_end = chord_x(WALL_IR, abs(BSTOP_Y_TIP))     # the bore, at the rib face
-    assert bb.xmin - x_end >= 3 * NOZZLE_D - 1e-9, \
-        "brake END rib under 3 beads long between the bore and the wing"
-    assert (BEAM_IR + BEAM_SIZE) - BWING_X1 >= 3 * NOZZLE_D - 1e-9, \
-        "brake REST rib under 3 beads long between the wing and the face"
-    end_bb = brake_wing_at(BRAKE_END_DEG).val().BoundingBox()
-    _, z_top = _swung(BWING_X0, BWING_Z1, BRAKE_PIVOT_Z, BRAKE_END_DEG)
-    x_bot, _ = _swung(BWING_X0, BWING_Z0, BRAKE_PIVOT_Z, BRAKE_END_DEG)
-    ys = (BSTOP_Y_ROOT, BWING_Y_TIP, BSTOP_Y_TIP)
-    rest = _stop_rib(BWING_X1 - 1.0, BEAM_IR + BEAM_SIZE,
-                     BWING_Z0, BWING_Z1, *ys)
-    end = _stop_rib(x_end - 1.0, x_bot, end_bb.zmin, z_top, *ys)
-    return _trim_to_bore(rest.union(end).cut(sw),
-                         max(BWING_Z1, end_bb.zmax))
 
 
 def _ratchet_stop():
@@ -666,16 +630,25 @@ def _floor():
     # cylinder grip on the inner race over the stub's whole reach; the
     # upright print never needed the chamfer). 45° base flare for
     # strength, inside the guide sleeve's bore (asserted).
-    f = f.union(cyl(STUB_BOSS_D, STUB_BOSS_Z1 - FLOOR_Z0, z=FLOOR_Z0),
-                clean=False)
-    f = f.union(cone_solid(d_bottom=STUB_BOSS_D + 2.0 * STUB_FLARE,
-                           d_top=STUB_BOSS_D, h=STUB_FLARE,
-                           z_base=FLOOR_Z1), clean=False)
-    f = f.union(cyl(STUB_D, STUB_Z1 - STUB_BOSS_Z1, z=STUB_BOSS_Z1),
-                clean=False)
+    # BOTTOM-BEARING POCKET (user #1020, replacing the static stub): the
+    # sleeve's top is PLUGGED solid and bored Ø BRG_BORE down to a
+    # retention lip — the outer race drops in from above and rests on it,
+    # the separator's nub turns in the bore. Under the lip the bore opens
+    # back out at 45° into the sleeve's own bore, so the lip's underside
+    # is a funnel and not a ceiling in the upright print.
+    z_plug = BOT_PLUG_Z0
+    f = f.union(cyl(SLEEVE_OD, BOT_BRG_Z1 - z_plug, z=z_plug), clean=False)
+    f = f.cut(cyl(BRG_BORE, (BOT_BRG_Z1 - BOT_BRG_Z0) + 1.0, z=BOT_BRG_Z0),
+              clean=False)
+    f = f.cut(cyl(BOT_LIP_ID, BOT_LIP_H, z=BOT_BRG_Z0 - BOT_LIP_H),
+              clean=False)
+    f = f.cut(cone_solid(d_bottom=SLEEVE_OD - 2.0 * SLEEVE_T,
+                         d_top=BOT_LIP_ID, h=BOT_LIP_FUNNEL,
+                         z_base=BOT_PLUG_Z0),
+              clean=False)
     # HUB WEBS (params, user #970): radial ribs boss -> sleeve wall,
     # floor plate -> sleeve top, buried 0.5 into each neighbour
-    web = _box(STUB_D / 2.0, SLEEVE_OD / 2.0 - SLEEVE_T + 0.5,
+    web = _box(0.0, SLEEVE_OD / 2.0 - SLEEVE_T + 0.5,
                -HUB_WEB_W / 2.0, HUB_WEB_W / 2.0,
                FLOOR_Z1 - 0.5, HUB_WEB_Z1)
     for i in range(N_HUB_WEB):
@@ -700,7 +673,7 @@ def _thrust_boss(y_face, grow, pz, clip_x=None):
     if clip_x is not None:
         boss = boss.cut(cyl(2.0 * clip_x, 24.0, z=pz - 12.0))
     # the ring's proud face trimmed back (user #1014): at 0.05 of side
-    # play the pair pinched the brake lever too hard for the TPU to
+    # play the pair pinched the lever too hard for the TPU to
     # return it
     face = y_face + grow * (BOSS_RING_W - BOSS_RING_CUT)
     lo = min(face, face + grow * 20.0)
@@ -712,12 +685,12 @@ def _lever_mount():
     """Fork columns + arch struts + per-pivot thrust bosses (v2's design,
     fans/climbs retired; the lever plates/pins land next round on these
     same constants). Each side runs the SAME construction off its own
-    roof height (_ARCH_Z0_R / _ARCH_Z0_B — user's call)."""
+    roof height (_ARCH_Z0_R — the −y fork left with the brake, #1019)."""
     _rise = _SB_Y0 - BEAM_SIZE / 2.0
     _half = _rise / 2.0
     _y2 = BEAM_SIZE / 2.0 + _half + 1.0
     m = None
-    for s, z0 in ((+1.0, _ARCH_Z0_R), (-1.0, _ARCH_Z0_B)):
+    for s, z0 in ((+1.0, _ARCH_Z0_R),):
         col_top = z0 + 2.0 * POST_OUT_T / math.sqrt(2.0) - POST_OUT_T
         p = _side_column(s, col_top)
         p = p.union(_arch(s, z0), clean=False)
@@ -739,7 +712,7 @@ def _lever_mount():
         m = p if m is None else m.union(p, clean=False)
     # thrust bosses: beam flank grows OUT to the lever's inner face (wall-
     # cylinder guard on its −x side); the column face grows IN
-    for s, pz in ((+1.0, RATCHET_PIVOT_Z), (-1.0, BRAKE_PIVOT_Z)):
+    for s, pz in ((+1.0, RATCHET_PIVOT_Z),):
         m = m.union(_thrust_boss(s * BEAM_SIZE / 2.0, s, pz, clip_x=WALL_OR),
                     clean=False)
         m = m.union(_thrust_boss(s * _SB_Y0, -s, pz), clean=False)
@@ -749,25 +722,30 @@ def _lever_mount():
 def _clip_posts():
     """Each lever's TPU return-clip POST (#1004 — replaces the Lee
     spring's pocket and leg groove): levers.clip_post. Both stand well
-    clear of the hand-access cutaway since #1008 (the brake's leaf points
-    up; asserted in levers.py) — the #1007 trim by the cut left a 35°
-    edge where its 45° met the gusset's (user)."""
+    clear of the hand-access cutaway (asserted in levers.py) — the #1007
+    trim by the cut left a 35° edge where its 45° met the gusset's
+    (user)."""
     out = None
-    for s, pz in ((+1, RATCHET_PIVOT_Z), (-1, BRAKE_PIVOT_Z)):
+    for s, pz in ((CLIP_SIDE, RATCHET_PIVOT_Z),):
         p = clip_post(pz, s)
         out = p if out is None else out.union(p, clean=False)
     return out
 
 
 def _pin_bores_side(pz, s):
-    """ROUND running bores for one lever's pivot pin (#988; s=+1 ratchet,
-    −1 brake): the fork column THROUGH, and the beam flank BLIND — its
-    floor at PIN_TIP_END_Y is the pin's depth stop. Horizontal in this
-    part's upright print, so cadkit's teardrop cutter peaks their crowns
-    at 45°; the pin rides the round part. Both run through their thrust
-    rings + 0.5 (a cutter step inside a ring strands a crown sliver)."""
+    """ROUND running bores for the lever's pivot pin (#988; re-laid at
+    #1029, when the pin grew to SPAN the beam). Two cuts:
+      · the +y fork column, THROUGH (user #1035 — it was blind, and the
+        pin only reached 1.6 into it). The pin now runs the column's full
+        5.6 of wall, so it is carried at both ends of its span; nothing
+        can bottom anywhere, which leaves the WEDGE as the only stop.
+      · the BEAM, THROUGH both flanks and on out past the −y face, where
+        the TPU clip now lives.
+    Horizontal in this part's upright print, so cadkit's teardrop cutter
+    peaks their crowns at 45°; the pin rides the round part. Both run
+    through their thrust rings + 0.5 (a cutter step inside a ring strands
+    a crown sliver)."""
     y1o = s * RATCHET_LEV_Y1
-    F = y1o + s * (LEVER_SIDE_CLR + POST_OUT_T)
     d = LEVER_PIN_D + 2.0 * LEVER_PIN_FRAME_CLR
 
     def bore(ya, yb):
@@ -775,14 +753,14 @@ def _pin_bores_side(pz, s):
         h = teardrop_hole(d, hi - lo, (LEVER_PIVOT_X, lo, pz), (0.0, 1.0, 0.0))
         return h if isinstance(h, cq.Workplane) else cq.Workplane(obj=h)
 
-    out = bore(F + s * 0.5, y1o - s * 0.5)                # column, through
-    return out.union(bore(s * (PIN_TIP_END_Y - PIN_TIP_CLEAR),  # beam, blind
-                          s * (BEAM_SIZE / 2.0 + LEVER_SIDE_CLR + 0.5)))
+    col = bore(s * (LEVER_COL_Y1 + 0.5), y1o - s * 0.5)    # column, through
+    beam = bore(s * (BEAM_SIZE / 2.0 + LEVER_SIDE_CLR + 0.5),
+                -s * (BEAM_SIZE / 2.0 + 1.0))              # beam, through
+    return col.union(beam)
 
 
 def _lever_pin_bores():
-    return (_pin_bores_side(RATCHET_PIVOT_Z, +1.0)
-            .union(_pin_bores_side(BRAKE_PIVOT_Z, -1.0)))
+    return _pin_bores_side(RATCHET_PIVOT_Z, +1.0)   # one lever since #1019
 
 
 def _lock_place(w):
@@ -854,8 +832,11 @@ def _build_frame_bottom():
                                           # the lid-top plane (wall.py)
     fb = fb.union(_floor(), clean=False)
     fb = fb.union(_lever_pad(), clean=False)
-    fb = fb.union(_bay_web(+1.0), clean=False)
-    fb = fb.union(_bay_web(-1.0), clean=False)
+    fb = fb.union(_bay_web(+1.0), clean=False)   # −y web went with the
+                                   # brake (#1019): no bay window cuts
+                                   # that side any more, so there is no
+                                   # band end to seal and no column to
+                                   # seal it to — it stood as a blade
     # the 4 sites' beams/tenons/fillers as ONE compound → one fuse
     # instead of 12 whole-part unions
     site_solids = []
@@ -865,7 +846,6 @@ def _build_frame_bottom():
     fb = fb.union(cq.Workplane(obj=cq.Compound.makeCompound(site_solids)),
                   clean=False)
     fb = fb.union(_lever_mount(), clean=False)
-    fb = fb.union(_brake_stops(), clean=False)
     fb = fb.union(_ratchet_stop(), clean=False)
     fb = fb.union(_HORN_BOTTOM, clean=False)
     for c in _lock_copies(_lock_corbel_bot()):

@@ -14,11 +14,11 @@ from cadkit.overlap_check import run
 from src.frame import frame_top, frame_bottom, horn_cap, lock_pins_in_place
 from src.mount import mount_ring
 from src.params import COUCH_TOP_PAD
-from src.axle import axle_top, axle_separator
+from src.axle import axle_top, axle_separator, bearing_nub
 from src.lid import lid
-from src.levers import (ratchet_lever, brake_lever, brake_pad_tpu,
+from src.levers import (ratchet_lever,
                         lever_pin_in_place, return_clip_in_place)
-from src.params import RATCHET_PIVOT_Z, BRAKE_PIVOT_Z
+from src.params import RATCHET_PIVOT_Z, CLIP_SIDE
 from src.dummies import bearing_608, bearing_608_bottom, spring
 
 
@@ -30,16 +30,13 @@ def collect_components():
         ("horn_cap",    horn_cap),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),
+        ("bearing_nub", bearing_nub),
         ("lid",         lid),
         ("ratchet_lever", ratchet_lever),
-        ("brake_lever",   brake_lever),
-        ("brake_pad_tpu", brake_pad_tpu),
         *[("lock_pin_tpu" + ("" if k == 0 else f"_{k + 1}"), pin)
           for k, pin in enumerate(lock_pins_in_place)],
-        ("ratchet_pin", lever_pin_in_place(RATCHET_PIVOT_Z, +1)),
-        ("brake_pin",   lever_pin_in_place(BRAKE_PIVOT_Z, -1)),
-        ("ratchet_return_clip", return_clip_in_place(RATCHET_PIVOT_Z, +1)),
-        ("brake_return_clip",   return_clip_in_place(BRAKE_PIVOT_Z, -1)),
+        ("ratchet_pin", lever_pin_in_place(RATCHET_PIVOT_Z, CLIP_SIDE)),
+        ("ratchet_return_clip", return_clip_in_place(RATCHET_PIVOT_Z, CLIP_SIDE)),
         ("bearing_608", bearing_608),
         ("bearing_608_bottom", bearing_608_bottom),
         ("spring",      spring),
@@ -50,7 +47,19 @@ def collect_components():
 # whitelisted so numeric grazing never fails the gate):
 _INTENDED = {
     frozenset(p) for p in [
+        ("ratchet_return_clip", "frame_bottom"),  # the TPU leaf's PRELOAD
+                                   # (#1037): the printed clip leans
+                                   # CLIP_PRELOAD into the post and the post
+                                   # bends it back — the interference IS the
+                                   # spring. Same call as the old brake pad's
+                                   # TPU squish.
         ("bearing_608", "frame_top"),    # outer race in the pocket, on the lip
+        ("bearing_608_bottom", "frame_bottom"),   # #1020: the bottom race is
+                                   # the FRAME's now — outer race in the
+                                   # sleeve-top pocket, resting on its lip
+        ("bearing_608_bottom", "bearing_nub"),    # the nub's 45° seats on the
+                                   # inner race's bore chamfer
+        ("bearing_nub", "axle_separator"),        # coned tenon in its mortise
         ("bearing_608", "axle_top"),     # shaft in the bore; lip on the inner race
         ("spring", "frame_top"),         # top flange against the frame underside
         ("axle_top", "axle_separator"),     # tenon glued in the mortise
@@ -66,13 +75,9 @@ _INTENDED = {
                                               # rest (exact-negative edge)
         ("horn_cap", "frame_bottom"),  # cap seated flat on the trough
                                        # half at the bore's equator
-        ("brake_pad_tpu", "brake_lever"),     # hook slide joint seated
         ("ratchet_pin", "frame_bottom"),      # keyed diamond bores
-        ("brake_pin",   "frame_bottom"),
         ("ratchet_pin", "ratchet_lever"),     # keyed lever pockets
-        ("brake_pin",   "brake_lever"),
         ("ratchet_pin", "ratchet_return_clip"),  # the TPU clip's rib is
-        ("brake_pin",   "brake_return_clip"),    # squeezed into the pin's
                                                  # key slot (#1011)
     ]
 }
