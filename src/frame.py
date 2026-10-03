@@ -38,7 +38,8 @@ from cadkit.joinery import PrintSpec, joint
 from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
-from .helpers import chord_x, cone_solid, cyl, drop_stray_shells, heal
+from .helpers import (chevron_plan, chord_x, cone_solid, cyl,
+                      drop_stray_shells, heal)
 from .levers import clip_post
 from .levers import (
                      RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
@@ -49,9 +50,9 @@ from .wall import wall_band
 from .params import (
     NOZZLE_D,
     FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1, FRAME_TOP_Z1, COUCH_TOP_PAD,
-    LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_HEAD_Y1,
+    LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_WALL_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
-    LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_PIN_SQ, LOCK_PIN_CLR, LOCK_PIN_Z0,
+    LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_SLOT_XA, LOCK_PIN_CLR, LOCK_PIN_Z0,
     LOCK_PIN_L, LOCK_SHIFT_X, LOCK_SHIFT_Y, LOCK_ROTS,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
@@ -798,7 +799,10 @@ def _lock_corbel_top():
          (LOCK_X0, LOCK_TOPB_Z1),
          (LOCK_X1, LOCK_TOPB_Z1 - LOCK_BLK_D),
          (LOCK_X1, zb)],
-        FRAME_RIB / 2.0, LOCK_HEAD_Y1)
+        FRAME_RIB / 2.0, LOCK_WALL_Y1)       # #1064/#1066: the section
+                                   # runs STRUCT_WALL past the slot, so the
+                                   # pin is walled on all four sides; the
+                                   # screw pad is inset clear of it
     return _lock_place(w).translate((0.0, 0.0, COUCH_TOP_PAD))
 
 
@@ -812,15 +816,26 @@ def _lock_corbel_bot():
          (LOCK_X1, -(LOCK_BOTB_H - LOCK_BLK_D)),
          (LOCK_X0, -LOCK_BOTB_H),
          (LOCK_X0 - LOCK_WELD, -(LOCK_BOTB_H - LOCK_WELD))],
-        FRAME_RIB / 2.0, LOCK_HEAD_Y1))
+        FRAME_RIB / 2.0, LOCK_WALL_Y1))      # #1064: full inboard wall —
+                                   # nothing of the mount reaches this far
+                                   # down, so this one just widens
+
+
+def _lock_prism(z0, z1, inset=0.0):
+    """The shared pin-slot plan over [z0, z1] — ONE shape for all three
+    storeys AND for the pin itself (user's recipe: size the prisms,
+    then cut the TPU pin's shape through everything). `inset` makes it
+    the PIN instead of the slot. The +x end is a chevron, which is what
+    keeps the corbels' 45 fronts from bridging the slot (params)."""
+    return (cq.Workplane("XY").workplane(offset=z0)
+            .polyline(chevron_plan(LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_XA,
+                                   LOCK_SLOT_Y0, LOCK_SLOT_Y1, inset))
+            .close().extrude(z1 - z0))
 
 
 def _lock_slot_cut(z0, z1):
-    """The shared pin-slot plan, cut over [z0, z1] — ONE shape for all
-    three storeys (user's recipe: size the prisms, then cut the TPU
-    pin's shape through everything), placed on the lock's beam."""
-    return _lock_place(_box(LOCK_SLOT_X0, LOCK_SLOT_X1,
-                            LOCK_SLOT_Y0, LOCK_SLOT_Y1, z0, z1))
+    """The pin slot, placed on the lock's beam."""
+    return _lock_place(_lock_prism(z0, z1))
 
 
 def _build_frame_bottom():
@@ -945,11 +960,8 @@ horn_cap = heal(_HORN_CAP)
 # reverted), tip LOCK_PIN_GRIP proud below the beam corbel for the
 # pliers grab. Free in z — the desk caps +z once mounted; goes in
 # from BELOW, after the mount rotation.
-lock_pin_tpu = _lock_place(_box(LOCK_SLOT_X0 + LOCK_PIN_CLR,
-                                LOCK_SLOT_X0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
-                                LOCK_SLOT_Y0 + LOCK_PIN_CLR,
-                                LOCK_SLOT_Y0 + LOCK_PIN_CLR + LOCK_PIN_SQ,
-                                LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L))
+lock_pin_tpu = _lock_place(_lock_prism(LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L,
+                                       LOCK_PIN_CLR))
 # one printed PART, installed at every lock site (#983): the assembly
 # and the overlap gate place these; the STEP export stays the one part
 lock_pins_in_place = _lock_copies(lock_pin_tpu)

@@ -43,6 +43,8 @@ import cadquery as cq
 
 from cadkit.joinery import PrintSpec, joint
 
+from .helpers import chevron_plan
+
 from .params import (
     NOZZLE_D, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
     MOUNT_TEN_W, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
@@ -58,7 +60,8 @@ from .params import (
     TOP_ENTRY_OVER,
     WOOD_SCREW_SHAFT_D, WOOD_SCREW_HEAD_D, WOOD_SCREW_HEAD_H,
     MOUNT_PAD_H, MOUNT_PAD_INSET_MY, LOCK_HEAD_ZF, LOCK_ROTS,
-    LOCK_X0, LOCK_X1, LOCK_HEAD_Y1, LOCK_HEAD_ZB,
+    LOCK_X0, LOCK_X1, LOCK_MOUNT_Y1, LOCK_HEAD_ZB, LOCK_SLOT_XA,
+    LOCK_WALL_Y1, LOCK_PAD_Z0, LOCK_SWEEP_CLR,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
 )
@@ -235,15 +238,11 @@ _PAD_Y0 = FRAME_RIB / 2.0                 # the flank the pad seats on
 # so its deep span may end there — the step is buried in the pad
 _PAD_R0 = _PAD_CX - MOUNT_PAD_W / 2.0
 _PAD_R1 = _PAD_CX + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY
-# HAIRLINE FILL (user #982): the #971 pad inset left the −y arm's screw
-# pad ~0.7 short of the TPU-lock jib head, bridged only by the tail rib
-# at the flank — a split line right where two bosses should be one
-# block. The head extrudes that much further toward the pad, into space
-# the frame's corbel never occupies (the corbel BEGINS at the head's own
-# near face, so the fill is entirely inboard of it) and which no other
-# part enters. Derived, so it closes exactly however the pad moves.
-_HEAD_FILL = (-(LOCK_SHIFT_Y + LOCK_HEAD_Y1) - _PAD_R1)
-assert _HEAD_FILL >= 0.0, "the −y screw pad already overruns the jib head"
+# (the #982 HAIRLINE FILL is retired — #1063: the head no longer stops
+# short of the screw pad at all. It runs a LOCK_WELD INTO the pad
+# (LOCK_MOUNT_Y1), and the slot stops at the pad's face, so the pad IS
+# the slot's inboard wall and the TPU bears straight on the screw boss.)
+assert -(LOCK_SHIFT_Y + LOCK_MOUNT_Y1) <= _PAD_R1 + 1e-9,     "the jib head no longer reaches into its screw pad — the weld is open"
 
 
 # the arms that carry a TPU lock (the −y one, turned by each LOCK_ROTS):
@@ -407,21 +406,54 @@ def _build_mount():
     head = (cq.Workplane("XZ")
             .polyline([(LOCK_X0, FRAME_Z1), (LOCK_X1, FRAME_Z1),
                        (LOCK_X1, LOCK_HEAD_ZB), (LOCK_X0, LOCK_HEAD_ZF)])
-            .close().extrude(LOCK_HEAD_Y1 - FRAME_RIB / 2.0 + _HEAD_FILL)
+            .close().extrude(LOCK_MOUNT_Y1 - FRAME_RIB / 2.0)
             .translate((LOCK_SHIFT_X,
-                        LOCK_HEAD_Y1 + LOCK_SHIFT_Y + _HEAD_FILL, 0.0)))
+                        LOCK_MOUNT_Y1 + LOCK_SHIFT_Y, 0.0)))
+    # the head only needs to reach PAST the frame's own block where the
+    # screw pad is there to weld to — i.e. from the pad's underside up.
+    # Below that it was hanging LOCK_MOUNT_Y1 − LOCK_WALL_Y1 proud of
+    # both frame corbels for nothing (user #1068). Trimmed flush with
+    # them; the trim's own face lands on the pad's underside plane, and
+    # in this part's FLIPPED print it is a print-TOP face, not an
+    # overhang.
+    trim = (cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 2.0)
+            .center((LOCK_X0 + LOCK_X1) / 2.0,
+                    (LOCK_WALL_Y1 + LOCK_MOUNT_Y1 + 1.0) / 2.0)
+            .rect(LOCK_X1 - LOCK_X0 + 4.0,
+                  LOCK_MOUNT_Y1 + 1.0 - LOCK_WALL_Y1)
+            .extrude(LOCK_PAD_Z0 - (LOCK_HEAD_ZB - 2.0))
+            .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)))
+    head = head.cut(trim)
     for r in LOCK_ROTS:
         m = m.union(head.rotate((0, 0, 0), (0, 0, 1), r), clean=False)
+    # NOTHING OF THE MOUNT BELOW THE LOCK'S 45 (user #1069): the head's
+    # own underside rides the frame corbel's roof at LOCK_SWEEP_CLR, but
+    # it is not the only mount part that reaches out here — the ring-tie
+    # WEB bottoms at MOUNT_WEB_Z0, which is FRAME_Z1 − MOUNT_PAD_H, the
+    # same depth as the screw pad, and its outer edge (MOUNT_RING_R +
+    # MOUNT_SPINE_W/2) dropped a sliver past that 45 into the frame's
+    # block. Tiny — 0.42 mm² of face — but it is inside the joint, so it
+    # fouls the stack. So the envelope is CUT from the finished mount
+    # rather than merely respected by the head: past the beam's flank,
+    # below the head's underside line, the mount is empty by
+    # construction, whatever grows there later.
+    env_z0 = LOCK_HEAD_ZB - 12.0
+    env = (cq.Workplane("XZ")
+           .polyline([(LOCK_X0, LOCK_HEAD_ZF), (LOCK_X1, LOCK_HEAD_ZB),
+                      (LOCK_X1, env_z0), (LOCK_X0, env_z0)])
+           .close().extrude(LOCK_WALL_Y1 + LOCK_SWEEP_CLR - FRAME_RIB / 2.0)
+           .translate((LOCK_SHIFT_X,
+                       LOCK_WALL_Y1 + LOCK_SWEEP_CLR + LOCK_SHIFT_Y, 0.0)))
+    for r in LOCK_ROTS:
+        m = m.cut(env.rotate((0, 0, 0), (0, 0, 1), r), clean=False)
     # the slot is a CLOSED pocket in the head — the −x wall between the
     # flank and the slot is the lock itself (user #948: the mount's
     # uninstall motion here is +x, and that wall is what drives the
     # pin against the frame corbels' +x walls; the #942 open-slot
     # variant slid straight off the pin)
     slot = (cq.Workplane("XY").workplane(offset=LOCK_HEAD_ZB - 1.0)
-            .polyline([(LOCK_SLOT_X0, LOCK_SLOT_Y0),
-                       (LOCK_SLOT_X1, LOCK_SLOT_Y0),
-                       (LOCK_SLOT_X1, LOCK_SLOT_Y1),
-                       (LOCK_SLOT_X0, LOCK_SLOT_Y1)])
+            .polyline(chevron_plan(LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_XA,
+                                   LOCK_SLOT_Y0, LOCK_SLOT_Y1))
             .close().extrude((FRAME_Z1 - LOCK_HEAD_ZB) + 2.0)
             .translate((LOCK_SHIFT_X, LOCK_SHIFT_Y, 0.0)))
     for r in LOCK_ROTS:

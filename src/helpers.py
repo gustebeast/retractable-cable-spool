@@ -16,6 +16,30 @@ def chord_x(r: float, y: float) -> float:
     return math.sqrt(max(r * r - y * y, 0.0))
 
 
+def chevron_plan(x0: float, x1: float, xa: float, y0: float, y1: float,
+                 inset: float = 0.0) -> tuple:
+    """Plan outline of a slot whose +x end closes as a CHEVRON: the
+    rectangle [x0,x1]x[y0,y1] with a nose running out to the apex `xa`
+    on the centreline.
+
+    WHY a nose: a slot cut through a part that the printer builds as a
+    45 deg front sweeping +x (anything corbelled off a wall) has its
+    far wall appear all at once — one layer bridging the slot's whole
+    width, drooping into the bore. A chevron makes that closure
+    DIAGONAL instead, so each layer adds only a sliver.
+
+    `inset` shrinks the outline uniformly (every edge moves in by that
+    much, the apex by inset / sin of its half-angle) — the printed pin
+    is its own slot inset by the fit clearance."""
+    yc = (y0 + y1) / 2.0
+    dx, dy = xa - x1, (y1 - y0) / 2.0
+    L = math.hypot(dx, dy)
+    xk = x1 - inset * (L - dx) / dy          # the nose's base corners
+    xp = xa - inset * L / dy                 # the apex itself
+    return ((x0 + inset, y0 + inset), (xk, y0 + inset), (xp, yc),
+            (xk, y1 - inset), (x0 + inset, y1 - inset))
+
+
 def cyl(d: float, h: float, z: float = 0.0) -> cq.Workplane:
     """Solid cylinder, diameter d, height h, base at z."""
     return cq.Workplane("XY").workplane(offset=z).circle(d / 2).extrude(h)

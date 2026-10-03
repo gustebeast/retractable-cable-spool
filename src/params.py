@@ -1062,13 +1062,22 @@ MOUNT_TAIL_TIP_X = FRAME_R_OUT + snap(MOUNT_COUCH_SETBACK, NOZZLE_D, "up")
 MOUNT_TAIL_VIS = MOUNT_TAIL_TIP_X - _PAD_EDGE_X    # ≈9.8 past the pad edge
 assert MOUNT_TAIL_TIP_X - FRAME_R_OUT >= MOUNT_COUCH_SETBACK - 1e-9, \
     "guide tails end inside the rotate-on set-back"
-MOUNT_PAD_INSET_MY = 3 * NOZZLE_D  # 2.4 — the −Y ARM's pad (and its screw)
+MOUNT_PAD_INSET_MY = 6 * NOZZLE_D  # 4.8 — the −Y ARM's pad (and its screw)
                                    # slides inboard along its beam until
                                    # its outboard edge CLEARS the TPU lock's
                                    # top corbel by the sweep clearance
                                    # (#971: the two-bead boss left no room
                                    # for the old wedge relief over the
-                                   # corbel — asserted in the LOCK block;
+                                   # corbel — asserted in the LOCK block).
+                                   # 3 beads until #1066: the lock's own
+                                   # INBOARD WALL has to fit between the
+                                   # slot and this pad, and at 2.4 the pad
+                                   # overhung it — the wall had to duck
+                                   # under the pad on a capped 45 ridge,
+                                   # leaving the void the user caught at
+                                   # (8.40, −79.59, 11.00). At 4.8 the pad
+                                   # clears the wall and the wall carries
+                                   # the corbel's own roof;
                                    # the flank edge — the seating stop — is
                                    # untouched, and 2.4 off the ring line is
                                    # nothing to a wood beam)
@@ -1136,17 +1145,55 @@ MOUNT_GRV_DEPTH = MOUNT_GRV_VERT + (MOUNT_GRV_W - MOUNT_GRV_FLAT) / 2.0  # 3.3
 # pad only moves away from the stack during the install sweep).
 # Dims below stay in the AS-DRAWN (+x-arm) frame; builders translate
 # by (LOCK_SHIFT_X, LOCK_SHIFT_Y).
-LOCK_PIN_SQ  = 5 * NOZZLE_D        # 4.0 — square pin section (95A TPU)
-LOCK_PIN_CLR = 0.20                # per-side, all three hosts — 4.4 sq
-                                   # slots (user #978: 4.2 then 4.3 both
+# the −y arm's screw pad: its outboard edge along the arm (the #947
+# one-bead inset applied — this pad slid inboard for the deep-pad
+# countersink). It lives HERE, above the lock, because since #1063 the
+# pad's own face IS the slot's inboard wall.
+_PAD_OUT_R   = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
+                + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY)   # ≈79.6
+LOCK_PIN_X   = 5 * NOZZLE_D        # 4.0 — pin section ACROSS the beam: the
+                                   # LOCKING axis, walled STRUCT_WALL both
+                                   # sides, unchanged since #939
+# ALONG the beam the pin now runs the whole way from the beam's end wall
+# to the mount's screw BOSS (user #1063 — the 4.0 square pin was fragile
+# to print). The boss IS the slot's inboard wall: the head's old 1.6
+# wall is deleted and the head welds INTO its own pad instead, so the
+# TPU bears straight on the screw boss. Whatever the pin leaves at the
+# beam's end becomes the outboard wall — a RESIDUAL between two datums
+# (the beam end and the pad face), the one length in this block that
+# cannot sit on the bead grid.
+_LOCK_PAD_Y  = FRAME_R_OUT + FRAME_RIB / 2.0 - _PAD_OUT_R   # ≈13.50 — the
+                                   # pad's outboard face, in as-drawn y
+LOCK_PIN_Y   = 8 * NOZZLE_D        # 6.4 — pin section ALONG the beam (was
+                                   # 4.0 — the same square): the largest
+                                   # bead multiple that still leaves ~1.5
+                                   # of end wall (asserted below)
+LOCK_PIN_CLR = 0.20                # per-side, all three hosts (user #978:
+                                   # 4.2 then 4.3 on the 4.0 pin both
                                    # printed too tight to insert)
 LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
                                    # host (a real shared volume —
                                    # coincident-face unions are OCC's bad
                                    # day; one bead, it also surfaces as the
                                    # little flank stub)
-LOCK_SLOT_W  = LOCK_PIN_SQ + 2 * LOCK_PIN_CLR      # 4.4 — slot y width
-                                   # (clearance both sides along the beam)
+LOCK_SLOT_WX = LOCK_PIN_X + 2 * LOCK_PIN_CLR       # 4.4 — slot ACROSS
+LOCK_SLOT_WY = LOCK_PIN_Y + 2 * LOCK_PIN_CLR       # 6.8 — slot ALONG
+LOCK_SWEEP_CLR = 0.2               # corbel roof under the jib head's swept
+                                   # underside (the mount install rotation)
+# SELF-SUPPORTING NOSE (user #1063 — the TPU pin was being BLOCKED on
+# install): both frame storeys hang off the beam's flank on a 45° face,
+# so the printer builds them as a front sweeping +x. Where that front
+# crossed the slot's flat +x wall it had to close the slot's whole width
+# in ONE layer — a LOCK_SLOT_WY bridge, repeated for every layer of that
+# wall's thickness, drooping into the slot the pin has to pass through.
+# Every face involved is EXACTLY 45°, so the overhang gate saw nothing:
+# the bridge is a property of the layer sweep, not of any face normal.
+# A CHEVRON nose turns that one-layer closure into a diagonal one — the
+# roof closes from the two side walls inward, a sliver per layer.
+LOCK_NOSE    = 3 * NOZZLE_D        # 2.4 — chevron depth past the straight
+                                   # slot: plan slope (WY/2)/NOSE = 1.42,
+                                   # so a 0.4 layer closes 0.57 of new
+                                   # span — inside the one-bead rule
 LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
                                                    # (LOCK_SHIFT_X maps it
                                                    # onto the beam's flank)
@@ -1159,16 +1206,57 @@ LOCK_X0      = FRAME_R_OUT                         # as-drawn base plane
 # braces on the frame corbels' +x walls). The pin rides 1.6 off the
 # beam wall again, clearance all around.
 LOCK_SLOT_X0 = LOCK_X0 + STRUCT_WALL
-LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_W          # 4.4 sq slot
-LOCK_BLK_D   = LOCK_SLOT_W + 2 * STRUCT_WALL       # 7.4 — protrusion depth:
-                                   # the slot + 1.6 walls BOTH sides
-                                   # (the −x one is the LOCK)
+LOCK_SLOT_X1 = LOCK_SLOT_X0 + LOCK_SLOT_WX         # the STRAIGHT slot's +x
+                                                   # end — the chevron runs
+                                                   # LOCK_NOSE past it
+LOCK_SLOT_XA = LOCK_SLOT_X1 + LOCK_NOSE            # the nose's apex
+LOCK_BLK_D   = (LOCK_SLOT_XA - LOCK_X0) + STRUCT_WALL   # 10.0 — protrusion
+                                   # depth: 1.6 wall + slot + nose + 1.6
+                                   # wall (the −x one is the LOCK)
 LOCK_X1      = LOCK_X0 + LOCK_BLK_D
-LOCK_SLOT_Y0 = FRAME_RIB / 2.0 + STRUCT_WALL       # 6.8 — slot y band sits
-LOCK_SLOT_Y1 = LOCK_SLOT_Y0 + LOCK_SLOT_W          # 11.0   inside the head
-LOCK_HEAD_Y1 = LOCK_SLOT_Y1 + STRUCT_WALL          # 12.6 — head/corbel +y face
-LOCK_SWEEP_CLR = 0.2               # corbel roof under the jib head's swept
-                                   # underside (the mount install rotation)
+# BOSS SET-BACK (user #1064/#1066): the slot sits this far INSIDE the
+# screw boss's face. #1063 had it FLUSH — the TPU bore straight on the
+# boss — but then the frame corbels had nowhere for a wall of their own:
+# the pin ran past them with its inboard face in open air, and a wall
+# squeezed in would have sat UNDER the pad, which hangs MOUNT_PAD_H
+# deep. So the pad slid inboard instead (MOUNT_PAD_INSET_MY) and the
+# slot kept its place: the frame's STRUCT_WALL now fits outboard of the
+# boss with the sweep clearance to spare, and the mount spans the
+# set-back with a wall of its own. The TPU still bears on mount
+# material — the same boss, one wall out.
+# THE MORTISE FILLS THE BEAM (user #1067): the lock block runs the
+# beam's whole width, flank to inboard edge — it was 0.5 short, which
+# is what the pad's position had left over. So the BEAM is the datum
+# now, not the pad: the block's inboard face is the beam's far edge,
+# the inboard wall is STRUCT_WALL in from it, and the slot hangs off
+# that. The beam-end wall is the residual (2.0 — it was 1.495).
+# The screw boss no longer sets the slot at all; it only has to stay
+# clear of the block, which is asserted below and is what
+# MOUNT_PAD_INSET_MY is tuned for (#1066).
+# INBOARD WALL (user #1064): both frame corbels carry STRUCT_WALL past
+# the slot at the corbel's FULL section — no cap and no ridge, now that
+# the pad is inset clear of them (#1066).
+LOCK_WALL_Y1 = FRAME_RIB / 2.0 + BEAM_SIZE
+LOCK_SLOT_Y1 = LOCK_WALL_Y1 - STRUCT_WALL
+LOCK_SLOT_Y0 = LOCK_SLOT_Y1 - LOCK_SLOT_WY
+LOCK_PAD_Z0  = FRAME_Z1 - MOUNT_PAD_H              # the screw pad's
+                                   # underside, MOUNT-local: how far down
+                                   # the boss hangs. Below it the head has
+                                   # no pad to weld to, so it is TRIMMED
+                                   # back to the frame's own width there
+                                   # (#1068) — in the mount's flipped print
+                                   # that trim face is a print-TOP face
+LOCK_MOUNT_Y1 = _LOCK_PAD_Y + LOCK_WELD            # the mount head runs
+                                   # a FULL WALL past the slot (#1065 — a
+                                   # LOCK_WELD bead was enough where the pad
+                                   # closes the slot from z = FRAME_Z1 −
+                                   # MOUNT_PAD_H up, but BELOW the pad's
+                                   # underside that bead was the only thing
+                                   # there: 0.8, user-measured). At
+                                   # STRUCT_WALL it is a wall under the pad
+                                   # and a STRUCT_WALL weld into it above —
+                                   # #982's hairline fill stays retired
+assert LOCK_SLOT_Y0 - FRAME_RIB / 2.0 >= 2 * NOZZLE_D - 1e-9,     "the lock's beam-end wall has fallen under 1.6 — drop LOCK_PIN_Y a bead"
 # COUCH HEAD DROP (user #983 — the spool twisted off its mount, and the
 # mount's head gripped the pin over only a few mm): the couch build's
 # frame_top carries COUCH_TOP_PAD of extra height, so the interface
@@ -1195,7 +1283,10 @@ LOCK_HEAD_ZF = LOCK_TOPB_Z1 + LOCK_SWEEP_CLR      # the head's underside at
                                    # the flank (MOUNT_MATE_Z on the desk)
 _LOCK_TOPB_FOOT = FRAME_Z0 - COUCH_TOP_PAD         # the top corbel's foot:
                                    # frame_top's underside, mount-local
-LOCK_BOTB_H  = 13 * NOZZLE_D       # 10.4 — beam corbel depth at the face
+LOCK_BOTB_H  = 15 * NOZZLE_D       # 12.0 — beam corbel depth at the face
+                                   # (13 beads until #1063: the nose pushed
+                                   # the 45 another LOCK_NOSE out, and the
+                                   # far face still needs its 2 beads)
 # the MOUNT storey is a TRAPEZOID (user #942: cover more pin, better
 # grip): flat top at the frame face, underside FOLLOWING the top
 # corbel's 45 roof at LOCK_SWEEP_CLR — its slot walls grip the pin
@@ -1214,9 +1305,9 @@ LOCK_JOINT_Z0 = -(LOCK_BOTB_H - STRUCT_WALL)       # −8.8 — the BOTTOM of
 LOCK_PIN_GRIP = 8 * NOZZLE_D       # 6.4 — pin stub proud below the joint
                                    # bottom: the pliers grab (user #942).
                                    # A CONSTANT bead count past the joint
-                                   # (user #986), the nearest bead to a 36
-                                   # couch pin: (36 − (FRAME_TOP_Z1 −
-                                   # LOCK_JOINT_Z0)) / NOZZLE_D = 8.0
+                                   # (user #986; chosen as the nearest
+                                   # bead to a 36 couch pin, and it stays
+                                   # put as the joint deepens)
 LOCK_PIN_Z0  = LOCK_JOINT_Z0 - LOCK_PIN_GRIP       # −15.2 — pin bottom
 LOCK_PIN_L   = FRAME_TOP_Z1 - LOCK_PIN_Z0          # 36.0 couch / 25.6 desk — top
                                                    # flush with frame_top's
@@ -1224,10 +1315,10 @@ LOCK_PIN_L   = FRAME_TOP_Z1 - LOCK_PIN_Z0          # 36.0 couch / 25.6 desk — 
                                                    # (follows COUCH_TOP_PAD:
                                                    # the pin must still reach
                                                    # the mount head, #955)
-assert (LOCK_TOPB_Z1 - _LOCK_TOPB_FOOT - (LOCK_SLOT_X1 - LOCK_X0)
+assert (LOCK_TOPB_Z1 - _LOCK_TOPB_FOOT - (LOCK_SLOT_XA - LOCK_X0)
         >= 2 * NOZZLE_D - 1e-9), \
     "top corbel's 45 roof leaves under 1.6 of pin engagement at the slot"
-assert LOCK_BOTB_H - (LOCK_SLOT_X1 - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
+assert LOCK_BOTB_H - (LOCK_SLOT_XA - LOCK_X0) >= 2 * NOZZLE_D - 1e-9, \
     "beam corbel's 45 underside leaves under 1.6 of slot wall depth"
 assert LOCK_TOPB_Z1 - _LOCK_TOPB_FOOT - LOCK_BLK_D >= 0.2 - 1e-9, \
     "top corbel's 45 runs out before its far face"
@@ -1242,11 +1333,6 @@ LOCK_ROTS = (0.0, 180.0)
 # flank; as-drawn flank edge (FRAME_RIB/2) → the beam's outer end
 LOCK_SHIFT_X = FRAME_RIB / 2.0 - LOCK_X0
 LOCK_SHIFT_Y = -FRAME_R_OUT - FRAME_RIB / 2.0
-# the −y arm's screw pad: its outboard edge along the arm (the #947
-# one-bead inset applied — this pad slid inboard for the deep-pad
-# countersink)
-_PAD_OUT_R   = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
-                + MOUNT_PAD_W / 2.0 - MOUNT_PAD_INSET_MY)   # ≈75.9
 # (the top corbel's PAD NOTCH is RETIRED — #983: since the #971 inset
 # the pad ends ≥ LOCK_SWEEP_CLR short of the corbel (asserted below), so
 # the notch had been cutting nothing, and the couch head drop would
@@ -1256,10 +1342,10 @@ _PAD_OUT_R   = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
 # overhangs the lock stack — the mount's old wedge relief and the
 # corbel's pad notch are both retired on the strength of this. The pad
 # only moves AWAY from the stack during the install sweep.
-assert (-(LOCK_SHIFT_Y + LOCK_HEAD_Y1) - _PAD_OUT_R
+assert (-(LOCK_SHIFT_Y + LOCK_WALL_Y1) - _PAD_OUT_R
         >= LOCK_SWEEP_CLR - 1e-9), \
-    "the −y arm's screw pad reaches into the lock corbel's sweep clearance"
-assert LOCK_HEAD_Y1 - FRAME_RIB / 2.0 <= BEAM_SIZE + 1e-9, \
+    "the −y arm's screw pad overhangs the lock's inboard wall"
+assert LOCK_WALL_Y1 - FRAME_RIB / 2.0 <= BEAM_SIZE + 1e-9, \
     "lock stack overruns the beam's footprint along the arm"
 # the frame arc joint at this beam: its tenon spans the ENTRY half of
 # the crossing and its cavity stop ends TOP_JOINT_SEAT_CLR past the
