@@ -15,7 +15,7 @@ import cadquery as cq
 from cadkit.step_export import export_print
 from cadkit.orientation import require_declared, unconfirmed
 from cadkit.cq_colors import color
-from cadkit.freecad import show
+from cadkit.web import show
 
 from .frame import (frame_top, frame_bottom, horn_cap, lock_pin_tpu,
                     lock_pins_in_place)
