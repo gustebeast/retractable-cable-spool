@@ -12,7 +12,8 @@ import pathlib
 
 import cadquery as cq
 
-from cadkit.step_export import export_step, print_pose
+from cadkit.step_export import export_print
+from cadkit.orientation import require_declared, unconfirmed
 from cadkit.cq_colors import color
 from cadkit.freecad import show
 
@@ -28,7 +29,7 @@ from .levers import (
     RATCHET_OPEN_DEG, KIN,
 )
 from .params import (RATCHET_PIVOT_Z, LEVER_PIVOT_X, CLIP_SIDE,
-                     COUCH_TOP_PAD)
+                     COUCH_TOP_PAD, PRINT_ORIENTATION)
 from .dummies import bearing_608, bearing_608_bottom, spring
 
 # ── Viewer pose (revertable) — the lever at REST (canonical pose). Set
@@ -85,35 +86,16 @@ COLOR = {
 
 # ── PRINT POSE for the per-part STEP exports (user #935, cadkit's
 # print_pose since #937): each file lands in Bambu already
-# print-oriented — rotated onto its documented bed face, dropped to
-# z=0, centred on xy. EXPORT-ONLY: the assembly / viewer keeps every
-# part as-modeled. This table is the project's print-orientation
-# RECORD — when a part's print direction changes, its entry changes
-# in the same commit (cadkit AGENTS.md convention).
-PRINT_ROT = {
-    "frame_top":     "flip",             # prints +z→−z
-    "mount_ring":    "flip",             # octagon rule: frame_top's direction
-    "horn_cap":      "flip",             # prints +z→−z (user #905)
-    "axle_top":      "flip",             # bed = the shaft top (flipped print)
-    "lid":           "flip",             # prints +z→−z (through slots)
-    "ratchet_lever": ((1, 0, 0), -90),   # bed = its +y OUTER face (#886)
-    "lever_pin":     ((0, 1, 0), 90),    # STANDS on its head (#995)
-    "bearing_nub":   None,               # STANDS on its shaft as modelled
-                                         # (#1020: every step widens going up)
-    "ratchet_clip_tpu": ((1, 0, 0), 90), # flat, on a face (#1004)
-    "lock_pin_tpu":  ((0, 1, 0), -90),   # LIES DOWN along x, flat back face
-                                         # (the one the lock wall bears on)
-                                         # on the bed and the chevron apex
-                                         # UP — 37.6 x 6.4 x 6.4 instead of
-                                         # standing 37.6 tall on a 6.4 x 4
-                                         # footprint (#1070). Apex DOWN
-                                         # would be two overhangs.
-    # these two model as printed — drop-and-centre only. They are spelled
-    # out because a MISSING key used to mean the same thing as an explicit
-    # None, which is how the lock pin shipped standing on its end (#1070).
-    "frame_bottom":  None,
-    "axle_separator": None,
-}
+# print-oriented — rotated onto its declared bed face, dropped to z=0,
+# centred on xy. EXPORT-ONLY: the assembly / viewer keeps every part
+# as-modeled.
+#
+# The bed faces themselves live in params.PRINT_ORIENTATION, because the
+# JOINT SPECS derive from the same declarations (cadkit #1070) — a part's
+# build direction is one fact and it is stated once. `export_print`
+# refuses a part whose orientation is not a PrintOrientation, so there is
+# no longer a code path where a missing bed face looks like a deliberate
+# "models as printed".
 
 # One STEP per PRINTED part (dummies are assembly-only, cadkit rule).
 PARTS = [
@@ -134,7 +116,7 @@ PARTS = [
 
 # Test coupons: exported to the project root and shown in the assembly
 # off to the side (+y), so they rebuild with every run.
-COUPONS = GAUGE_PRINTS        # (fname, solid, print rotation) — the pin /
+COUPONS = GAUGE_PRINTS        # (fname, solid, PrintOrientation) — the pin /
                               # lever / frame gauge: does the TPU clear?
 COUPON_SHIFT = (0.0, 140.0, 0.0)
 
@@ -164,24 +146,31 @@ def _build_number_model(n):
 
 # EVERY printed part declares its bed face — no silent default. An
 # omission and a deliberate "models as printed" are different claims, and
-# PRINT_ROT.get() could not tell them apart (#1070).
-assert {n for n, _p, _f in PARTS} == set(PRINT_ROT), (
-    "PRINT_ROT must name every part in PARTS and nothing else; "
-    "missing " + str({n for n, _p, _f in PARTS} - set(PRINT_ROT)) +
-    ", stale " + str(set(PRINT_ROT) - {n for n, _p, _f in PARTS}))
+# PRINT_ROT.get() could not tell them apart (#1070). This also catches a
+# RENAMED part, whose old entry would otherwise sit there matching nobody.
+require_declared({n for n, _p, _f in PARTS}, PRINT_ORIENTATION)
 
 
 def main():
     for _name, part, fname in PARTS:
-        export_step(print_pose(part, PRINT_ROT[_name]), str(OUT / fname))
+        export_print(part, PRINT_ORIENTATION[_name], str(OUT / fname))
     # TEST COUPONS — printed in the real part's orientation, exported
     # into src/test/ beside their modules (user #1033; cadkit's own rule
     # says the project root — the test_ prefix still marks them)
     (OUT / "test").mkdir(exist_ok=True)
-    for fname, part, rot in COUPONS:
-        export_step(print_pose(part, rot), str(OUT / "test" / fname))
+    for fname, part, orient in COUPONS:
+        export_print(part, orient, str(OUT / "test" / fname))
 
     build_n = _bump_build_counter()
+
+    # 🚩 an UNCONFIRMED bed face is a guess nobody has checked. Say so on
+    # every build: the bed face decides which faces are overhangs, which
+    # slots bridge and which way every joint on the part prints, so work
+    # done on top of a guess can be silently wrong (cadkit AGENTS.md).
+    _flagged = unconfirmed(PRINT_ORIENTATION)
+    if _flagged:
+        print("UNCONFIRMED print orientation (confirm with the user BEFORE "
+              "working on these parts): " + ", ".join(_flagged), flush=True)
 
     T = _twist                      # uninstall pose (viewer-only, see flag)
     asm = (cq.Assembly(name="retractable_cable_spool")

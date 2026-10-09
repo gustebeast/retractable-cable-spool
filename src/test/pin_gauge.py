@@ -43,6 +43,7 @@ from ..params import (
     CLIP_FACE_Y, CLIP_GAP, CLIP_HUB_R, CLIP_SIDE, PIN_COL_Y0,
     LEVER_BOSS_OD, RATCHET_LEV_Y0, RATCHET_LEV_Y1, LEVER_PIN_BODY_L,
     LEVER_PIN_D, PIN_SHANK_UNDER,
+    PRINT_ORIENTATION,
 )
 
 GAUGE_LIP_T = NOZZLE_D               # 0.8 — the lip is one bead thick: it
@@ -124,10 +125,17 @@ def _pin_in_place():
 # THE PRINTS — one STEP each, so any of the three can be reprinted on its
 # own, in the orientation its real counterpart prints in: the frame's crop
 # on its new base, the lever's boss on its face, the pin on its head.
+# A COUPON IS A PRINTED PART, so it declares its bed face like one — and
+# it must be the SAME face as the part it stands in for, or the coupon
+# tests a print the real part never makes (cadkit #1070). So each coupon
+# reads the REAL part's declaration rather than restating the rotation —
+# they cannot drift apart, which is what used to happen.
 GAUGE_PRINTS = (
-    ("test_gauge_frame.step", _frame_gauge(), None),
-    ("test_gauge_lever.step", _lever_gauge(), ((1, 0, 0), -90)),
-    ("test_gauge_pin.step", _pin_gauge(), ((0, 1, 0), 90)),
+    ("test_gauge_frame.step", _frame_gauge(),
+     PRINT_ORIENTATION["frame_bottom"]),
+    ("test_gauge_lever.step", _lever_gauge(),
+     PRINT_ORIENTATION["ratchet_lever"]),
+    ("test_gauge_pin.step", _pin_gauge(), PRINT_ORIENTATION["lever_pin"]),
 )
 
 # THE VIEWER — the same three where they actually meet, each its own

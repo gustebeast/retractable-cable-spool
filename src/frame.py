@@ -34,7 +34,7 @@ import math
 
 import cadquery as cq
 
-from cadkit.joinery import PrintSpec, joint
+from cadkit.joinery import joint
 from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
@@ -67,7 +67,8 @@ from .params import (
     BRG_BORE, BOT_BRG_Z0, BOT_BRG_Z1, BOT_LIP_ID, BOT_LIP_H,
     BOT_LIP_FUNNEL, BOT_PLUG_Z0,
     N_HUB_WEB, HUB_WEB_W, HUB_WEB_Z1,
-    JOINT_SPEC, JOINT_CLR, JOINT_BACK_CLR,
+    FRAME_TENON, FRAME_MORTISE, HORN_TENON, HORN_MORTISE,
+    JOINT_CLR, JOINT_BACK_CLR,
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z,
@@ -101,8 +102,10 @@ from .params import (
 # CCW on frame_bottom (pawl holding the separator) — that relative
 # twist crosses THIS joint, so frame_top must seat rotating CW (viewed
 # +z) for the parked spring and pull-out to both PRESS the stops. Uninstall = frame_top CCW, a torque no sustained load makes. ────────
-_DOWN = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="down")
-FRAME_J = joint(FRAMEJ_W, None, tenon=JOINT_SPEC, mortise=_DOWN,
+# Both halves' facings are DERIVED from their declared bed faces plus
+# FRAME_SITE (params) — frame_bottom builds -z->+z into the joint, frame_top
+# prints flipped and so builds 'down' through it. Nobody writes the word.
+FRAME_J = joint(FRAMEJ_W, None, tenon=FRAME_TENON, mortise=FRAME_MORTISE,
                 install="-x")
 FRAME_X = FRAME_J.crossing(FRAMEJ_R, BEAM_SIZE, FRAMEJ_TEN_ARC,
                            seat=TOP_JOINT_SEAT_CLR, over=TOP_ENTRY_OVER,
@@ -544,8 +547,11 @@ def _cable_horn():
         _box(xb0, HORN_X1, y_lo - HORN_STOP_T, y_lo,
              zc - HORN_STOP_DROP, HORN_Z1 + HORN_BLOCK_H), clean=False)
     # MUSHROOM rail (cadkit): local +X (the slide) → global −y — the
-    # CAP travels +y over the fixed tenons; local Y → global +x
-    hj = joint(HORNJ_W, HORN_WALL_T, tenon=JOINT_SPEC, mortise=_DOWN,
+    # CAP travels +y over the fixed tenons; local Y → global +x. That
+    # mapping is now HORN_SITE (params), which derives both facings from
+    # the two parts' declared bed faces instead of leaving it to this
+    # comment to be right.
+    hj = joint(HORNJ_W, HORN_WALL_T, tenon=HORN_TENON, mortise=HORN_MORTISE,
                install="+x", back_clearance=HORNJ_Z_CLR)
     # (z-sandwich tightened to the lid's print-proven 0.20 — user #912:
     # short joinery that must stay put)

@@ -1,6 +1,9 @@
 """PRINT-POSE OVERHANG GATE — every printed part, in the orientation it
-actually prints (build.PRINT_ROT), scanned for downward-facing material
-the printer would have to bridge or support.
+actually prints (params.PRINT_ORIENTATION, the SAME declaration export and
+the joinery read), scanned for downward-facing material the printer would
+have to bridge or support. It has to be the same table: the bed face is
+what decides which faces are overhangs at all, so a gate reading its own
+copy would certify a print nobody makes.
 
     py -3.12 -m tools.check_overhangs
 
@@ -27,7 +30,8 @@ import math
 
 from cadkit.step_export import print_pose
 
-from src.build import PARTS, PRINT_ROT, COUPONS
+from src.build import PARTS, COUPONS
+from src.params import PRINT_ORIENTATION
 from src.params import NOZZLE_D
 
 ANGLE_LIMIT = 45.5          # degrees off horizontal; 45 + slicer slack
@@ -68,10 +72,10 @@ def main():
     print(f"overhang limit = {ANGLE_LIMIT:.0f} deg off horizontal, "
           f"bridges over {SPAN_LIMIT} mm ({NOZZLE_D} nozzle = one bead)")
     bad = 0
-    scanned = [(n, p, PRINT_ROT.get(n)) for n, p, _f in PARTS]
+    scanned = [(n, p, PRINT_ORIENTATION[n]) for n, p, _f in PARTS]
     # COUPONS get printed too, so they get gated too (#1034: the pin
     # gauge's lip shipped a 2.45 overhang because they were skipped)
-    scanned += [(f.replace(".step", ""), p, rot) for f, p, rot in COUPONS]
+    scanned += [(f.replace(".step", ""), p, o) for f, p, o in COUPONS]
     for name, part, rot in scanned:
         faces = scan(part, rot)
         if not faces:

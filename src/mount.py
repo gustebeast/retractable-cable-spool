@@ -41,7 +41,7 @@ import math
 
 import cadquery as cq
 
-from cadkit.joinery import PrintSpec, joint
+from cadkit.joinery import joint
 
 from .helpers import chevron_plan
 
@@ -64,9 +64,12 @@ from .params import (
     LOCK_WALL_Y1, LOCK_PAD_Z0, LOCK_SWEEP_CLR,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_SHIFT_X, LOCK_SHIFT_Y,
+    MOUNT_TENON, MOUNT_MORTISE,
 )
 
-_SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
+# Both halves derive from MOUNT_SITE + their declared bed faces (params).
+# Both come out 'up' though both parts print FLIPPED, because the mount
+# HANGS: the joint's local +Z is global -z. That used to be a comment.
 # cadkit's standard for two same-direction hosts: the OCTAGON — its
 # cavity CLOSES on the one-bead roof inside the arm (user's call: the
 # old THROUGH mushroom left the arm's underside open and weak). The GF
@@ -77,7 +80,7 @@ _SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
 # override keeps the silhouette: the 45° shoulder gives 0.2 per side
 # (0.8 — the one-nozzle floor) and the waist vertical takes it (1.8);
 # height and swallow unchanged, so the arm-floor assert stands as-is.
-MOUNT_J = joint(MOUNT_TEN_W, None, tenon=_SPEC, mortise=_SPEC,
+MOUNT_J = joint(MOUNT_TEN_W, None, tenon=MOUNT_TENON, mortise=MOUNT_MORTISE,
                 install="-x", stem=MOUNT_SPINE_W)
 assert (MOUNT_MATE_Z - MOUNT_J.cavity_depth
         >= MOUNT_FLOOR_MIN - 1e-9), \

@@ -22,17 +22,97 @@ small fit clearances stay absolute.
 import math
 
 from cadkit.joinery import PrintSpec, joint_clearances, joint_box_min
+from cadkit.orientation import PrintOrientation as PO, JointSite
 from cadkit.contact import contact_rib_size
 from cadkit.printing import min_wall, snap
 
 NOZZLE_D      = 0.8            # THE print-width unit (0.8 nozzle, v2's call)
 STRUCT_WALL = min_wall(NOZZLE_D, beads=2)   # 1.6 — the two-bead quality tier
 FIT_CLR     = 0.15           # per-side slip-fit clearance (v2's proven value)
-# THE joint print policy — one spec, one clearance pair, defined at the
-# top so every joint block below can derive from it (moved up at #932;
-# the T-joint history comment lives at the old site)
-JOINT_SPEC = PrintSpec(nozzle=NOZZLE_D, material="PETG-GF", facing="up")
-JOINT_CLR, JOINT_BACK_CLR = joint_clearances(JOINT_SPEC, JOINT_SPEC)  # 0.15/0.30
+
+# ── PRINT ORIENTATION — every printed part's bed face, declared ONCE ─────────
+# cadkit's contract (#1070): a part's build direction is one fact, and it
+# used to be stated twice — here as a rotation for export, and again at
+# every joint as a `facing` word somebody mapped onto the global axes in
+# their head. Both now read THIS table. It lives in params, not build,
+# because the joint specs below derive from it.
+#
+# `PARTS` in build.py is asserted against it (require_declared), so a part
+# with no entry cannot be exported and a renamed part cannot leave a stale
+# one behind. That is the whole point: export used to read the table with
+# .get(), so "nobody said" and "models as printed" were the same None, and
+# the TPU lock pin shipped as a 5.9:1 tower.
+PRINT_ORIENTATION = {
+    "frame_top":     PO("flip", "prints +z->-z"),
+    "frame_bottom":  PO(None, "models as printed"),
+    "mount_ring":    PO("flip", "octagon rule: frame_top's direction"),
+    "horn_cap":      PO("flip", "prints +z->-z (user #905)"),
+    "axle_top":      PO("flip", "bed = the shaft top (flipped print)"),
+    "axle_separator": PO(None, "models as printed"),
+    "bearing_nub":   PO(None, "STANDS on its shaft as modelled — every step "
+                              "widens going up (#1020)"),
+    "lid":           PO("flip", "prints +z->-z (through slots)"),
+    "ratchet_lever": PO(((1, 0, 0), -90), "bed = its +y OUTER face (#886)"),
+    "lever_pin":     PO(((0, 1, 0), 90), "STANDS on its head (#995)"),
+    "ratchet_clip_tpu": PO(((1, 0, 0), 90), "flat, on a face (#1004)"),
+    "lock_pin_tpu":  PO(((0, 1, 0), -90),
+                        "LIES DOWN along x, flat back face (the one the lock "
+                        "wall bears on) on the bed and the chevron apex UP — "
+                        "37.6 x 6.4 x 6.4 instead of standing 37.6 tall on a "
+                        "6.4 x 4 footprint (#1070). Apex DOWN would be two "
+                        "overhangs."),
+}
+
+# ── JOINT SITES — WHERE each joint sits, in the frame the parts are MODELLED
+# in: the direction the MORTISE host travels to go on, and the mating plane's
+# normal (the joint's local +Z). Both are needed — for these x-family sites
+# 'up' and 'side' are both perpendicular to the install axis, so the install
+# direction alone would not pick one. `PrintSpec.at` turns site + orientation
+# into the `facing`, so the local->global mapping is arithmetic instead of the
+# comment it used to be (e.g. frame.py's "local +X (the slide) -> global -y").
+#
+# All three installs are ROTATIONS about z, so install_dir is the tangent at
+# the joint; for these sites the facing falls out of the normal alone, but the
+# tangent is recorded because it is what makes the site a site.
+FRAME_SITE = JointSite(install_dir=(0, -1, 0), normal=(0, 0, 1))
+# frame_top seats rotating CW viewed +z (the chirality audit in frame.py):
+# at the +x arm that tangent is -y. Mating plane normal is global +z.
+HORN_SITE  = JointSite(install_dir=(0, 1, 0), normal=(0, 0, 1))
+# the horn CAP travels +y over the fixed tenons (same axis the library's
+# install='+x' names in the joint's own frame, where local +X is global -y).
+MOUNT_SITE = JointSite(install_dir=(0, 1, 0), normal=(0, 0, -1))
+# the mount HANGS — _hang z-mirrors the arc solid — so this joint's local +Z
+# points along global -z. That is why both of its halves are 'up' even though
+# both parts print flipped, and it is exactly the mapping that used to live
+# only in a comment.
+
+def _gf_spec(site, part):
+    """This half's spec: GF through the 0.8 nozzle, facing DERIVED from the
+    part's declared bed face."""
+    return PrintSpec.at(site, PRINT_ORIENTATION[part],
+                        nozzle=NOZZLE_D, material="PETG-GF")
+
+FRAME_TENON,   FRAME_MORTISE = (_gf_spec(FRAME_SITE, "frame_bottom"),
+                                _gf_spec(FRAME_SITE, "frame_top"))
+HORN_TENON,    HORN_MORTISE  = (_gf_spec(HORN_SITE, "frame_bottom"),
+                                _gf_spec(HORN_SITE, "horn_cap"))
+MOUNT_TENON,   MOUNT_MORTISE = (_gf_spec(MOUNT_SITE, "mount_ring"),
+                                _gf_spec(MOUNT_SITE, "frame_top"))
+
+# MIGRATION CHECK — these six facings were hand-written and print-proven
+# before the derivation existed, so pinning them here is what says the new
+# arithmetic agrees with parts that came off the printer and fit. A failure
+# means a site's normal or a part's declared bed face is wrong, NOT that the
+# expectation needs updating.
+assert (FRAME_TENON.facing, FRAME_MORTISE.facing) == ("up", "down")
+assert (HORN_TENON.facing, HORN_MORTISE.facing) == ("up", "down")
+assert (MOUNT_TENON.facing, MOUNT_MORTISE.facing) == ("up", "up")
+
+# THE joint print policy — one clearance pair for the whole project (moved up
+# at #932; the T-joint history comment lives at the old site). Clearance is a
+# function of material and nozzle, not facing, so any derived pair gives it.
+JOINT_CLR, JOINT_BACK_CLR = joint_clearances(FRAME_TENON,
+                                             FRAME_MORTISE)  # 0.15/0.30
 
 # ── 608 bearing (purchased part — dummy in the assembly, no STEP) ────────────
 BEARING_OD = 22.0            # outer race Ø
