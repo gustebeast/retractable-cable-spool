@@ -101,8 +101,18 @@ PRINT_ROT = {
     "bearing_nub":   None,               # STANDS on its shaft as modelled
                                          # (#1020: every step widens going up)
     "ratchet_clip_tpu": ((1, 0, 0), 90), # flat, on a face (#1004)
-    # frame_bottom / axle_separator / screw_spacer
-    # model as printed (drop-and-centre only)
+    "lock_pin_tpu":  ((0, 1, 0), -90),   # LIES DOWN along x, flat back face
+                                         # (the one the lock wall bears on)
+                                         # on the bed and the chevron apex
+                                         # UP — 37.6 x 6.4 x 6.4 instead of
+                                         # standing 37.6 tall on a 6.4 x 4
+                                         # footprint (#1070). Apex DOWN
+                                         # would be two overhangs.
+    # these two model as printed — drop-and-centre only. They are spelled
+    # out because a MISSING key used to mean the same thing as an explicit
+    # None, which is how the lock pin shipped standing on its end (#1070).
+    "frame_bottom":  None,
+    "axle_separator": None,
 }
 
 # One STEP per PRINTED part (dummies are assembly-only, cadkit rule).
@@ -152,9 +162,18 @@ def _build_number_model(n):
         return None
 
 
+# EVERY printed part declares its bed face — no silent default. An
+# omission and a deliberate "models as printed" are different claims, and
+# PRINT_ROT.get() could not tell them apart (#1070).
+assert {n for n, _p, _f in PARTS} == set(PRINT_ROT), (
+    "PRINT_ROT must name every part in PARTS and nothing else; "
+    "missing " + str({n for n, _p, _f in PARTS} - set(PRINT_ROT)) +
+    ", stale " + str(set(PRINT_ROT) - {n for n, _p, _f in PARTS}))
+
+
 def main():
     for _name, part, fname in PARTS:
-        export_step(print_pose(part, PRINT_ROT.get(_name)), str(OUT / fname))
+        export_step(print_pose(part, PRINT_ROT[_name]), str(OUT / fname))
     # TEST COUPONS — printed in the real part's orientation, exported
     # into src/test/ beside their modules (user #1033; cadkit's own rule
     # says the project root — the test_ prefix still marks them)

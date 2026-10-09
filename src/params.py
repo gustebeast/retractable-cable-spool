@@ -60,11 +60,26 @@ SPRING_BORE_BOT_D = 8.7      # bottom-flange hole (user-measured) — only the
 SPRING_STRIP_T   = 0.2       # strip steel thickness (v2-measured)
 SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 
-# ── Cable (hardware) ─────────────────────────────────────────────────────────
-CABLE_D        = 3.3         # working-cable Ø (user's measurement,
-                             # 3.85 → 3.3 at #952; was 3.0 before #883)
-CABLE_CAPACITY = 7 * 304.8   # 7 ft / 2133.6 of wrapped cable (user's call
-                             # at #952; was 1 m since #884, 6 ft before)
+# ── INSTALL SITE ─────────────────────────────────────────────────────────────
+# ONE switch picks the whole build. True = under the couch, False = under
+# the desk. It lives up here because the CABLE is per-site too: the two
+# installs run different cable and different lengths, so flipping the flag
+# has to carry those with it or switching back silently keeps the wrong
+# spool (user #1073 — the desk reprint). Everything it gates is tagged
+# `COUCH_VERSION` and derived, never hand-edited per site.
+COUCH_VERSION = False
+
+# ── Cable (hardware, per install site) ───────────────────────────────────────
+CABLE_D        = 3.3 if COUCH_VERSION else 5 * NOZZLE_D
+                             # couch: the user's measured 3.3 (3.85 → 3.3 at
+                             # #952; 3.0 before #883). DESK: a 3.9 cable
+                             # given room and snapped onto the bead grid at
+                             # 4.0 (user #1073)
+CABLE_CAPACITY = (7 if COUCH_VERSION else 4) * 304.8
+                             # couch 7 ft / 2133.6 (user's call at #952; was
+                             # 1 m since #884, 6 ft before). DESK 4 ft —
+                             # a shorter run, and fatter cable, so the wrap
+                             # count falls at both ends
 
 assert CABLE_D - 3 * NOZZLE_D >= NOZZLE_D - 1e-9, \
     "floor viewing slits (FLOOR_SLIT_W) are wide enough to swallow the cable"
@@ -96,9 +111,16 @@ FRAME_Z1 = FRAME_Z0 + FRAME_RIB
 # slot follow the new top face; every other printed part is untouched
 # (the mount ring simply seats COUCH_TOP_PAD higher in the assembly).
 # 13 beads = 10.4 (the user's 10 snapped up onto the grid; the lever
-# needs ≥ 7.0 to clear at 20°). False = the desk build, pad 0.
-COUCH_VERSION = True
-COUCH_TOP_PAD = 13 * NOZZLE_D if COUCH_VERSION else 0.0   # 10.4 / 0
+# needs ≥ 7.0 to clear at 20°).
+# THE DESK PAD IS NOT ZERO (user #1073): the TPU lock's top corbel is
+# cantilevered off the beam flank on a 45, so it needs as much z as it
+# reaches in x — LOCK_BLK_D plus a hair. Off the frame's own 10.4 face
+# that leaves 7.8 of corbel, and the lock reaches 10.0, so the desk build
+# carries 3 beads of pad and the lock asserts in the LOCK block are what
+# hold it to that. The desk still loses 8.0 of the couch's 10.4. (It was
+# 0 until the #1063 chevron nose deepened the block; the desk had 1.8 of
+# margin before that and nobody had rebuilt it since.)
+COUCH_TOP_PAD = (13 if COUCH_VERSION else 3) * NOZZLE_D   # 10.4 / 2.4
 FRAME_TOP_Z1  = FRAME_Z1 + COUCH_TOP_PAD   # frame_top's ACTUAL top face
                                            # (the wood / mount plane)
 

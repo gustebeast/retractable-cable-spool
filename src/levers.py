@@ -737,15 +737,23 @@ def clip_post(pivot_z, y_sign):
     # has to respect that 45° itself: same shape, revolved — flat at the
     # bed inside WALL_OR, rising at 45° outside it.
     _F = 200.0
-    bar = bar.cut(
-        cq.Workplane("XZ")
-        .polyline([(0.0, FLOOR_Z0), (WALL_OR, FLOOR_Z0),
-                   (_F, FLOOR_Z0 + (_F - WALL_OR)), (_F, FLOOR_Z0 - _F),
-                   (0.0, FLOOR_Z0 - _F)])
-        .close().revolve(360.0, (0, 0), (0, 1)))
+    under_bed = (cq.Workplane("XZ")
+                 .polyline([(0.0, FLOOR_Z0), (WALL_OR, FLOOR_Z0),
+                            (_F, FLOOR_Z0 + (_F - WALL_OR)),
+                            (_F, FLOOR_Z0 - _F), (0.0, FLOOR_Z0 - _F)])
+                 .close().revolve(360.0, (0, 0), (0, 1)))
+    bar = bar.cut(under_bed)
     bar = bar.cut(xz_prism([(cx + POST_R, cz - B), (cx + B, cz - B),
                             (cx + B, cz + B), (cx + POST_R, cz + B)]))
-    return nose.union(block).union(to_band(bar))
+    # the WHOLE post respects the bed, not just the bar (#1073). The
+    # DESK build runs a 4 ft cable where the couch runs 7, so its drum
+    # floor is 5.8 SHALLOWER while the lever pivot does not move — which
+    # lifted the bed into the nose's bottom-outboard corner, 1.58 mm3 of
+    # it. The leaf bears on the nose's 9:00 side, so this never touches
+    # the contact; on the couch the post is already clear and it removes
+    # nothing. A_POST_BED below still checks every vertex — the cut is
+    # what makes it pass, so the assert now guards the CUT's coverage.
+    return nose.union(block).union(to_band(bar)).cut(under_bed)
 
 
 # A_POST_BED — on the BUILT solid, because the analytic version got this
