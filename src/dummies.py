@@ -1,5 +1,5 @@
 """DUMMY purchased parts — assembly-only fit-check models (cadkit rule:
-no standalone STEP for springs/bearings; they appear only in assembly.step).
+no standalone STEP for springs/bearings; they appear only in the viewer assembly).
 
 Both are modelled IN PLACE (world/assembly coordinates from params).
 """

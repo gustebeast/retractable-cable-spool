@@ -45,7 +45,7 @@ py -3.12 tools/check_geometry.py --update-baseline   # bless current as new base
 | `src/guide_axle.py`    | Standalone guide-bearing axle part                 |
 | `src/levers.py`        | Ratchet + brake levers + pawl/pad helpers (mutates `spool.main_body` to apply ratchet teeth + drum cable hole, since these depend on lever geometry) |
 | `src/viz.py`           | Assembly-only viz parts: dummy 608 bearings + dummy torsion springs |
-| `src/build.py`         | Orchestrator: imports parts in dependency order, heals, exports STEPs, builds assembly STEP. CLI: `--part NAME` / `--list` |
+| `src/build.py`         | Orchestrator: imports parts in dependency order, heals, exports STEPs, hands the assembly to the web viewer. CLI: `--part NAME` / `--list` |
 
 ## Outputs
 
@@ -59,7 +59,8 @@ py -3.12 tools/check_geometry.py --update-baseline   # bless current as new base
 - `brake_housing_pin.step`, `brake_housing_rest_pin.step` — separately-printed stop pins (glue-install)
 - `guide_axle.step` — short axle for the side-rolling guide bearing
 - `ratchet_spring.step`, `brake_spring.step` — visualization-only dummies of the purchased torsion springs
-- `assembly.step` — every printed part + the 3 dummy bearings + 2 dummy torsion springs in their as-built positions, for dimensional verification
+
+The web viewer shows the assembly straight from the build: every printed part + the 3 dummy bearings + 2 dummy torsion springs in their as-built positions.
 
 ## Purchased parts
 

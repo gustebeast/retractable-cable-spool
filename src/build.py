@@ -58,7 +58,6 @@ def _ratchet_pose(part):
                        (LEVER_PIVOT_X, 1, RATCHET_PIVOT_Z), -RATCHET_POSE_DEG)
 
 OUT = pathlib.Path(__file__).resolve().parent
-VIEWER = OUT.parent / "assembly.step"
 
 COLOR = {
     "frame_top":   "#4F6D8F",  # slate — top plus (v2's frame_top colour)
@@ -80,7 +79,6 @@ COLOR = {
                                # they were black TPU torsion axles)
     "bearing_608": "#9FA8B2",  # steel — dummy 608 (assembly-only)
     "spring":      "#6E7B8B",  # gunmetal — dummy spring, flanges on (assembly-only)
-    "build_num":   "#F0A878",  # salmon — floating build number
     "coupon":      "#7FA37A",  # sage — test coupons (off to the side)
 }
 
@@ -122,6 +120,8 @@ COUPON_SHIFT = (0.0, 140.0, 0.0)
 
 
 def _bump_build_counter():
+    """The build number the viewer page states (all-time running count —
+    the counter carried over from v2, which carried it from v1)."""
     f = OUT / "build_n.txt"
     try:
         n = int(f.read_text().strip()) + 1
@@ -132,16 +132,6 @@ def _bump_build_counter():
     except OSError:
         pass
     return n
-
-
-def _build_number_model(n):
-    """Floating build number above the assembly (all-time running count —
-    the counter carried over from v2, which carried it from v1)."""
-    try:
-        return (cq.Workplane("XZ").text(str(n), 12, 2)
-                .translate((0.0, 0.0, 40.0)))
-    except Exception:                                       # noqa: BLE001
-        return None
 
 
 # EVERY printed part declares its bed face — no silent default. An
@@ -216,13 +206,8 @@ def main():
                 color=color(COLOR["coupon"] if _gn != "gauge_pin"
                             else COLOR["lever_pin"]))
 
-    num = _build_number_model(build_n)
-    if num is not None:
-        asm.add(num, name="build_number", color=color(COLOR["build_num"]))
-
-    asm.save(str(VIEWER), mode="default")
-    print(f"Wrote {VIEWER.name}  [build #{build_n}]", flush=True)
-    show(str(VIEWER))
+    print(f"Assembly: {len(asm.children)} parts  [build #{build_n}]", flush=True)
+    show(asm, root=OUT.parent, build=build_n)
 
 
 if __name__ == "__main__":       # guarded so audits can import src.* freely
