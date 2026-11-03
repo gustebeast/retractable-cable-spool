@@ -407,13 +407,14 @@ ATO_W, ATO_HEAD_T, ATO_BODY_T = 19.1, 5.1, 3.8
 ATO_HEAD_H = 4.0             # REPRESENTATIVE: the thick moulded grip at the top
 
 
-def blade_fuse_holder(W, D, H, rating="10", **_):
+def blade_fuse_holder(W, D, H, rating="10", empty=False, **_):
     """A board-mount ATO holder with its blade fuse seated: the open-topped black box on
     its standoff, and the fuse standing in it to H -- which is the PROJECT's figure
     (Boards HEIGHT), because how far a seated blade stands proud is the stack, and the
     holder's drawing does not dimension it. The fuse's grip, its two test windows with
     the terminals showing, and its rating on top are a likeness. The moulding is drawn
-    10 A red; another rating is another colour, and the footprint does not say which."""
+    10 A red; another rating is another colour, and the footprint does not say which.
+    `empty` (the board's Boards(unmated=...) names it) draws the holder with no blade."""
     turned = W < D                                   # draw along the long side
     if turned:
         W, D = D, W
@@ -436,7 +437,9 @@ def blade_fuse_holder(W, D, H, rating="10", **_):
         tab = _box(1.4, 1.0, 0.4, x=x, y=cy - 0.5, z=H - 0.6)
         tabs = tab if tabs is None else tabs.union(tab)
     text = (cq.Workplane("XY").text(rating, 2.4, 0.15).translate((0, cy, H)))
-    out = [(body.union(feet), BLACK), (fuse, FUSE_RED), (tabs, TIN), (text, WHITE)]
+    out = [(body.union(feet), BLACK)]
+    if not empty:
+        out += [(fuse, FUSE_RED), (tabs, TIN), (text, WHITE)]
     if turned:
         out = [(w.rotate((0, 0, 0), (0, 0, 1), 90).translate((D / 2.0, W / 2.0, 0)), c)
                for w, c in out]
@@ -606,6 +609,8 @@ def build(f, h, thickness, panel=None, outline=None, tip=None):
         facts["pads"] = sorted({round(p[0], 3) for p in here.values()})
     if gen in _FIRES:
         facts["tip"] = tip
+    if f.get("empty"):
+        facts["empty"] = True
     spec = (panel or {}).get(name) or {}
     if "axis_h" in spec:
         facts["axis_h"] = spec["axis_h"]
