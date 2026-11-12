@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 .vscode/
 
-# Per-machine build counter (the "build #N" the viewer page states) — bumped
-# every build, so don't track it.
-tools/build_counter.txt
+# The build counter (the "build #N" the viewer page states) moved to
+# src/build_n.txt and IS tracked, on purpose: it is an all-time running
+# count carried from v1, and the build resets it to 1 when the file is
+# missing — so a fresh clone would lose the count if it were ignored.
+# The cost is one churning line per build in the diff. The old
+# tools/build_counter.txt is gone.

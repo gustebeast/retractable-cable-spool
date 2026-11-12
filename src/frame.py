@@ -39,20 +39,21 @@ from cadkit.contact import contact_ring
 from cadkit.holes import teardrop_hole
 
 from .helpers import (chevron_plan, chord_x, cone_solid, cyl,
-                      drop_stray_shells, heal)
+    drop_stray_shells, heal)
 from .levers import clip_post
 from .levers import (
-                     RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
-                     PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept,
-                     RATCHET_OPEN_DEG)
+    RSTOP_Y_TIP, RSTOP_WELD, RWING_X1, RWING_Y_TIP,
+    PAWL_Z_LO, PAWL_Z_HI, ratchet_wing_swept,
+    RATCHET_OPEN_DEG)
 from .mount import mount_channel_cuts
 from .wall import wall_band
 from .params import (
     NOZZLE_D,
-    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_Z1, FRAME_TOP_Z1, COUCH_TOP_PAD,
+    SITE_AZ,
+    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_TOP_Z1, COUCH_TOP_PAD,
     LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_WALL_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
-    LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_SLOT_XA, LOCK_PIN_CLR, LOCK_PIN_Z0,
+    LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_SLOT_XA, LOCK_PIN_FIT, LOCK_PIN_Z0,
     LOCK_PIN_L, LOCK_SHIFT_X, LOCK_SHIFT_Y, LOCK_ROTS,
     ANCH_IR, ANCH_OR, ANCH_Z0, ANCH_A_NEG, ANCH_A_POS,
     ANCH_WIN_W, ANCH_WIN_Y0, ANCH_TIP_Z, ANCH_WIN_Z1, ANCH_HOLD_Z0,
@@ -64,11 +65,11 @@ from .params import (
     FLOOR_HOLE_D, FLOOR_HOLE_WEB, FLOOR_HOLE_R0, FLOOR_HOLE_R1,
     FLOOR_RIB_W,
     SLEEVE_OD, SLEEVE_T, SLEEVE_FLARE, SLEEVE_Z1, SLEEVE_TOP_CH,
-    BRG_BORE, BOT_BRG_Z0, BOT_BRG_Z1, BOT_LIP_ID, BOT_LIP_H,
+    BOT_BRG_Z0, BOT_BRG_Z1, BOT_LIP_ID, BOT_LIP_H,
     BOT_LIP_FUNNEL, BOT_PLUG_Z0,
     N_HUB_WEB, HUB_WEB_W, HUB_WEB_Z1,
     FRAME_TENON, FRAME_MORTISE, HORN_TENON, HORN_MORTISE,
-    JOINT_CLR, JOINT_BACK_CLR,
+    JOINT_CLR,
     FRAMEJ_W, FRAMEJ_R, FRAMEJ_TEN_ARC,
     TOP_JOINT_SEAT_CLR, TOP_ENTRY_OVER,
     LEVER_PIVOT_X, RATCHET_PIVOT_Z,
@@ -861,7 +862,7 @@ def _build_frame_bottom():
     # the 4 sites' beams/tenons/fillers as ONE compound → one fuse
     # instead of 12 whole-part unions
     site_solids = []
-    for a in (0.0, 90.0, 180.0, 270.0):
+    for a in SITE_AZ:
         for w in (_beam(a), _arc_tenon(a), _beam_filler(a)):
             site_solids.append(w.val())
     fb = fb.union(cq.Workplane(obj=cq.Compound.makeCompound(site_solids)),
@@ -925,7 +926,7 @@ def _build_frame_top():
     # unify-same-domain over the WHOLE part after EVERY cut — profiled
     # (#910, py-spy) as the frame build's runaway cost. heal(ft) at the
     # end is the one cleanup pass.
-    for a in (0.0, 90.0, 180.0, 270.0):
+    for a in SITE_AZ:
         ft = ft.cut(_arc_mortise(a), clean=False)
     # mount channels: the v-grooves and the cavity slots SHARE a wall by
     # design (2.7 = 2.7 — one straight surface, user #911); the groove
@@ -967,7 +968,7 @@ horn_cap = heal(_HORN_CAP)
 # pliers grab. Free in z — the desk caps +z once mounted; goes in
 # from BELOW, after the mount rotation.
 lock_pin_tpu = _lock_place(_lock_prism(LOCK_PIN_Z0, LOCK_PIN_Z0 + LOCK_PIN_L,
-                                       LOCK_PIN_CLR))
+                                       LOCK_PIN_FIT))
 # one printed PART, installed at every lock site (#983): the assembly
 # and the overlap gate place these; the STEP export stays the one part
 lock_pins_in_place = _lock_copies(lock_pin_tpu)

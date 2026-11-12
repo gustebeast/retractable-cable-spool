@@ -33,7 +33,7 @@ import cadquery as cq
 from .helpers import cyl, heal
 from .lid_joint import lid_channel_cut
 from .params import (
-    LID_OD, LID_T, LID_Z0, LID_Z1, DRUM_IR,
+    LID_OD, LID_T, LID_Z0, DRUM_IR,
     LID_SPOKE_N, LID_SPOKE_W, LID_RING_IN_R1, LID_RIM_R0,
     LID_MID_W, LID_MID_RC, LIDJ_SITES,
 )

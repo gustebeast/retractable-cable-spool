@@ -24,35 +24,32 @@ import math
 
 import cadquery as cq
 
-from cadkit.joinery import joint
-
 from .axle import ratchet_star_world
 from .lever_kinematics import assert_kinematics, R_ROOT, PAWL_CLEAR_MM
 from .params import (
     NOZZLE_D,
     RIM_OD, RATCHET_DEPTH, RATCHET_TEETH, RATCHET_PHASE_DEG,
-    SEP_Z0, SEP_Z1, R_OUT_COIL, CABLE_D,
-    LEVER_T, LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
+    SEP_Z1, R_OUT_COIL, CABLE_D,
+    LEVER_HANDLE_W, LEVER_PIVOT_X, LEVER_TRAVEL_DEG,
     RATCHET_LEV_Y0, RATCHET_LEV_Y1,
     RATCHET_PIVOT_Z, HANDLE_Z_BOT, LEVER_BEND_Z, HANDLE_X_BOT,
     LEVER_PIN_D, LEVER_PIN_LEVER_CLR, LEVER_BOSS_OD,
     PIN_KEY_W, PIN_KEY_H, PIN_KEY_L, PIN_KEY_WIDEN, PIN_KEY_SLOT_H,
-    PIN_KEY_RATE, PIN_KEY_FLOAT, PIN_CLIP_SLOT_W, PIN_CLIP_RIB_W,
+    PIN_KEY_RATE, PIN_CLIP_SLOT_W, PIN_CLIP_RIB_W,
     PIN_SHANK_UNDER, PIN_CLIP_SLOT_FREE, PIN_CLIP_SQUEEZE_RUN,
-    PIN_KEY_SEAT_UNDER, PIN_HUB_OVER, PIN_JOURNAL_UNDER,
-    LEVER_T,
-    LEVER_PIN_L, PIN_COL_Y0, PIN_TIP_Y,
+    PIN_KEY_SEAT_UNDER, PIN_HUB_OVER,
+    PIN_TIP_Y,
     CLIP_FACE_Y, CLIP_SIDE,
     RATCHET_BAND_Z0,
-    LEVER_Y_IN, BEAM_SIZE, POST_OUT_T,
-    LEVER_COL_Y1, LEVER_PIN_BODY_L, BEAM_IR,
+    LEVER_Y_IN, BEAM_SIZE,
+    LEVER_PIN_BODY_L, BEAM_IR,
     TPU_E, CLIP_GAP, CLIP_T, CLIP_HUB_R, CLIP_BORE_CLR, CLIP_LEAF_T,
     CLIP_LEAF_X, CLIP_CONTACT_R, CLIP_TIP_PAST, CLIP_PRELOAD, CLIP_AX_CLR,
     CLIP_MODEL_OFFSET,
     POST_R, PIN_HEAD_R, PIN_HEAD_T, RETURN_TORQUE_MAX,
     RATCHET_CLIP_ROT_DEG, FLOOR_Z0,
     WALL_IR, WALL_OR, RATCHET_OPEN_CLR, LEVER_SIDE_CLR, STOP_LEVER_CLR,
-    BEAM_IR, GUARD_LEVER_CLR, FLOOR_Z1,
+    GUARD_LEVER_CLR, FLOOR_Z1,
 )
 
 R_RIM = RIM_OD / 2.0                              # 69.435 — band / tooth tips
@@ -172,12 +169,17 @@ def _pivot_hole(pivot_x, pivot_z, y_outer, y_inner):
 
 
 def _handle(y0, y1, z_top):
-    """The HANDLE plate below z_top (params BENT HANDLES, user #966): a
-    LEVER_HANDLE_W-wide vertical bar on the pivot's x from z_top down
-    to the shared knee LEVER_BEND_Z, a round knee, then a bar of the
-    same width running to the grip disc at (HANDLE_X_BOT, HANDLE_Z_BOT)
-    — 45° toward +x −z in the couch version, straight down on the desk
-    build (params). In the plate's along-y print every face here is a
+    """The HANDLE plate below z_top (params STRAIGHT HANDLE): a
+    LEVER_HANDLE_W-wide vertical bar on the pivot's x, running from,
+    z_top straight down to the grip disc at (HANDLE_X_BOT
+    HANDLE_Z_BOT) and bottoming at FLOOR_Z0, the spool's own −z extent.,
+
+    It is still built as two runs meeting at LEVER_BEND_Z, which is now,
+    a SEAM rather than a knee: HANDLE_X_BOT sits under the pivot, so
+    both runs are the same vertical bar of the same width and the seam
+    (with the round disc on it) vanishes into the solid. The 45° couch
+    knee this replaced is retired in params, with the expression to
+    restore it. In the plate's along-y print every face here is a
     vertical wall."""
     y_len = y1 - y0
 
@@ -191,9 +193,11 @@ def _handle(y0, y1, z_top):
                           (LEVER_PIVOT_X - _HW, z_top)]).close())
     knee = _xz(cq.Workplane("XZ").center(LEVER_PIVOT_X, LEVER_BEND_Z)
                .circle(_HW))
-    # the knee→grip run: half-width _HW measured PERPENDICULAR to the
-    # run (45° toward +x −z in the couch version; straight down on the
-    # desk build, where HANDLE_X_BOT sits under the pivot — params)
+    # the seam→grip run: half-width _HW measured PERPENDICULAR to the
+    # run. HANDLE_X_BOT sits under the pivot, so the run is straight
+    # down and this is the same bar as `vert` continued (the general
+    # form is kept because it is what makes restoring the retired 45°
+    # couch knee a params-only change — params STRAIGHT HANDLE)
     dx, dz = HANDLE_X_BOT - LEVER_PIVOT_X, HANDLE_Z_BOT - LEVER_BEND_Z
     L = math.hypot(dx, dz)
     nx, nz = -dz / L * _HW, dx / L * _HW          # unit normal × half-width
@@ -211,10 +215,9 @@ def _handle(y0, y1, z_top):
 def _build_ratchet_lever():
     """(1) horizontal pawl block minus the separator's tooth solid (exact
     negative) + the chord-tracking catch bump; (2) the handle through the
-    pivot — vertical to the shared knee, then 45° out to the grip disc
-    (_handle)."""
+    pivot — ONE vertical bar all the way down to the grip disc, the
+    seam at LEVER_BEND_Z invisible inside it (_handle)."""
     y0, y1 = RATCHET_LEV_Y0, RATCHET_LEV_Y1
-    y_len = y1 - y0
 
     h_x_hi = LEVER_PIVOT_X + _HW
     h_x_lo = 56.0                                # safely inside the valley radius

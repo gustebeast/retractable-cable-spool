@@ -1,177 +1,117 @@
 # Retractable Cable Spool
 
-A 3D-printable retractable cable spool driven by a power spring (harvested
-from a Stanley 30-455 tape-measure cassette), with a ratchet to hold the
-cable out. Routes a USB-A-to-C source cable to the powered end.
+A 3D-printable retractable cable spool. A power spring winds the drum; a
+ratchet holds the cable out at any length; a one-click pull on the lever
+releases it. It mounts under a couch or a desk and routes a USB-A-to-C
+source cable to the powered end.
 
-> **Note:** everything below this line still describes the v1 design and is
-> stale — the module table names files that no longer exist (`caps.py`,
-> `housing.py`, `guide_axle.py`, `housing_pins.py`), and the assembly steps
-> are v1's. The current design is v3, in `src/`; build with
-> `py -3.12 -m src.build`. The brake was deleted entirely at build #1019.
-
-![Assembly preview](demo.png)
+This is **v3**, the rotating-axle design, and it lives entirely in `src/`.
+(v1 and v2 are in git history only. The old `demo.png` in this directory
+is a v1 render and does not show this design.)
 
 ## Building
 
 ```bash
 py -3.12 -m pip install cadquery
-py -3.12 -m src.build                  # all parts + assembly
-py -3.12 -m src.build --part axle      # build a single part (faster iteration)
-py -3.12 -m src.build --list           # list available part names
+py -3.12 -m src.build
 ```
 
-(or run the convenience wrapper: `./build.sh`)
+That writes one STEP per printed part into `src/`, bumps the build counter
+in `src/build_n.txt`, and hands the assembly to the web viewer. There is no
+part-selection CLI — the whole model builds in about a minute.
 
-This produces every STEP file in the repo root. Geometry-regression check:
+Or run the wrapper `./build.sh`, and double-click `View Assembly.cmd` to
+reopen the last build in the viewer.
+
+### Gates
+
+Four checks, all expected to pass before anything is printed:
 
 ```bash
-py -3.12 tools/check_geometry.py             # diff against committed baseline
-py -3.12 tools/check_geometry.py --update-baseline   # bless current as new baseline
+py -3.12 -m tools.check_overlaps     # parts intersecting where they shouldn't
+py -3.12 -m tools.check_beads        # every printed length a whole number of beads
+py -3.12 -m tools.check_overhangs    # every downward face 45 deg, or a one-bead bridge
+py -3.12 tools/check_geometry.py     # geometry regression vs tools/baseline.tsv
 ```
 
-## Source layout
+`check_geometry.py --update-baseline` blesses a deliberate geometry change.
+Run it after any intentional change, and *not* after a refactor that was
+supposed to change nothing — that is exactly what it is there to catch.
 
-| File                   | Contents                                           |
-|------------------------|----------------------------------------------------|
-| `src/dimensions.py`    | Top-level dimensional / material / fit constants + module-load asserts |
-| `src/helpers.py`       | Geometric helpers (`cyl`, `cone_solid`, flange / spoke / ratchet helpers, `make_keys`, `heal`) |
-| `src/spool.py`         | Initial main spool body — drum, flanges, hub, cap pockets, pancake flange, spring slot |
-| `src/caps.py`          | Bearing caps + pancake spool + cap-key joining (mutates `spool.main_body` to add the groove sides of the keys) |
-| `src/axle.py`          | Main spool axle — shaft, spring-engagement bosses, bearing-retention hats, cross-pin holes |
-| `src/housing.py`       | U-bracket housing skeleton — plates, columns, spine, mount holes, lever-pivot/cross-pin/stop-pin holes |
-| `src/housing_guide.py` | Guide-bearing area of the housing — bearing pocket, press hole, anti-rotation recess, sleeve, +Y wrap, gussets. Exposes `apply_to_housing()` |
-| `src/housing_pins.py`  | `brake_housing_pin` + `brake_housing_rest_pin` (separately printed, glue-installed into the housing) |
-| `src/guide_axle.py`    | Standalone guide-bearing axle part                 |
-| `src/levers.py`        | Ratchet + brake levers + pawl/pad helpers (mutates `spool.main_body` to apply ratchet teeth + drum cable hole, since these depend on lever geometry) |
-| `src/viz.py`           | Assembly-only viz parts: dummy 608 bearings + dummy torsion springs |
-| `src/build.py`         | Orchestrator: imports parts in dependency order, heals, exports STEPs, hands the assembly to the web viewer. CLI: `--part NAME` / `--list` |
+## Install site
 
-## Outputs
+`COUCH_VERSION` in `src/params.py` is one switch that picks the whole
+build, because the cable differs per site as well as the geometry:
 
-- `spool_main_body.step` — full spool: both flanges, drum (with ratchet teeth + brake ring), spokes, hub, bearing pockets, spring cavity, cap seats
-- `bearing_cap_top.step` — top bearing retainer + integrated source-cable pancake spool (cone funnel + tongue cylinder)
-- `bearing_cap_bottom.step` — bottom bearing retainer
-- `pancake_spool.step` — flat 88 mm flange that press-fits onto bearing_cap_top to close the source-cable groove
-- `axle.step` — fixed center shaft with integrated spring-engagement bosses
-- `housing.step` — U-bracket holding the spool and carrying both levers + the guide-bearing pocket above the top flange
-- `ratchet_lever.step`, `brake_lever.step` — the two actuating levers
-- `brake_housing_pin.step`, `brake_housing_rest_pin.step` — separately-printed stop pins (glue-install)
-- `guide_axle.step` — short axle for the side-rolling guide bearing
-- `ratchet_spring.step`, `brake_spring.step` — visualization-only dummies of the purchased torsion springs
+| | `True` (couch) | `False` (desk) |
+|---|---|---|
+| cable | Ø3.3, 7 ft | Ø4.0, 4 ft |
+| frame-top pad | 10.4 | 2.4 |
 
-The web viewer shows the assembly straight from the build: every printed part + the 3 dummy bearings + 2 dummy torsion springs in their as-built positions.
+It currently builds the **couch** version. Flip the flag and rebuild; never
+hand-edit the gated numbers, or switching back silently keeps the wrong
+spool.
+
+## Printed parts
+
+Twelve parts. **PETG-GF through a 0.8 mm nozzle**, except the two TPU parts.
+**No support material anywhere** — every overhang is 45° or steeper and
+every bridge is one bead wide, which is what `check_overhangs` enforces.
+Each part's bed face is declared in `PRINT_ORIENTATION` in `src/params.py`
+and the STEPs are exported already rotated into it, so the slicer needs no
+manual orientation.
+
+| Part | What it is |
+|---|---|
+| `frame_top.step` | The plus-spider top frame. Hosts the upper 608 in a pocket in its own thickness, and carries the lever mount and the cable horn. |
+| `frame_bottom.step` | The lower frame: floor, wall band, the four beams, and the lower bearing seat. Joins `frame_top` with arc tenons at the four stations. |
+| `mount_ring.step` | The fixed part. Screws to the couch or desk, then the whole spool rotates on and locks with the two TPU pins. |
+| `horn_cap.step` | Closes the cable horn's guide mouth. |
+| `axle_top.step` | The rotating shaft. Installs from below, up through the spring and into the 608. |
+| `axle_separator.step` | The separator disc: carries the ratchet star, the spring's tenon post, and the drum. |
+| `bearing_nub.step` | Seats the lower 608 against the separator. |
+| `lid.step` | The drum lid, with the spoke windows. |
+| `ratchet_lever.step` | The pawl and the handle, in one part. Pull to release. |
+| `lever_pin.step` | The lever's pivot pin. Keyed by a wedge, not a D-flat. |
+| `ratchet_clip_tpu.step` | **95A TPU.** The lever's return spring — a bending leaf on the pivot post. |
+| `lock_pin_tpu.step` | **95A TPU.** The mount lock. One printed part, installed at both lock sites. |
+
+Print the two TPU parts in black — black filament is reserved for TPU in
+this project, so the material is obvious in hand.
 
 ## Purchased parts
 
-### Lee Spring (leespring.com)
+Deliberately almost nothing. The lever return springs were retired at
+build #1004 in favour of the printed TPU leaf, so no springs need buying.
 
-- **Power spring**: harvested from a Stanley 30-455 tape-measure cassette
-  (or equivalent). The cassette wraps around the axle's spring-engagement
-  bosses; the spring's bent outer tab seats in a slot in the hub wall.
-  Drives spool retraction.
-- *(The v1/v3 Lee torsion springs are retired as of v3 build #1004: the
-  lever return is a printed 95A TPU leaf clip on each pivot pin —
-  `return_clip_tpu.step` — so no springs need buying.)*
-
-### McMaster-Carr (mcmaster.com)
-
-- **3× 608 bearing** — 8 mm bore, 22 mm OD, 7 mm wide. Two in the spool
-  (top + bottom), one in the lever housing as the side-rolling guide
-  against the pancake-side flange. Any ZZ or RS version works.
-- **4× [McMaster 94459A110](https://www.mcmaster.com/94459A110/)** — M2 × 0.4 heat-set brass inserts (Ø3.6 toothed,
-  2.5 mm length, 3.3 mm pilot). Two for the lever pivots
-  (ratchet at +y face x=76, brake at -y face x=55), two for the axle
-  cross-pins (-y face at each plate's z, opposite the screw head).
-- **4× [McMaster 91292A013](https://www.mcmaster.com/91292A013/)** — M2 × 20 mm cap screws. Two are the
-  lever pivots: thread into the lever-side housing inserts and clamp
-  each lever axially; the smooth shank under the head supports the
-  spring coil. Two are the axle cross-pins: enter through the +y face
-  counterbore, pass through the housing and the axle's cross-hole,
-  thread into the -y face insert. Locks the axle against rotation
-  and axial slide.
-- **1× [McMaster 86495K36](https://www.mcmaster.com/86495K36/)** — Oil-resistant Buna-N rubber sheet,
-  12″×24″, 3 mm thick, 70A durometer. Cut a ~7×13 mm pad (bounded by
-  arcs at r=73, r=80) and bond to the underside of the brake-lever pad.
-  Way more sheet than needed; one sheet supports many builds.
-- **Super glue** — a few drops, to retain `brake_housing_pin` in its keyed hole.
-- **1× [McMaster 90915A641](https://www.mcmaster.com/90915A641/)** — 10-24 wood-screw-to-stud, 1″ long.
-  Wall-mount stud through the front spine's centered hole.
-- **1× [McMaster 90389A112](https://www.mcmaster.com/90389A112/)** — 10-24 flange nut (12.7 mm flange OD,
-  316 SS). Tighten on the +x face of the spine to clamp the housing
-  against the mounting board.
-
-## Print orientation
-
-Material: **PA6-GF**. Supports: **ASA**, only where unavoidable.
-
-The 45° sloped flanges and the spring boss's 45° underside chamfers keep
-the spool self-supporting. The separately-printed `brake_housing_pin` and
-45° cones on all blind-hole ends keep the housing supportless too. The
-production axle prints vertically with the spring boss's 45° chamfers
-self-supporting the +X overhangs.
-
-## Assembly
-
-1. **Press bottom bearing** into main body — seats against the 20 mm
-   retention lip behind the pocket.
-2. **Drop the axle** through the open top of the main body. Shaft threads
-   through the bottom bearing; spring-boss section settles into the
-   spring cavity.
-3. **Install the power spring**. Stretch the cassette spring's coil over
-   the spring-engagement bosses on the axle; bend the outer tab into a
-   short radial tab and drop it into the hub-wall slot from above
-   (the slot's coned roof clears the bent section).
-4. **Slide bearing_cap_bottom** into the bottom of the main body cavity.
-   Bottoms out on the 1 mm inset lip (slip fit — easily removable for
-   service).
-5. **Slide bearing_cap_top** into the top — same fit. Press the top
-   bearing into the cap's pocket from the spring-cavity face.
-6. **Press the second 608 bearing** into the bearing_cap_bottom pocket,
-   from the spring-cavity face.
-7. **Heat-set M2 inserts** into both ends of the axle (3.2 mm pilots,
-   insert flush with the axle tip on each end).
-8. **Heat-set M2 inserts** into the lever-pivot faces of the housing
-   (3.2 mm pilots): -y face at x=76 (ratchet pivot), +y face at x=55
-   (brake pivot).
-9. **Install `brake_housing_pin`**: drop super glue in the keyed blind
-   hole on the +y side of the brake pivot column. Orient the pin so
-   its D-flat matches the hole's flat (this automatically points the
-   pin's diametral through-hole radially outward, which is what the
-   spring leg expects). Lightly tap the pin home.
-10. **Install the housing** onto the assembled spool. The housing is a
-    closed rectangle in xz with both plates 11 mm thick, so it no longer
-    snap-fits — install procedure needs revisiting (e.g., remove a spine
-    temporarily, or change to a printed two-piece housing). For now,
-    align so the axle ends pass through both plates' round axle holes.
-11. **Install both cross-pins**: thread an M2 × 20 mm cap screw through
-    each plate's +y face (counterbored 2 mm), through the axle's cross-
-    hole, into the heat-set insert at the -y face. Locks the axle
-    against rotation and axial slide.
-12. **For each lever** (ratchet, brake):
-    1. Slip the torsion spring coil over the lever's pivot boss.
-    2. Offer the lever up to its pivot, slipping one spring leg through
-       the housing stop pin's diametral through-hole before the lever
-       face meets the housing.
-    3. Rotate the lever so the other spring leg threads through the
-       lever stop pin's through-hole, pre-loading the spring.
-    4. Thread an M2 × 20 mm cap screw through the lever's pivot hole into
-       the housing-side insert; tighten snugly. The lever should rotate
-       freely.
-13. **Cut a ~7 × 13 mm pad** from the Buna-N sheet (86495K36) to the
-    brake contact footprint (bounded by arcs at r=73 and r=80) and bond
-    it to the underside of the brake lever's pad block with contact
-    cement or thin CA glue.
-14. **Source-cable installation**: thread the source cable through the
-    cable-entry hole in the back spine, around the pancake spool's
-    cone funnel (4–5 wraps fit in the radial groove), through the
-    transit hole in the spool's pancake-side flange, down along the
-    180° spoke face, and out the drum-wall slot to wrap the drum OD.
+- **2× 608 bearing** — 8 mm bore, 22 mm OD, 7 mm wide. Any ZZ or RS
+  version. One in `frame_top`'s pocket, one on the `bearing_nub`.
+- **1× power spring** — the mainspring of a **Stanley PowerLock 35'** tape
+  measure, pulled out of the cassette whole and installed **unmodified**,
+  upside down (the Ø13.4 flange hole ends up on top). Ø78.3 flanges, Ø56.3
+  body, 32.0 tall overall. Buy the tape measure — the spring is not sold
+  separately, and every dimension in `src/params.py` was measured off that
+  cassette. (Earlier notes said "Stanley 30-455", a 25' PowerLock; that was
+  wrong.)
+- **4× wood screw** — Ø4.0 shaft, one per mount arm, into the couch frame
+  or the underside of the desk.
+- **The cable** — per the install site, above.
 
 ## Tuning
 
-Constants live in `src/dimensions.py` (top-level shared) and in each
-`src/<part>.py` (part-specific geometry that doesn't propagate). Most
-fits are standardized at **0.15 mm per side** (cylinder/box clearances,
-slip fits) with **0.2 mm per side** for keys/notches. See the audit
-table in `src/dimensions.py`.
+`src/params.py` is the single source for every dimension; the part modules
+read it and never restate a number. Three conventions it enforces:
+
+- **The bead grid.** Every printed length is a whole number of 0.8 mm
+  beads. `check_beads` gates it, and its exemption table names each
+  constant that is legitimately off-grid (clearances, moduli, angles) with
+  the reason.
+- **Bridges max 0.8 mm,** one documented exception: the separator above the
+  bearing.
+- **One statement of one fact.** A number that can be derived is derived.
+  Where a constant is retired, its history stays as prose so the reasoning
+  survives without a dead name in the namespace.
+
+Print-fit history is recorded in comments at each constant, keyed to the
+build number the finding came from — those are the record of what the
+printer actually did, and they are worth reading before changing a fit.

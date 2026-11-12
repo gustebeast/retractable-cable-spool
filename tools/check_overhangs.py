@@ -30,7 +30,7 @@ import math
 
 from cadkit.step_export import print_pose
 
-from src.build import PARTS, COUPONS
+from src.build import PARTS
 from src.params import PRINT_ORIENTATION
 from src.params import NOZZLE_D
 
@@ -73,9 +73,6 @@ def main():
           f"bridges over {SPAN_LIMIT} mm ({NOZZLE_D} nozzle = one bead)")
     bad = 0
     scanned = [(n, p, PRINT_ORIENTATION[n]) for n, p, _f in PARTS]
-    # COUPONS get printed too, so they get gated too (#1034: the pin
-    # gauge's lip shipped a 2.45 overhang because they were skipped)
-    scanned += [(f.replace(".step", ""), p, o) for f, p, o in COUPONS]
     for name, part, rot in scanned:
         faces = scan(part, rot)
         if not faces:

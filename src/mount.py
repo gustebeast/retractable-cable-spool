@@ -46,9 +46,10 @@ from cadkit.joinery import joint
 from .helpers import chevron_plan
 
 from .params import (
-    NOZZLE_D, FRAME_Z1, FRAME_RIB, FRAME_R_OUT,
+    SITE_AZ,
+    FRAME_Z1, FRAME_RIB,
     MOUNT_TEN_W, MOUNT_SPINE_T, MOUNT_FLOOR_MIN,
-    MOUNT_PLATE_T, MOUNT_MATE_Z,
+    MOUNT_MATE_Z,
     MOUNT_RING_R, MOUNT_RING2_R, MOUNT_RING3_R, MOUNT_SPINE_W,
     MOUNT_WEB_Z0, MOUNT_WEB_CLR_DEG,
     MOUNT_SPOKE_W, N_MOUNT_SPOKE, MOUNT_PAD_W, MOUNT_PAD_LY,
@@ -92,7 +93,6 @@ assert (MOUNT_MATE_Z - MOUNT_J.cavity_depth
 assert abs(MOUNT_GRV_W - (MOUNT_J.stem + 2.0 * MOUNT_J.clearance)) < 1e-9, \
     "spine groove no longer matches the cavities' neck slot"
 
-_SITES = (0.0, 90.0, 180.0, 270.0)
 # rings that LOCK to the frame (arc tenons in all four arms) vs rings
 # that only RIDE a plain V-groove through the arms (user #985: the inner
 # ring's joinery carried next to nothing, and dropping it frees room for
@@ -205,7 +205,7 @@ def _spoke_layout():
     a0, a1 = _web_span(r0)
     half_bar = math.degrees(math.asin((MOUNT_SPOKE_W / 2.0) / r0))
     layout = []
-    for site in _SITES:
+    for site in SITE_AZ:
         lo = (max(a0, _ANCH_BLOCK) if site == 0.0 else a0) + half_bar
         hi = a1 - half_bar
         assert hi > lo, "no room for a ring-tie spoke in this quadrant"
@@ -324,7 +324,7 @@ def _build_mount():
             # arm's ENTRY face, spanning half the crossing inboard —
             # the stop-side half stays solid arm)
             ten = _hang(_CROSS[R].tenon(root=2.0))
-            for site in _SITES:
+            for site in SITE_AZ:
                 ring = ring.union(
                     ten.rotate((0, 0, 0), (0, 0, 1), site), clean=False)
         m = ring if m is None else m.union(ring, clean=False)
@@ -366,7 +366,7 @@ def _build_mount():
     # #947: the #936 stack spacer FUSED in — pads run the full
     # MOUNT_PAD_H, everything else keeps its section)
     pad = _pad_proto()
-    for base_az in (0.0, 90.0, 180.0, 270.0):
+    for base_az in SITE_AZ:
         m = m.union(_site_place(pad, base_az), clean=False)
     # (the −y pad's wedge relief over the TPU lock corbel is RETIRED —
     # #971: that pad is inset clear of the lock stack instead, params)
@@ -388,7 +388,7 @@ def _build_mount():
                     FRAME_RIB / 2.0 + MOUNT_SPINE_W / 2.0)
             .rect(MOUNT_TAIL_TIP_X - x0, MOUNT_SPINE_W)
             .extrude(MOUNT_SPINE_T))
-    for axis_az in (0.0, 90.0, 180.0, 270.0):
+    for axis_az in SITE_AZ:
         m = m.union(tail.rotate((0, 0, 0), (0, 0, 1), axis_az),
                     clean=False)
     # TPU-LOCK jib HEAD (user #939/#941/#942, params LOCK block): the
@@ -462,7 +462,7 @@ def _build_mount():
     for r in LOCK_ROTS:
         m = m.cut(slot.rotate((0, 0, 0), (0, 0, 1), r), clean=False)
     screw = _screw_cut_proto()
-    for base_az in (0.0, 90.0, 180.0, 270.0):
+    for base_az in SITE_AZ:
         m = m.cut(_site_place(screw, base_az), clean=False)
     return m
 
@@ -510,7 +510,7 @@ def mount_channel_cuts():
         # across the whole arm, and between the arms there is only air —
         # so the joined ring needs no groove arcs at all
         mor = _hang(_CROSS[R].mortise(drop=MOUNT_SPINE_T + 0.5))
-        for site in _SITES:            # fixed 90° pitch
+        for site in SITE_AZ:
             cuts.append(mor.rotate((0, 0, 0), (0, 0, 1), site))
     # FREE rings (#985): a plain full-circle V-groove each — no cavity,
     # so no slot wall for it to run coincident with; it only bites where

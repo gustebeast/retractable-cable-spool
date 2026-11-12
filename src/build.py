@@ -18,18 +18,16 @@ from cadkit.cq_colors import color
 from cadkit.web import show
 
 from .frame import (frame_top, frame_bottom, horn_cap, lock_pin_tpu,
-                    lock_pins_in_place)
-from .mount import mount_ring, MOUNT_MATE_DEG
+    lock_pins_in_place)
+from .mount import mount_ring
 from .axle import axle_top, axle_separator, bearing_nub
 from .lid import lid
-from .test.pin_gauge import GAUGE_PRINTS, GAUGE_ASSEMBLED
 from .levers import (
     ratchet_lever, lever_pin, ratchet_clip_tpu,
     lever_pin_in_place, return_clip_in_place,
-    RATCHET_OPEN_DEG, KIN,
 )
 from .params import (RATCHET_PIVOT_Z, LEVER_PIVOT_X, CLIP_SIDE,
-                     COUCH_TOP_PAD, PRINT_ORIENTATION)
+    COUCH_TOP_PAD, PRINT_ORIENTATION)
 from .dummies import bearing_608, bearing_608_bottom, spring
 
 # ── Viewer pose (revertable) — the lever at REST (canonical pose). Set
@@ -79,7 +77,6 @@ COLOR = {
                                # they were black TPU torsion axles)
     "bearing_608": "#9FA8B2",  # steel — dummy 608 (assembly-only)
     "spring":      "#6E7B8B",  # gunmetal — dummy spring, flanges on (assembly-only)
-    "coupon":      "#7FA37A",  # sage — test coupons (off to the side)
 }
 
 # ── PRINT POSE for the per-part STEP exports (user #935, cadkit's
@@ -112,13 +109,6 @@ PARTS = [
 ]
 
 
-# Test coupons: exported to the project root and shown in the assembly
-# off to the side (+y), so they rebuild with every run.
-COUPONS = GAUGE_PRINTS        # (fname, solid, PrintOrientation) — the pin /
-                              # lever / frame gauge: does the TPU clear?
-COUPON_SHIFT = (0.0, 140.0, 0.0)
-
-
 def _bump_build_counter():
     """The build number the viewer page states (all-time running count —
     the counter carried over from v2, which carried it from v1)."""
@@ -144,12 +134,6 @@ require_declared({n for n, _p, _f in PARTS}, PRINT_ORIENTATION)
 def main():
     for _name, part, fname in PARTS:
         export_print(part, PRINT_ORIENTATION[_name], str(OUT / fname))
-    # TEST COUPONS — printed in the real part's orientation, exported
-    # into src/test/ beside their modules (user #1033; cadkit's own rule
-    # says the project root — the test_ prefix still marks them)
-    (OUT / "test").mkdir(exist_ok=True)
-    for fname, part, orient in COUPONS:
-        export_print(part, orient, str(OUT / "test" / fname))
 
     build_n = _bump_build_counter()
 
@@ -199,12 +183,6 @@ def main():
            .add(T(bearing_608_bottom), name="bearing_608_bottom",
                 color=color(COLOR["bearing_608"]))
            .add(T(spring),      name="spring",      color=color(COLOR["spring"])))
-
-    # the gauge, ASSEMBLED (the print STEP lays them out flat instead)
-    for _gn, _gp in GAUGE_ASSEMBLED:
-        asm.add(_gp.translate(COUPON_SHIFT), name=_gn,
-                color=color(COLOR["coupon"] if _gn != "gauge_pin"
-                            else COLOR["lever_pin"]))
 
     print(f"Assembly: {len(asm.children)} parts  [build #{build_n}]", flush=True)
     show(asm, root=OUT.parent, build=build_n)

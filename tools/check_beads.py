@@ -137,6 +137,7 @@ _ex("clearance",
     _LEAF_I="second moment, mm⁴ (not a length)",
     _LEAF_K="N/mm (not a length)",
     LOCK_PIN_CLR="TPU lock pin in its three slots, per side",
+    LOCK_PIN_FIT="TPU pin inset from its slot plan, per side — the fit",
     LOCK_SWEEP_CLR="lock corbel roof under the jib head's install sweep",
     MOUNT_COUCH_SETBACK="probed rotate-on clearance to the couch front beam (air)",
     )

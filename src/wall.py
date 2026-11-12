@@ -21,7 +21,6 @@ The former derived sill (the over-pull stop) is still gone;
 RATCHET_WIN_Z0 stays in params as the lever's future stop-tab reference.
 """
 
-import math
 
 import cadquery as cq
 

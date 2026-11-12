@@ -21,7 +21,7 @@ small fit clearances stay absolute.
 
 import math
 
-from cadkit.joinery import PrintSpec, joint_clearances, joint_box_min
+from cadkit.joinery import PrintSpec, joint_clearances
 from cadkit.orientation import PrintOrientation as PO, JointSite
 from cadkit.contact import contact_rib_size
 from cadkit.printing import min_wall, snap
@@ -58,10 +58,19 @@ PRINT_ORIENTATION = {
     "lock_pin_tpu":  PO(((0, 1, 0), -90),
                         "LIES DOWN along x, flat back face (the one the lock "
                         "wall bears on) on the bed and the chevron apex UP — "
-                        "37.6 x 6.4 x 6.4 instead of standing 37.6 tall on a "
-                        "6.4 x 4 footprint (#1070). Apex DOWN would be two "
-                        "overhangs."),
+                        "37.6 long and about 6 square, instead of standing "
+                        "37.6 TALL on that 6-square footprint (#1070). Apex "
+                        "DOWN would be two overhangs."),
 }
+
+# ── THE FOUR STATIONS ─────────────────────────────────────────────
+# The build is four-fold: four frame beams with their arc tenons, four
+# mount arms with their pads, screws and guide tails. ONE statement of
+# that — it used to be the same literal tuple written out seven times
+# across frame.py, mount.py and here, which is seven places to miss if
+# the station count ever changes. (LIDJ_SITES is the lid's own count of
+# four; it is left separate because nothing proves the two must agree.)
+SITE_AZ = (0.0, 90.0, 180.0, 270.0)      # degrees about z, CCW from +x
 
 # ── JOINT SITES — WHERE each joint sits, in the frame the parts are MODELLED
 # in: the direction the MORTISE host travels to go on, and the mating plane's
@@ -125,6 +134,12 @@ BEARING_INNER_CH = 0.3       # 608 ring-edge chamfer (spec r_s min ≈ 0.3, both
                              # rings) — v2's cone-seat trick face-mates it
 
 # ── Spring (purchased part, UNMODIFIED — dummy in the assembly, no STEP) ─────
+# THE DONOR IS A STANLEY POWERLOCK 35' TAPE MEASURE (user, confirmed
+# 2026-11-12) — the power spring is its cassette's mainspring, pulled out
+# whole and installed unmodified. Buy the tape, not the spring: the spring
+# is not sold on its own, and every number below was measured off THAT
+# cassette. The old "Stanley 30-455" in the README was a 25' PowerLock and
+# simply wrong — corrected, not carried as an alternative.
 SPRING_FLANGE_OD = 78.3      # flange Ø, top and bottom
 SPRING_FLANGE_T  = 2.4       # flange thickness, each
 SPRING_BODY_OD   = 56.3      # coil body Ø between the flanges
@@ -147,7 +162,7 @@ SPRING_STRIP_W   = 22.0      # strip width (v2-measured)
 # has to carry those with it or switching back silently keeps the wrong
 # spool (user #1073 — the desk reprint). Everything it gates is tagged
 # `COUCH_VERSION` and derived, never hand-edited per site.
-COUCH_VERSION = False
+COUCH_VERSION = True
 
 # ── Cable (hardware, per install site) ───────────────────────────────────────
 CABLE_D        = 3.3 if COUCH_VERSION else 5 * NOZZLE_D
@@ -355,7 +370,8 @@ AXLE_ROOT_CONE_H = SHOULDER_Z - SEP_Z1 # 1.9 — 45° column→disk root cone: i
                                        # spring's bottom face anymore — the
                                        # Ø8.7 hole is there, sexes swapped)
 
-AXLE_Z_BOT = SEP_Z0                    # the column runs flush through the disk
+# (the column runs flush THROUGH the separator disk, so its bottom is
+#  plain SEP_Z0 — there is no separate axle-bottom number to keep)
 AXLE_Z_TOP = BRG_Z1 + 2 * NOZZLE_D       # 10.2 — shaft top, 1.6 proud of the
                                        # bearing, UNDER the frame face (the
                                        # flipped print's bed face)
@@ -829,8 +845,9 @@ NUB_TIP_H    = (NUB_TENON_D - NUB_TIP_FLAT) / 2.0      # 2.8 — the nub's own
                                    # mortise's, so the SHOULDER seats and the
                                    # tip never bottoms
 NUB_MORT_H   = NUB_TENON_STRAIGHT + NUB_ROOF_H         # 4.55 — mortise depth
-NUB_Z1       = SEP_Z0 + NUB_TENON_STRAIGHT + NUB_TIP_H # the nub's dulled tip
-NUB_L        = NUB_Z1 - BOT_BRG_Z0                     # overall
+# (the nub's dulled TIP lands at SEP_Z0 + NUB_TENON_STRAIGHT +
+#  NUB_TIP_H; nothing reads that sum — axle.py builds the tip from the
+#  three terms directly.)
 assert NUB_TENON_D < NUB_BODY_D, "the nub's tenon has no shoulder to seat on"
 assert SEP_Z0 + NUB_MORT_H <= SEP_Z1 + 1e-9,     "the nub's mortise pokes out of the separator disk's top face"
 assert NUB_BODY_D <= BEARING_IRACE_OD,     "the nub's seat cone runs off the inner race's face annulus"
@@ -1144,7 +1161,6 @@ assert ((MOUNT_SCREW_SEAT + WOOD_SCREW_HEAD_H) * _SCREW_C + 2 * NOZZLE_D
 # pull-out is what friction has to hold instead of the slam.
 MOUNT_PAD_AZ_OFF = math.degrees(math.asin(
     (BEAM_SIZE / 2.0 + MOUNT_PAD_LY / 2.0) / MOUNT_RING_R))   # ≈ 9.6°
-MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
 # GUIDE-TAIL TIP (user #958): the tails run from each pad's outboard
 # edge along the arm flank; their tips are the install reference — the
 # rotate-on install needs the face set back
@@ -1152,8 +1168,9 @@ MOUNT_PAD_AZ = tuple(a + MOUNT_PAD_AZ_OFF for a in (0.0, 90.0, 180.0, 270.0))
 # sweeping on a ~91 radius at the mate angle) from the front beam — so
 # the visible tail grows from the 6.37 to-the-face length to 12 beads
 # (9.6), and its tip is where the front beam goes.
-_PAD_EDGE_X = (MOUNT_RING_R * math.cos(math.radians(MOUNT_PAD_AZ_OFF))
-               + MOUNT_PAD_W / 2.0)                # ≈81.5 — pad outboard edge
+# (the pad's outboard EDGE sits at ≈81.5 — MOUNT_RING_R at the pad
+#  azimuth plus half the pad width; mount.py derives it where it needs
+#  it, from _PAD_CX.)
 MOUNT_COUCH_SETBACK = 3.06         # probed clearance (#958), the floor
 MOUNT_TAIL_TIP_X = FRAME_R_OUT + snap(MOUNT_COUCH_SETBACK, NOZZLE_D, "up")
                                    # face + 3.2 (4 beads), EVERY build (user
@@ -1161,7 +1178,7 @@ MOUNT_TAIL_TIP_X = FRAME_R_OUT + snap(MOUNT_COUCH_SETBACK, NOZZLE_D, "up")
                                    # gated) — anchored to the FACE, not the
                                    # pad edge, so pad changes can't erode
                                    # the set-back (#959: the wider pad did)
-MOUNT_TAIL_VIS = MOUNT_TAIL_TIP_X - _PAD_EDGE_X    # ≈9.8 past the pad edge
+# (the tails stand ≈9.8 proud of the pad edge — derived, never read)
 assert MOUNT_TAIL_TIP_X - FRAME_R_OUT >= MOUNT_COUCH_SETBACK - 1e-9, \
     "guide tails end inside the rotate-on set-back"
 MOUNT_PAD_INSET_MY = 6 * NOZZLE_D  # 4.8 — the −Y ARM's pad (and its screw)
@@ -1272,7 +1289,33 @@ LOCK_PIN_Y   = 8 * NOZZLE_D        # 6.4 — pin section ALONG the beam (was
                                    # of end wall (asserted below)
 LOCK_PIN_CLR = 0.20                # per-side, all three hosts (user #978:
                                    # 4.2 then 4.3 on the 4.0 pin both
-                                   # printed too tight to insert)
+                                   # printed too tight to insert). This now
+                                   # sizes the SLOT ONLY — see LOCK_PIN_FIT
+# THE PIN IS SIZED SEPARATELY FROM THE SLOT (user, 2026-11-11 — the pins
+# were STILL too tight to insert at 0.20). Until now one number did both
+# jobs: the slot was the pin plus LOCK_PIN_CLR per side, and the pin was
+# the slot's own plan inset by the same LOCK_PIN_CLR. That coupling meant
+# the only way to loosen the fit was to widen the SLOT, which moves a
+# structural wall in three printed hosts and every assert that measures
+# off it. Splitting them makes the fit a TPU-side number: the slot, the
+# frame, the mount and the asserts all stay exactly where they were and
+# only the printed pin gets smaller.
+#
+# THE HISTORY IS A ONE-WAY STREET — 0.10, 0.15 and 0.20 per side were all
+# reported too tight, so this is not a 0.05 nudge: 0.35 per side. The
+# printed pin section goes 4.00 x 6.40 -> 3.70 x 6.10 inside an unchanged
+# 4.40 x 6.80 slot.
+#
+# WHY A UNIFORM CLEARANCE KEEPS LOSING, and what to look at if 0.35 is
+# still tight: the pin passes through THREE SEPARATELY PRINTED STOREYS
+# (frame_top's corbel, the beam, frame_bottom's corbel) that must line up
+# for the pin to see one straight bore. Any stack-up between them eats the
+# clearance before the pin's own size does, and TPU at 95A has no column
+# strength to push through a step. So if this still binds, measure WHERE
+# it stops rather than shrinking the pin again — a pin small enough to
+# clear a misaligned stack would be too loose to lock anything.
+LOCK_PIN_FIT = 0.35                # per-side inset of the PIN from the slot
+                                   # plan — the TPU fit, tune this one
 LOCK_WELD    = NOZZLE_D            # 0.8 — corbel/head weld overlap into its
                                    # host (a real shared volume —
                                    # coincident-face unions are OCC's bad
@@ -1511,8 +1554,8 @@ LEVER_HANDLE_W = 6.0               # handle X width (v2) — CANNOT snap:
 # take its moving leg off the pin itself. Printed lying on the D-flat:
 # the layers run along the pin and the flat is the bed face.
 LEVER_PIN_D      = 8 * NOZZLE_D      # 6.4 — pin Ø (bearing + keyed body)
-LEVER_PIN_FLAT   = NOZZLE_D          # 0.8 — (RETIRED at #1011 with the
-                                     # D-key; kept only for the trail)
+# (the 0.8 D-FLAT is RETIRED — #1011 replaced the D-key with the wedge;
+#  the pin is round in the lever now, keyed only by PIN_KEY_*)
 LEVER_PIN_FRAME_CLR = 0.15           # per-side running fit in the frame bores
 LEVER_PIN_LEVER_CLR = 0.1            # per-side ROUND fit in the lever at
                                      # the SEAT. Install ease is the PIN's
@@ -1683,22 +1726,31 @@ HANDLE_Z_BOT     = FLOOR_Z0 + LEVER_HANDLE_W / 2.0   # ≈ −75.1 — grip-disc
                                    # ends land FLUSH with the assembly's
                                    # −z extent (user's call); pulling only
                                    # raises them
-# BENT HANDLE (user #966 — easier to reach; COUCH-gated, #967): below the
-# pivot the handle no longer drops straight to the grip. It runs
-# vertically from the pivot down to LEVER_BEND_Z, then 45° toward +x −z
-# to HANDLE_Z_BOT.
-# The knee used to BE the brake's axle height, which is no anchor at all
-# now the brake is gone (#1019). It is its own datum instead: HALFWAY
-# between the lever's axle and the spool floor (user's call — that is
-# within 1.9 of where the brake-derived knee sat, so the handle keeps
-# the shape that was working, and it now scales with the stack instead
-# of trailing a deleted part).
-LEVER_BEND_Z = (RATCHET_PIVOT_Z + FLOOR_Z1) / 2.0        # the handle's knee
-HANDLE_X_BOT = (LEVER_PIVOT_X + (LEVER_BEND_Z - HANDLE_Z_BOT)
-                if COUCH_VERSION else LEVER_PIVOT_X)   # ≈108.4 couch —
-                                   # grip-disc centre x (45°: the run's
-                                   # drop equals its reach); DESK: under
-                                   # the pivot = the straight handle
+# STRAIGHT HANDLE (user, 2026-11-09): the handle runs VERTICALLY from the
+# pivot all the way down to the grip, on the pivot's own x, bottoming at
+# FLOOR_Z0 = −73.312 — the spool's own −z extent, which is where it
+# already bottomed (HANDLE_Z_BOT is the grip-disc CENTRE, half a handle
+# width above it).
+#
+# THE 45° KNEE IS RETIRED. It was couch-only (user #966, gated at #967 —
+# the couch grip swung +x −z to be easier to reach under the couch, out to
+# HANDLE_X_BOT ≈ 105.6, a 22.656 reach for a 22.656 drop). The desk build
+# always ran straight, so this makes both sites the same handle and the
+# straight run is the one that was already printing on the desk spool.
+# To bring the bend back, restore the couch arm of:
+#     HANDLE_X_BOT = (LEVER_PIVOT_X + (LEVER_BEND_Z - HANDLE_Z_BOT)
+#                     if COUCH_VERSION else LEVER_PIVOT_X)
+# REACHABILITY IS THE TRADE and it is the thing to check on the couch: the
+# grip now sits 22.656 further in (under the pivot at x 82.932, not 105.6),
+# so it is further behind the couch's front beam than the bent one was.
+#
+# LEVER_BEND_Z survives as the seam between the handle's two runs, not as a
+# knee: both runs are now the same vertical bar of the same width, so the
+# seam is invisible in the solid. _handle() still splits there, and the
+# clip-post sweep still samples the path through it (src/levers.py).
+LEVER_BEND_Z = (RATCHET_PIVOT_Z + FLOOR_Z1) / 2.0        # the handle's seam
+HANDLE_X_BOT = LEVER_PIVOT_X       # grip-disc centre x = straight under
+                                   # the pivot, both install sites
 RATCHET_PHASE_DEG = math.degrees(math.asin(
     ((RATCHET_LEV_Y0 + RATCHET_LEV_Y1) / 2.0) / (RIM_OD / 2.0)))   # ≈ 9.95 —
                                    # one catch face lands at the pawl's
@@ -1786,8 +1838,9 @@ PIN_KEY_FLOAT   = 2 * NOZZLE_D     # 1.6 — how far the seat may shift with
 # instead of cantilevered, and stopped by its WEDGE in the lever (user
 # #1029: a tight fit on the lever, not a hard bottom), so its tip must
 # never reach that bore's floor.
-PIN_COL_Y0     = RATCHET_LEV_Y1 + LEVER_SIDE_CLR   # 18.9 — the column's
-                                   # INNER face, where the pin enters it
+# (the column's INNER face, where the pin enters, is RATCHET_LEV_Y1 +
+#  LEVER_SIDE_CLR = 18.9. Named PIN_COL_Y0 until the pin-clearance
+#  coupon — its only reader — was retired.)
 PIN_TIP_Y      = LEVER_COL_Y1      # 24.5 — and its OUTER face, where the
                                    # pin now ENDS. The column's bore runs
                                    # THROUGH (user #1035), so the pin is
@@ -1814,7 +1867,8 @@ PIN_KEY_SEAT_UNDER = 0.40          # the slot is this much NARROWER than the
                                    # rib at the nominal seat, so the wedge
                                    # bites early — guaranteed, whatever the
                                    # print does (user #1014).
-                                   # 0.15 -> 0.40 at #1036: on the gauge the
+                                   # 0.15 -> 0.40 at #1036, measured on the
+                                   # pin-clearance coupon (since retired): the
                                    # pin pressed a full CLIP_GAP (3.2) past
                                    # nominal before the lip bottomed, so the
                                    # wedge was still not gripping there. The
@@ -1945,7 +1999,6 @@ LEVER_PIN_BODY_L = (PIN_TIP_Y + CLIP_FACE_Y + CLIP_GAP + CLIP_T)
                                    # face lands. The clip rests against the
                                    # head, so the drawn CLIP_GAP is what it
                                    # gets at the nominal seat (#1029)
-LEVER_PIN_L = LEVER_PIN_BODY_L + PIN_HEAD_T
 RETURN_TORQUE_MAX = 400.0          # N·mm at full pull — ~7.8 N at the grip
                                    # (the 51.2 handle arm). RAISED from 120
                                    # at #1030: that number was a usability
@@ -1955,11 +2008,9 @@ RETURN_TORQUE_MAX = 400.0          # N·mm at full pull — ~7.8 N at the grip
                                    # nothing
 
 # ── Wall openings (v2's derivations, v3 anchors) ─────────────────────────────
-_WALL_TOP_BAND_RETIRED = 4 * NOZZLE_D   # (kept only for the comment trail —
-                                   # wall_top itself is retired; the band
-                                   # runs to LID_Z1 and the openings close
-                                   # with 45° gables/teeth instead) (user's
-                                   # call; was 1.6)
+# (the old WALL-TOP BAND — 1.6, then 3.2 — is retired with wall_top
+#  itself: the band runs to LID_Z1 and the openings close with 45°
+#  gables/teeth instead, so there is no band width left to name.)
 # cable EXIT window at (+x,+y) — RE-DERIVED for the HORN (user #893:
 # v2's 30° arc assumed a free tangential fly-off; the horn REDIRECTS
 # every exit through its guide mouth). Defined the user's way: the

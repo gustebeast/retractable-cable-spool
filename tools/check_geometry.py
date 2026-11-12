@@ -1,8 +1,14 @@
 """Geometry regression check.
 
-Compares the bbox / volume / center-of-mass of every .step file in the
-repo root against the committed baseline (`tools/baseline.tsv`). Catches
-accidental geometry changes during refactors.
+Compares the bbox / volume / center-of-mass of every part STEP in `src/`
+against the committed baseline (`tools/baseline.tsv`). Catches accidental
+geometry changes during refactors — the one gate that answers "did that
+cleanup move anything?", which the overlap / bead / overhang gates cannot.
+
+It reads the files the build WRITES (src/*.step). It used to glob the repo
+ROOT, where nothing is written, so it measured an empty set and its
+baseline went stale against v2 part names — fixed, and rebaselined, at the
+v3 finalization.
 
 Usage:
   py -3.12 -m src.build              # rebuild
@@ -40,9 +46,9 @@ def measure(path: str) -> str:
 
 
 def collect() -> list[str]:
-    files = sorted(glob.glob(os.path.join(ROOT, "*.step")))
+    files = sorted(glob.glob(os.path.join(ROOT, "src", "*.step")))
     if not files:
-        sys.stderr.write("No .step files in repo root. Run `py -3.12 -m src.build` first.\n")
+        sys.stderr.write("No .step files in src/. Run `py -3.12 -m src.build` first.\n")
         sys.exit(2)
     return [HEADER] + [measure(f) for f in files]
 
