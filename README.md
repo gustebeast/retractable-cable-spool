@@ -46,7 +46,18 @@ build, because the cable differs per site as well as the geometry:
 | | `True` (couch) | `False` (desk) |
 |---|---|---|
 | cable | Ø3.3, 7 ft | Ø4.0, 4 ft |
-| frame-top pad | 10.4 | 2.4 |
+| `TOP_PAD` | 10.4 (provided) | 2.4 (the minimum) |
+| cable axis below the mounting face | 52.9 | 44.5 |
+
+`TOP_PAD` is a slab on `frame_top`'s +z end, and since that end is the
+mounting face, it is how far the whole assembly — and so the cable exit —
+hangs below the wood. On the couch it is **provided**, to put the exit
+under the front beam; run it too high and the cable fouls the beam, which
+means drilling through the wood to get it out. On the desk nothing needs
+clearing below the mount, so it sits at its structural minimum (set by the
+TPU lock's cantilevered top corbel, not zero). An assert in `params.py`
+pins the couch drop to its target, so the pad cannot be trimmed without
+the build failing.
 
 It currently builds the **couch** version. Flip the flag and rebuild; never
 hand-edit the gated numbers, or switching back silently keeps the wrong

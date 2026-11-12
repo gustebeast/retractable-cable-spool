@@ -50,7 +50,7 @@ from .wall import wall_band
 from .params import (
     NOZZLE_D,
     SITE_AZ,
-    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_TOP_Z1, COUCH_TOP_PAD,
+    FRAME_RIB, FRAME_R_OUT, FRAME_Z0, FRAME_TOP_Z1, TOP_PAD,
     LOCK_X0, LOCK_X1, LOCK_BLK_D, LOCK_WELD, LOCK_WALL_Y1,
     LOCK_SLOT_X0, LOCK_SLOT_X1, LOCK_SLOT_Y0, LOCK_SLOT_Y1,
     LOCK_TOPB_Z1, LOCK_BOTB_H, LOCK_SLOT_XA, LOCK_PIN_FIT, LOCK_PIN_Z0,
@@ -795,11 +795,11 @@ def _lock_corbel_top():
     couch build it sits LOCK_HEAD_DROP lower, handing the pad's extra
     height to the head; the corbel itself keeps its desk shape)."""
     # COUCH version (#955): the LOCK_* z's are MOUNT-local (the head is
-    # an unchanged part seating COUCH_TOP_PAD higher), so this storey is
+    # an unchanged part seating TOP_PAD higher), so this storey is
     # drawn with its foot dropped by the pad and then lifted — its roof
     # rides under the raised head at the same LOCK_SWEEP_CLR, and the
     # extra height is solid corbel down to the frame underside
-    zb = -COUCH_TOP_PAD
+    zb = -TOP_PAD
     w = _xz_prism(
         [(LOCK_X0 - LOCK_WELD, zb),
          (LOCK_X0 - LOCK_WELD, LOCK_TOPB_Z1 - LOCK_WELD),
@@ -810,7 +810,7 @@ def _lock_corbel_top():
                                    # runs STRUCT_WALL past the slot, so the
                                    # pin is walled on all four sides; the
                                    # screw pad is inset clear of it
-    return _lock_place(w).translate((0.0, 0.0, COUCH_TOP_PAD))
+    return _lock_place(w).translate((0.0, 0.0, TOP_PAD))
 
 
 def _lock_corbel_bot():
@@ -914,7 +914,7 @@ def _anchor_wall():
 
 
 def _build_frame_top():
-    # +z end grows COUCH_TOP_PAD in the couch version (params block):
+    # +z end grows TOP_PAD in the couch version (params block):
     # the arms, boss and anchor wall rise to FRAME_TOP_Z1; everything
     # cut from the TOP face (mount channels, lock slot, pocket) follows
     ft = _plus(FRAME_Z0, FRAME_TOP_Z1)
@@ -934,7 +934,7 @@ def _build_frame_top():
     # cutters ever carve float-identical walls — OCC's pathological
     # unify case (#910, 15+ min builds).
     for c in mount_channel_cuts():  # flush mount channels in the ±Y arms
-        ft = ft.cut(c.translate((0.0, 0.0, COUCH_TOP_PAD)), clean=False)
+        ft = ft.cut(c.translate((0.0, 0.0, TOP_PAD)), clean=False)
     for c in _lock_copies(_lock_slot_cut(-1.0, FRAME_TOP_Z1)):
         ft = ft.cut(c, clean=False)
     # lip bore through, the 45° FUNNEL seat (flipped-print cone — the

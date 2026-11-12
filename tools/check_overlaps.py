@@ -13,7 +13,7 @@ from cadkit.overlap_check import run
 
 from src.frame import frame_top, frame_bottom, horn_cap, lock_pins_in_place
 from src.mount import mount_ring
-from src.params import COUCH_TOP_PAD
+from src.params import TOP_PAD
 from src.axle import axle_top, axle_separator, bearing_nub
 from src.lid import lid
 from src.levers import (ratchet_lever,
@@ -26,7 +26,7 @@ def collect_components():
     return [
         ("frame_top",   frame_top),
         ("frame_bottom", frame_bottom),
-        ("mount_ring",  mount_ring.translate((0.0, 0.0, COUCH_TOP_PAD))),
+        ("mount_ring",  mount_ring.translate((0.0, 0.0, TOP_PAD))),
         ("horn_cap",    horn_cap),
         ("axle_top",    axle_top),
         ("axle_separator", axle_separator),

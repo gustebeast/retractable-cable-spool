@@ -83,6 +83,7 @@ _ex("hardware",
     COUCH_TOP_BEAM_W="couch top beam 30 sq (user-measured wood)",
     COUCH_FRONT_T="couch front beam thickness 38 (user-measured wood)",
     COUCH_FRONT_H="couch front beam height 77 (user-measured wood)",
+    EXIT_DROP_TARGET="cable axis below the mounting face, couch — set by where the wood lets the cable out, not a printed length",
     )
 
 _ex("hardware",

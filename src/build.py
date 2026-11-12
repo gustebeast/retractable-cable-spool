@@ -27,7 +27,7 @@ from .levers import (
     lever_pin_in_place, return_clip_in_place,
 )
 from .params import (RATCHET_PIVOT_Z, LEVER_PIVOT_X, CLIP_SIDE,
-    COUCH_TOP_PAD, PRINT_ORIENTATION)
+    TOP_PAD, PRINT_ORIENTATION)
 from .dummies import bearing_608, bearing_608_bottom, spring
 
 # ── Viewer pose (revertable) — the lever at REST (canonical pose). Set
@@ -152,9 +152,9 @@ def main():
            .add(T(frame_bottom), name="frame_bottom",
                 color=color(COLOR["frame_bottom"])))
     # the desk-mount twist-lock ring, SEATED flush in the arms' arc channels
-    # (couch version: the part is unchanged, it seats COUCH_TOP_PAD
+    # (couch version: the part is unchanged, it seats TOP_PAD
     # higher on frame_top's thickened top face — assembly placement only)
-    asm.add(mount_ring.translate((0.0, 0.0, COUCH_TOP_PAD)),
+    asm.add(mount_ring.translate((0.0, 0.0, TOP_PAD)),
             name="mount_ring", color=color(COLOR["mount_ring"]))
     # the TPU frame-lock pin, fully inserted through the lock stack
     # the TPU frame-lock pins, fully inserted — one per lock site (#983)

@@ -199,25 +199,48 @@ FRAME_RIB   = 13 * NOZZLE_D    # 10.4 — plus-arm section (was v2's 10.0 even;
 FRAME_Z0 = 0.0               # frame underside — the v3 z datum
 FRAME_Z1 = FRAME_Z0 + FRAME_RIB
 
-# ── COUCH VERSION (user #954): the couch's front beam (COUCH_* block
-# below) catches the ratchet lever at ~half its pull; the fix is to hang
-# the whole assembly LOWER off the wood. frame_top alone grows a slab on
-# its +z end — the mount channels, anchor wall, bearing pocket and lock
-# slot follow the new top face; every other printed part is untouched
-# (the mount ring simply seats COUCH_TOP_PAD higher in the assembly).
-# 13 beads = 10.4 (the user's 10 snapped up onto the grid; the lever
-# needs ≥ 7.0 to clear at 20°).
-# THE DESK PAD IS NOT ZERO (user #1073): the TPU lock's top corbel is
+# ── TOP PAD — WHAT SETS THE CABLE EXIT'S HEIGHT ───────────────────────
+# A slab on frame_top's +z end. Since that end IS the mounting face, the
+# slab is how far the whole assembly hangs below the wood — and therefore
+# how far the CABLE EXIT sits below it. That is the number this controls
+# (user, 2026-11-12), and it is the one that has to come out right: run
+# the exit too high and it fouls the couch's front beam, which means
+# drilling through the wood to get the cable out.
+#
+# So the pad is PROVIDED where the exit has to land, and otherwise sits at
+# its structural MINIMUM:
+#   · couch — provided. 13 beads puts the cable axis EXIT_DROP_TARGET
+#     below the mounting face, under the front beam. Asserted against the
+#     realized geometry further down, where the horn's chain exists.
+#   · desk  — the minimum. Nothing below the mount needs clearing, so the
+#     pad is only as thick as the structure demands.
+# Only frame_top changes shape: the mount channels, anchor wall, bearing
+# pocket and lock slot follow the new top face. Every other printed part
+# is untouched — the mount ring simply seats TOP_PAD higher in the
+# assembly.
+#
+# WHY THE MINIMUM IS NOT ZERO (user #1073): the TPU lock's top corbel is
 # cantilevered off the beam flank on a 45, so it needs as much z as it
 # reaches in x — LOCK_BLK_D plus a hair. Off the frame's own 10.4 face
-# that leaves 7.8 of corbel, and the lock reaches 10.0, so the desk build
-# carries 3 beads of pad and the lock asserts in the LOCK block are what
-# hold it to that. The desk still loses 8.0 of the couch's 10.4. (It was
-# 0 until the #1063 chevron nose deepened the block; the desk had 1.8 of
-# margin before that and nobody had rebuilt it since.)
-COUCH_TOP_PAD = (13 if COUCH_VERSION else 3) * NOZZLE_D   # 10.4 / 2.4
-FRAME_TOP_Z1  = FRAME_Z1 + COUCH_TOP_PAD   # frame_top's ACTUAL top face
+# that leaves 7.8 of corbel against a 10.0 reach, so the minimum is 3
+# beads and the lock asserts in the LOCK block are what hold it there.
+# (It was 0 until the #1063 chevron nose deepened the block; the desk had
+# 1.8 of margin before that and nobody had rebuilt it since.)
+#
+# HISTORY, since the pad used to be described as a lever fix: #954
+# introduced it because the front beam caught the ratchet lever at ~half
+# its pull, and 10.4 clears that too (the lever needs ≥ 7.0 at 20°). But
+# the lever is no longer what sizes it — the handle runs straight down now
+# and its grip sits inboard of the beam — and the exit height is. Do not
+# trim this for the lever's sake.
+TOP_PAD_MIN = 3 * NOZZLE_D         # 2.4 — the structural floor (above)
+TOP_PAD = 13 * NOZZLE_D if COUCH_VERSION else TOP_PAD_MIN     # 10.4 / 2.4
+FRAME_TOP_Z1  = FRAME_Z1 + TOP_PAD         # frame_top's ACTUAL top face
                                            # (the wood / mount plane)
+EXIT_DROP_TARGET = 52.9            # mounting face → cable axis, couch build.
+                                   # THE number the couch pad exists to hit;
+                                   # asserted against the built geometry at
+                                   # the cable-exit block below.
 
 # Bearing pocket: drops in from the TOP onto a lip UNDER the outer race —
 # the hanging load (axle + spring + future drum) pulls the bearing DOWN
@@ -1087,7 +1110,7 @@ N_MOUNT_SPOKE = 3                  # ring-tie spokes PER QUADRANT (user
 # become one deep girder instead of a pad hanging off a ribbon.
 # Room: the quadrants are OPEN AIR under the mount in both variants
 # (frame_top is a plus), and the web stops one bead above the frame's
-# underside — the couch build's frame is COUCH_TOP_PAD taller, so its
+# underside — the couch build's frame is TOP_PAD taller, so its
 # webs clear everything below by that much more. The angular keep-outs
 # live in mount.py: they need the install sweep (MOUNT_MATE_DEG).
 MOUNT_WEB_Z0 = FRAME_Z1 - MOUNT_PAD_H   # 0.8 — web bottom = the screw
@@ -1404,7 +1427,7 @@ LOCK_MOUNT_Y1 = _LOCK_PAD_Y + LOCK_WELD            # the mount head runs
 assert LOCK_SLOT_Y0 - FRAME_RIB / 2.0 >= 2 * NOZZLE_D - 1e-9,     "the lock's beam-end wall has fallen under 1.6 — drop LOCK_PIN_Y a bead"
 # COUCH HEAD DROP (user #983 — the spool twisted off its mount, and the
 # mount's head gripped the pin over only a few mm): the couch build's
-# frame_top carries COUCH_TOP_PAD of extra height, so the interface
+# frame_top carries TOP_PAD of extra height, so the interface
 # between the corbel's 45 ROOF and the mount head's 45 UNDERSIDE moves
 # DOWN into it — to the height where the two storeys grip EQUAL lengths
 # of pin at the slot's centreline (user #984: split it evenly; handing
@@ -1419,14 +1442,14 @@ _LOCK_SLOT_C = (LOCK_SLOT_X0 + LOCK_SLOT_X1) / 2.0 - LOCK_X0   # slot centre,
                                    # off the flank
 _LOCK_TOPB_DESK = MOUNT_MATE_Z - LOCK_SWEEP_CLR   # the undropped roof
 LOCK_HEAD_DROP = max(0.0, snap(
-    ((_LOCK_TOPB_DESK + COUCH_TOP_PAD - _LOCK_SLOT_C)              # frame grip
+    ((_LOCK_TOPB_DESK + TOP_PAD - _LOCK_SLOT_C)              # frame grip
      - (FRAME_Z1 - (_LOCK_TOPB_DESK + LOCK_SWEEP_CLR - _LOCK_SLOT_C)))  # head
     / 2.0, NOZZLE_D))              # 4.0 couch / 0 desk
 LOCK_TOPB_Z1 = _LOCK_TOPB_DESK - LOCK_HEAD_DROP    # top corbel roof at the
                                    # flank, MOUNT-local (7.8 desk / 3.8 couch)
 LOCK_HEAD_ZF = LOCK_TOPB_Z1 + LOCK_SWEEP_CLR      # the head's underside at
                                    # the flank (MOUNT_MATE_Z on the desk)
-_LOCK_TOPB_FOOT = FRAME_Z0 - COUCH_TOP_PAD         # the top corbel's foot:
+_LOCK_TOPB_FOOT = FRAME_Z0 - TOP_PAD         # the top corbel's foot:
                                    # frame_top's underside, mount-local
 LOCK_BOTB_H  = 15 * NOZZLE_D       # 12.0 — beam corbel depth at the face
                                    # (13 beads until #1063: the nose pushed
@@ -1457,7 +1480,7 @@ LOCK_PIN_Z0  = LOCK_JOINT_Z0 - LOCK_PIN_GRIP       # −15.2 — pin bottom
 LOCK_PIN_L   = FRAME_TOP_Z1 - LOCK_PIN_Z0          # 36.0 couch / 25.6 desk — top
                                                    # flush with frame_top's
                                                    # ACTUAL face at full insert
-                                                   # (follows COUCH_TOP_PAD:
+                                                   # (follows TOP_PAD:
                                                    # the pin must still reach
                                                    # the mount head, #955)
 assert (LOCK_TOPB_Z1 - _LOCK_TOPB_FOOT - (LOCK_SLOT_XA - LOCK_X0)
@@ -2041,6 +2064,16 @@ assert CABLE_EXIT_Y_LO > BEAM_SIZE / 2.0 + 2.0, \
     "exit window's low-y edge reaches the +X beam"
 CABLE_EXIT_Z0 = SEP_Z1 - 0.5                       # −34.9 — port floor
 HORN_Z1 = CABLE_EXIT_Z0            # cable-horn pier top = the window bottom
+# THE PAD'S WHOLE PURPOSE, CHECKED (see the TOP PAD block): the cable
+# axis has to land EXIT_DROP_TARGET below the mounting face on the couch
+# build, or the exit fouls the front beam. The pad is stated up top as a
+# bead count because that is what gets printed; this is what it MEANS.
+_EXIT_AXIS_Z = HORN_Z1 + HORN_CH_W / 2.0           # where the cable runs
+EXIT_DROP = FRAME_TOP_Z1 - _EXIT_AXIS_Z            # below the mounting face
+if COUCH_VERSION:
+    assert abs(EXIT_DROP - EXIT_DROP_TARGET) < 1e-9,         ("the couch cable exit moved off its target drop (%.3f, want %.3f) — "
+         "something upstream of the horn shifted, or TOP_PAD was trimmed"
+         % (EXIT_DROP, EXIT_DROP_TARGET))
                                    # (user #889; HORN_* block above)
 CABLE_EXIT_Z1 = LID_Z0 + 0.5                       # −29.9 — reference ceiling
                                    # (anchors WALL_SPLIT_Z below; the port
